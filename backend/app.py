@@ -126,12 +126,21 @@ def clean_production_data():
     conn = get_db()
     cursor = conn.cursor()
     try:
+        cursor.execute("UPDATE actividades SET parent_task_id = NULL")
         cursor.execute("UPDATE users SET team_id = NULL")
         cursor.execute("UPDATE teams SET lider_id = NULL")
+        
         cursor.execute("DELETE FROM actividades")
         cursor.execute("DELETE FROM bitacoras")
-        cursor.execute("DELETE FROM users WHERE username != 'admin'")
+        
+        for tbl in ['tasks', 'audit_logs', 'notifications', 'evidencias']:
+            try:
+                cursor.execute(f"DELETE FROM {tbl}")
+            except Exception:
+                pass
+                
         cursor.execute("DELETE FROM teams")
+        cursor.execute("DELETE FROM users WHERE username != 'admin'")
         
         cursor.execute('''
             INSERT INTO system_settings (key, value, updated_at) VALUES ('system_mode', 'production', CURRENT_TIMESTAMP)
