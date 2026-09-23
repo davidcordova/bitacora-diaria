@@ -109,11 +109,28 @@ export const api = {
     return await res.json();
   },
 
-  async deleteUser(userId: number): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+  async deleteUser(userId: number, permanent = false): Promise<any> {
+    const res = await fetch(`${API_BASE}/admin/users/${userId}${permanent ? '?permanent=true' : ''}`, {
       method: 'DELETE',
     });
-    return res.ok;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar o desactivar usuario' }));
+      throw new Error(err.error || 'Error al eliminar usuario');
+    }
+    return await res.json();
+  },
+
+  async changePassword(data: { user_id: number; current_password?: string; new_password: string }): Promise<any> {
+    const res = await fetch(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al cambiar contraseña' }));
+      throw new Error(err.error || 'Error al cambiar contraseña');
+    }
+    return await res.json();
   },
 
   // ================= TEAMS =================

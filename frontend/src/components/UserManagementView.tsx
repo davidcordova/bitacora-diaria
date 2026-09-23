@@ -10,6 +10,7 @@ import {
   X,
   Star,
   UserCheck,
+  UserX,
   Briefcase,
   AlertCircle,
   Settings,
@@ -94,6 +95,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     descripcion: '',
     lider_id: '' as number | '',
   });
+
+  // Delete / deactivate user modal state
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   const [feedbackMsg, setFeedbackMsg] = useState('');
 
@@ -251,9 +257,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     try {
       if (editingUserId) {
         await api.updateUser(editingUserId, {
-          full_name: userForm.full_name,
-          email: userForm.email,
-          phone: userForm.phone,
+          username: userForm.username.trim(),
+          full_name: userForm.full_name.trim(),
+          email: userForm.email.trim(),
+          phone: userForm.phone.trim(),
           role: userForm.role,
           team_id: userForm.team_id ? Number(userForm.team_id) : null,
           password: userForm.password ? userForm.password : undefined,
@@ -261,10 +268,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         setFeedbackMsg('Usuario actualizado correctamente');
       } else {
         await api.createUser({
-          username: userForm.username,
-          full_name: userForm.full_name,
-          email: userForm.email,
-          phone: userForm.phone,
+          username: userForm.username.trim(),
+          full_name: userForm.full_name.trim(),
+          email: userForm.email.trim(),
+          phone: userForm.phone.trim(),
           role: userForm.role,
           team_id: userForm.team_id ? Number(userForm.team_id) : null,
           password: userForm.password || '123456',
@@ -276,14 +283,41 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       onRefreshTeams();
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message);
+      alert(err.message || 'Error al guardar usuario');
     }
   };
 
-  const handleDeleteUser = async (id: number) => {
-    if (window.confirm('¿Deseas desactivar este usuario?')) {
-      await api.deleteUser(id);
+  const handleToggleActiveUser = async (u: User) => {
+    try {
+      await api.deleteUser(u.id, false);
       loadUsers();
+      setFeedbackMsg(Boolean(u.is_active) ? `Usuario @${u.username} desactivado` : `Usuario @${u.username} reactivado`);
+      setTimeout(() => setFeedbackMsg(''), 3000);
+    } catch (err: any) {
+      alert(err.message || 'Error al actualizar estado del usuario');
+    }
+  };
+
+  const handleOpenDeleteModal = (u: User) => {
+    setUserToDelete(u);
+    setShowDeleteUserModal(true);
+  };
+
+  const handleConfirmDeleteUser = async (permanent: boolean) => {
+    if (!userToDelete) return;
+    setDeletingUser(true);
+    try {
+      await api.deleteUser(userToDelete.id, permanent);
+      loadUsers();
+      onRefreshTeams();
+      setShowDeleteUserModal(false);
+      setUserToDelete(null);
+      setFeedbackMsg(permanent ? 'Usuario eliminado definitivamente del sistema' : 'Estado del usuario actualizado');
+      setTimeout(() => setFeedbackMsg(''), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Error al procesar la eliminación');
+    } finally {
+      setDeletingUser(false);
     }
   };
 
@@ -505,19 +539,33 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                           type="button"
                           onClick={() => handleEditUser(u)}
                           className="p-1.5 text-slate-400 hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full cursor-pointer transition-colors"
-                          title="Editar usuario"
+                          title="Editar usuario (usuario, nombre, clave, rol)"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         {u.username !== 'admin' && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteUser(u.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full cursor-pointer transition-colors"
-                            title="Desactivar usuario"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleActiveUser(u)}
+                              className={`p-1.5 rounded-full cursor-pointer transition-colors ${
+                                Boolean(u.is_active)
+                                  ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/30'
+                                  : 'text-amber-500 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                              }`}
+                              title={Boolean(u.is_active) ? 'Suspender / Desactivar acceso' : 'Reactivar acceso'}
+                            >
+                              {Boolean(u.is_active) ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeleteModal(u)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full cursor-pointer transition-colors"
+                              title="Eliminar usuario definitivamente"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -1250,16 +1298,23 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
             <form onSubmit={handleSaveUser} className="space-y-3.5 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Nombre de Usuario</label>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nombre de Usuario (@)
+                </label>
                 <input
                   type="text"
                   value={userForm.username}
-                  disabled={!!editingUserId}
+                  disabled={editingUserId !== null && userForm.username === 'admin'}
                   onChange={(e) => setUserForm({ ...userForm, username: e.target.value })}
-                  placeholder="ej: juan"
+                  placeholder="ej: wchamba, mlopez"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF] disabled:opacity-60"
                   required
                 />
+                {editingUserId !== null && userForm.username === 'admin' ? (
+                  <p className="text-[10px] text-slate-400 mt-1">El usuario 'admin' es reservado para el Administrador Principal.</p>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-1">Identificador con el que el usuario iniciará sesión en la plataforma.</p>
+                )}
               </div>
 
               <div>
@@ -1300,15 +1355,18 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Contraseña {editingUserId && '(Dejar en blanco para no cambiar)'}
+                  {editingUserId ? 'Nueva Contraseña (Opcional)' : 'Contraseña de Acceso'}
                 </label>
                 <input
                   type="password"
                   value={userForm.password}
                   onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                  placeholder="••••••••"
+                  placeholder={editingUserId ? 'Dejar en blanco para conservar la actual' : 'Mínimo 4 caracteres (ej: 123456)'}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
                 />
+                {editingUserId && (
+                  <p className="text-[10px] text-slate-400 mt-1">Escribe aquí solo si deseas cambiar o restablecer la clave del colaborador.</p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1503,6 +1561,74 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               >
                 <Trash2 className="w-4 h-4" />
                 <span>{cleaningData ? 'Purgando...' : 'Sí, Purgar y Dejar en Producción'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR O DESACTIVAR USUARIO */}
+      {showDeleteUserModal && userToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in select-none">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative">
+            <div className="flex items-center gap-3.5 mb-4 text-rose-500">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+                  Gestión de Colaborador
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  @{userToDelete.username} • {userToDelete.full_name}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+              <p>
+                ¿Qué acción deseas realizar con este usuario?
+              </p>
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#161722] border border-slate-200/80 dark:border-[#252636] space-y-2.5">
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-rose-600 dark:text-rose-400 shrink-0">• Eliminar definitivamente:</span>
+                  <span className="text-slate-500 dark:text-slate-400">Borra la cuenta del colaborador y sus registros asociados por completo de la base de datos. Esta acción no se puede deshacer.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="font-bold text-amber-600 dark:text-amber-400 shrink-0">• Solo Desactivar:</span>
+                  <span className="text-slate-500 dark:text-slate-400">Bloquea el inicio de sesión sin borrar su historial ni sus datos previos. Podrás reactivarlo en cualquier momento.</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteUserModal(false);
+                  setUserToDelete(null);
+                }}
+                disabled={deletingUser}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#161722] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDeleteUser(false)}
+                disabled={deletingUser}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-full text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/40 hover:bg-amber-200 dark:hover:bg-amber-900/60 border border-amber-300 dark:border-amber-800 cursor-pointer disabled:opacity-50"
+              >
+                {Boolean(userToDelete.is_active) ? 'Solo Desactivar' : 'Reactivar Cuenta'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleConfirmDeleteUser(true)}
+                disabled={deletingUser}
+                className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-5 py-2.5 rounded-full text-xs font-bold bg-rose-600 hover:bg-rose-500 active:scale-98 text-white shadow-lg shadow-rose-600/25 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{deletingUser ? 'Eliminando...' : 'Eliminar Definitivamente'}</span>
               </button>
             </div>
           </div>

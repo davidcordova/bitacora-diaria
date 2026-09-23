@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
-import { Search, Bell, HelpCircle, User as UserIcon } from 'lucide-react';
+import { Search, Bell, HelpCircle, User as UserIcon, KeyRound } from 'lucide-react';
 import { User } from '../types';
 
 interface TopHeaderProps {
   currentUser: User | null;
   onOpenHelp?: () => void;
   onSearch?: (query: string) => void;
+  onOpenChangePassword?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   currentUser,
   onOpenHelp,
   onSearch,
+  onOpenChangePassword,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -37,6 +39,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Action Icons Right */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Cambiar contraseña */}
+        {onOpenChangePassword && (
+          <button
+            type="button"
+            onClick={onOpenChangePassword}
+            title="Cambiar mi contraseña"
+            className="p-2 text-slate-500 hover:text-[#00F0FF] dark:text-slate-400 dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+          >
+            <KeyRound className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Notification Bell */}
         <button
           type="button"
@@ -60,7 +74,11 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         )}
 
         {/* User Avatar Circle */}
-        <div className="w-8 h-8 rounded-full bg-[#00F0FF]/15 border border-[#00F0FF]/40 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-xs font-extrabold cursor-pointer shrink-0">
+        <div 
+          onClick={onOpenChangePassword}
+          title={currentUser ? `${currentUser.full_name} (@${currentUser.username}) - Clic para cambiar clave` : undefined}
+          className="w-8 h-8 rounded-full bg-[#00F0FF]/15 border border-[#00F0FF]/40 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-xs font-extrabold cursor-pointer shrink-0 hover:scale-105 active:scale-95 transition-transform"
+        >
           {currentUser?.full_name ? (
             currentUser.full_name.charAt(0).toUpperCase()
           ) : (

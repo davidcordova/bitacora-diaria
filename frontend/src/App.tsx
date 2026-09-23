@@ -13,6 +13,7 @@ import { UserManagementView } from './components/UserManagementView';
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BottomNav } from './components/BottomNav';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { TopHeader } from './components/TopHeader';
@@ -57,6 +58,7 @@ export function App() {
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = (type: ToastType, message: string, title?: string) => {
@@ -472,6 +474,7 @@ export function App() {
         systemSettings={systemSettings || undefined}
         isDark={isDark}
         onToggleTheme={toggleTheme}
+        onOpenChangePassword={() => setChangePasswordModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -480,6 +483,7 @@ export function App() {
         <TopHeader
           currentUser={currentUser}
           onOpenHelp={() => setHelpModalOpen(true)}
+          onOpenChangePassword={() => setChangePasswordModalOpen(true)}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -606,6 +610,14 @@ export function App() {
         currentUser={currentUser}
         users={users}
         teams={teams}
+      />
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={changePasswordModalOpen}
+        onClose={() => setChangePasswordModalOpen(false)}
+        currentUser={currentUser}
+        onSuccess={() => showToast('success', 'Contraseña actualizada exitosamente')}
       />
     </div>
   );

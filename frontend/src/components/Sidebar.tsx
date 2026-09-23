@@ -17,6 +17,7 @@ import {
   X,
   Sun,
   Moon,
+  KeyRound,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
 
@@ -36,6 +37,7 @@ interface SidebarProps {
   systemSettings?: SystemSettings;
   isDark?: boolean;
   onToggleTheme?: () => void;
+  onOpenChangePassword?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -54,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   systemSettings,
   isDark = false,
   onToggleTheme,
+  onOpenChangePassword,
 }) => {
   const role = currentUser?.role || 'analista';
   const isAdmin = role === 'admin';
@@ -350,15 +353,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
 
-            {/* Logout button */}
-            <button
-              type="button"
-              onClick={onLogout}
-              title="Cerrar sesión"
-              className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 min-w-[32px] min-h-[32px] flex items-center justify-center"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            {/* User action buttons */}
+            <div className="flex items-center gap-0.5 shrink-0">
+              {onOpenChangePassword && (
+                <button
+                  type="button"
+                  onClick={onOpenChangePassword}
+                  title="Cambiar mi contraseña"
+                  className="p-1.5 text-slate-400 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onLogout}
+                title="Cerrar sesión"
+                className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         ) : (
           <button

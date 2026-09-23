@@ -63,7 +63,7 @@ export interface User {
   role: UserRole;
   team_id?: number | null;
   team_name?: string | null;
-  is_active?: boolean;
+  is_active?: boolean | number;
   is_leader?: boolean;
 }
 

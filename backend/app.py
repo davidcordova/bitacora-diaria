@@ -324,6 +324,56 @@ def login():
         "token": f"session-{user['id']}-{user['username']}"
     }), 200
 
+@app.route('/api/auth/change-password', methods=['POST', 'OPTIONS'])
+def change_password():
+    """Permite a cualquier usuario cambiar su contraseña validando la anterior, o al admin actualizarla."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+        
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    current_password = data.get('current_password') or ''
+    new_password = (data.get('new_password') or '').strip()
+    
+    if not user_id:
+        return jsonify({"error": "Identificador de usuario requerido"}), 400
+        
+    if not new_password or len(new_password) < 4:
+        return jsonify({"error": "La nueva contraseña debe tener al menos 4 caracteres"}), 400
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    user = cursor.execute("SELECT id, username, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+    
+    if not user:
+        conn.close()
+        return jsonify({"error": "Usuario no encontrado"}), 404
+        
+    stored_hash = user['password_hash']
+    # Si se envía contraseña actual, validarla
+    if current_password:
+        password_matches = False
+        try:
+            password_matches = check_password_hash(stored_hash, current_password)
+        except Exception:
+            password_matches = (stored_hash == current_password)
+        if not password_matches and stored_hash == current_password:
+            password_matches = True
+            
+        if not password_matches:
+            conn.close()
+            return jsonify({"error": "La contraseña actual es incorrecta"}), 400
+            
+    new_hash = generate_password_hash(new_password)
+    cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        "success": True,
+        "message": "Contraseña actualizada exitosamente"
+    }), 200
+
 # ==================== USERS CRUD ====================
 
 @app.route('/api/users', methods=['GET'])
@@ -402,6 +452,7 @@ def admin_user_detail(user_id):
     
     if request.method == 'PUT':
         data = request.get_json() or {}
+        raw_username = (data.get('username') or '').strip().lower()
         full_name = data.get('full_name')
         email = data.get('email')
         phone = data.get('phone')
@@ -410,10 +461,28 @@ def admin_user_detail(user_id):
         is_active = data.get('is_active', 1)
         password = data.get('password')
         
+        current_u = cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not current_u:
+            conn.close()
+            return jsonify({"error": "Usuario no encontrado"}), 404
+            
+        target_username = current_u['username']
+        if raw_username and raw_username != current_u['username'].lower():
+            if current_u['username'] == 'admin':
+                conn.close()
+                return jsonify({"error": "No se puede renombrar el usuario de la cuenta root admin"}), 400
+            # Validar que no exista otro con ese username
+            dup = cursor.execute("SELECT id FROM users WHERE LOWER(username) = ? AND id != ?", (raw_username, user_id)).fetchone()
+            if dup:
+                conn.close()
+                return jsonify({"error": f"El nombre de usuario '{raw_username}' ya está en uso por otro colaborador"}), 400
+            target_username = raw_username
+
         if password and len(password.strip()) > 0:
             p_hash = generate_password_hash(password.strip())
             cursor.execute('''
                 UPDATE users SET
+                    username = ?,
                     full_name = COALESCE(?, full_name),
                     email = COALESCE(?, email),
                     phone = COALESCE(?, phone),
@@ -422,10 +491,11 @@ def admin_user_detail(user_id):
                     is_active = ?,
                     password_hash = ?
                 WHERE id = ?
-            ''', (full_name, email, phone, role, team_id, is_active, p_hash, user_id))
+            ''', (target_username, full_name, email, phone, role, team_id, is_active, p_hash, user_id))
         else:
             cursor.execute('''
                 UPDATE users SET
+                    username = ?,
                     full_name = COALESCE(?, full_name),
                     email = COALESCE(?, email),
                     phone = COALESCE(?, phone),
@@ -433,22 +503,66 @@ def admin_user_detail(user_id):
                     team_id = ?,
                     is_active = ?
                 WHERE id = ?
-            ''', (full_name, email, phone, role, team_id, is_active, user_id))
+            ''', (target_username, full_name, email, phone, role, team_id, is_active, user_id))
             
         conn.commit()
         updated = cursor.execute("SELECT id, username, email, phone, full_name, role, team_id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
         conn.close()
-        return jsonify({"message": "Usuario actualizado", "user": dict(updated)})
+        return jsonify({"message": "Usuario actualizado con éxito", "user": dict(updated)})
         
     elif request.method == 'DELETE':
         if user_id == 1:
             conn.close()
-            return jsonify({"error": "No se puede desactivar al Administrador Principal"}), 400
-        # Soft delete / toggle active
-        cursor.execute("UPDATE users SET is_active = 0 WHERE id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Usuario desactivado correctamente"})
+            return jsonify({"error": "No se puede eliminar ni desactivar al Administrador Principal"}), 400
+            
+        permanent = request.args.get('permanent', 'false').lower() in ('true', '1', 'yes')
+        mode = request.args.get('mode', '')
+        if mode == 'permanent':
+            permanent = True
+            
+        if permanent:
+            try:
+                # 1. Desvincular liderazgo en equipos
+                cursor.execute("UPDATE teams SET lider_id = NULL WHERE lider_id = ?", (user_id,))
+                # 2. Desvincular dependencias en actividades
+                cursor.execute('''
+                    UPDATE actividades SET parent_task_id = NULL 
+                    WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?)
+                ''', (user_id,))
+                # 3. Eliminar actividades y bitácoras asociadas
+                cursor.execute('''
+                    DELETE FROM actividades 
+                    WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?)
+                ''', (user_id,))
+                cursor.execute("DELETE FROM bitacoras WHERE user_id = ?", (user_id,))
+                
+                for tbl in ['tasks', 'audit_logs', 'notifications']:
+                    try:
+                        cursor.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (user_id,))
+                    except Exception:
+                        pass
+                        
+                # 4. Eliminar el usuario definitivamente
+                cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+                conn.commit()
+                conn.close()
+                return jsonify({"success": True, "message": "Usuario eliminado definitivamente del sistema"})
+            except Exception as e:
+                conn.rollback()
+                conn.close()
+                return jsonify({"error": f"Error al eliminar usuario: {str(e)}"}), 500
+        else:
+            # Alternar o desactivar
+            curr = cursor.execute("SELECT is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+            if not curr:
+                conn.close()
+                return jsonify({"error": "Usuario no encontrado"}), 404
+            new_active = 0 if curr['is_active'] == 1 else 1
+            msg = "Usuario desactivado correctamente" if new_active == 0 else "Usuario reactivado correctamente"
+            cursor.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_active, user_id))
+            conn.commit()
+            conn.close()
+            return jsonify({"success": True, "message": msg, "is_active": new_active})
 
 # ==================== TEAMS CRUD ====================
 
