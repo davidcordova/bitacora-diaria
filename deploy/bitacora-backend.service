@@ -1,0 +1,20 @@
+[Unit]
+Description=Bitacora Diaria API Service (Flask + Gunicorn)
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/bitacora/backend
+Environment="PATH=/var/www/bitacora/backend/venv/bin"
+Environment="DATABASE_PATH=/var/www/bitacora/bitacora.db"
+Environment="FLASK_ENV=production"
+
+# Gunicorn ejecutando con 3 workers y 1 thread por worker
+ExecStart=/var/www/bitacora/backend/venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 --timeout 120 app:app
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

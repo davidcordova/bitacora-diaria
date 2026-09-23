@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Production builds
+dist/
+build/
+frontend/dist/
+
+# Python
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# SQLite databases (persisted on server volume, not tracked in git)
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads contents
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Environment variables & local configs
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+
+# Tool caches
+.kombai/
+.tempmediaStorage/
+.system_generated/

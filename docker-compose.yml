@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bitacora_backend
+    restart: always
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_PATH=/data/bitacora.db
+      - UPLOAD_FOLDER=/data/uploads
+    volumes:
+      - bitacora_data:/data
+    networks:
+      - bitacora_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bitacora_frontend
+    restart: always
+    expose:
+      - "80"
+    depends_on:
+      - backend
+    networks:
+      - bitacora_net
+
+volumes:
+  bitacora_data:
+
+networks:
+  bitacora_net:
+    driver: bridge
