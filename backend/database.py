@@ -139,57 +139,7 @@ def init_db():
             VALUES ('admin', 'admin@marketingalterno.pe', ?, 'Administrador Principal', 'admin', '51999888777', 1, CURRENT_TIMESTAMP)
         ''', (admin_hash,))
 
-    # 6. Crear / Actualizar usuarios de ejemplo y líderes
-    cursor.execute("UPDATE users SET role = 'analista' WHERE role = 'operador'")
-    default_users = [
-        ('juan', 'juan@marketingalterno.pe', 'Juan Pérez García', 'lider', '51987654321'),
-        ('maria', 'maria@marketingalterno.pe', 'María López', 'analista', '51912345678'),
-        ('carlos', 'carlos@marketingalterno.pe', 'Carlos Mendoza', 'analista', '51923456789'),
-        ('pedro', 'pedro@marketingalterno.pe', 'Pedro Gómez', 'analista', '51934567890'),
-    ]
-    
-    for u_name, u_email, u_full, u_role, u_phone in default_users:
-        cursor.execute("SELECT id FROM users WHERE username = ?", (u_name,))
-        existing = cursor.fetchone()
-        if not existing:
-            cursor.execute('''
-                INSERT INTO users (username, email, password_hash, full_name, role, phone, is_active, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-            ''', (u_name, u_email, generate_password_hash('123456'), u_full, u_role, u_phone))
-        else:
-            cursor.execute('''
-                UPDATE users SET full_name = ?, role = ?, phone = COALESCE(phone, ?) WHERE username = ?
-            ''', (u_full, u_role, u_phone, u_name))
-
-    # 7. Crear equipos iniciales si la tabla teams está vacía
-    cursor.execute("SELECT COUNT(*) FROM teams")
-    if cursor.fetchone()[0] == 0:
-        # Obtener id de Juan para ponerlo de líder
-        cursor.execute("SELECT id FROM users WHERE username = 'juan'")
-        juan_id = cursor.fetchone()[0]
-        
-        cursor.execute('''
-            INSERT INTO teams (nombre, descripcion, lider_id)
-            VALUES ('Equipo de Sistemas e Infraestructura', 'Área de TI, soporte técnico y servidores', ?)
-        ''', (juan_id,))
-        team_id = cursor.lastrowid
-
-        # Asignar miembros a este equipo
-        cursor.execute('''
-            UPDATE users SET team_id = ? WHERE username IN ('juan', 'maria', 'carlos')
-        ''', (team_id,))
-
-        # Crear un segundo equipo de Desarrollo
-        cursor.execute('''
-            INSERT INTO teams (nombre, descripcion, lider_id)
-            VALUES ('Equipo de Desarrollo y Automatización', 'Desarrollo de software y módulos web', ?)
-        ''', (juan_id,))
-        team2_id = cursor.lastrowid
-        cursor.execute('''
-            UPDATE users SET team_id = ? WHERE username IN ('pedro')
-        ''', (team2_id,))
-
-    # 8. Crear tabla system_settings para configuraciones globales y branding
+    # 6. Crear tabla system_settings para configuraciones globales y branding
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS system_settings (
             key TEXT PRIMARY KEY,
@@ -199,13 +149,15 @@ def init_db():
     ''')
     default_settings = [
         ('hora_inicio_default', '08:30'),
-        ('system_title', 'Bitácora Diaria de Actividades | Marketing Alterno Perú'),
+        ('system_title', 'Bitácora Diaria | Marketing Alterno Perú'),
         ('logo_url', ''),
         ('favicon_url', ''),
-        ('login_bg_url', ''),
-        ('login_bg_type', 'gradient'),
-        ('login_heading', 'Bitácora Oficial'),
-        ('login_subheading', 'Marketing Alterno Perú')
+        ('login_bg_url', 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=1600&q=80'),
+        ('login_bg_type', 'image'),
+        ('login_heading', 'Bitacora Digital'),
+        ('login_subheading', 'Marketing Alterno Perú'),
+        ('system_mode', 'production'),
+        ('show_demo_logins', 'false')
     ]
     for key, val in default_settings:
         cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)", (key, val))

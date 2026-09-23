@@ -9,35 +9,37 @@ def seed_team_and_activities():
     
     print("Inicializando datos de prueba para equipo y bitácoras...")
     
-    # 1. Asegurar que existe el Equipo 1 con líder Juan Pérez García (id: 3)
-    cursor.execute('''
-        INSERT OR REPLACE INTO teams (id, nombre, descripcion, lider_id, created_at)
-        VALUES (1, 'Equipo de Sistemas e Infraestructura', 'Área de TI, desarrollo interno, infraestructura y soporte', 3, CURRENT_TIMESTAMP)
-    ''')
-    
-    # 2. Asignar a todos los colaboradores al Equipo 1 con teléfonos válidos
+    # 1. Asignar a todos los colaboradores primero (sin team_id aún para evitar conflicto de FK)
     admin_hash = generate_password_hash('M1un1c4cl4v3')
     user_hash = generate_password_hash('123456')
     users_data = [
-        (1, 'admin', 'admin@marketingalterno.pe', admin_hash, 'Administrador Principal', 'admin', None, '51999888777'),
-        (3, 'juan', 'juan.perez@marketingalterno.pe', user_hash, 'Juan Pérez García', 'lider', 1, '51987654321'),
-        (4, 'maria', 'maria.lopez@marketingalterno.pe', user_hash, 'María López', 'analista', 1, '51912345678'),
-        (5, 'carlos', 'carlos.mendoza@marketingalterno.pe', user_hash, 'Carlos Mendoza', 'analista', 1, '51923456789'),
-        (6, 'pedro', 'pedro.gomez@marketingalterno.pe', user_hash, 'Pedro Gómez', 'analista', 1, '51934567890'),
+        (1, 'admin', 'admin@marketingalterno.pe', admin_hash, 'Administrador Principal', 'admin', '51999888777'),
+        (3, 'juan', 'juan.perez@marketingalterno.pe', user_hash, 'Juan Pérez García', 'lider', '51987654321'),
+        (4, 'maria', 'maria.lopez@marketingalterno.pe', user_hash, 'María López', 'analista', '51912345678'),
+        (5, 'carlos', 'carlos.mendoza@marketingalterno.pe', user_hash, 'Carlos Mendoza', 'analista', '51923456789'),
+        (6, 'pedro', 'pedro.gomez@marketingalterno.pe', user_hash, 'Pedro Gómez', 'analista', '51934567890'),
     ]
     
-    for uid, uname, email, phash, fname, role, tid, phone in users_data:
+    for uid, uname, email, phash, fname, role, phone in users_data:
         cursor.execute('''
-            INSERT INTO users (id, username, email, password_hash, full_name, role, team_id, phone, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+            INSERT INTO users (id, username, email, password_hash, full_name, role, phone, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
                 email = excluded.email,
                 password_hash = excluded.password_hash,
                 full_name = excluded.full_name,
                 role = excluded.role,
-                team_id = excluded.team_id,
                 phone = excluded.phone
-        ''', (uid, uname, email, phash, fname, role, tid, phone))
+        ''', (uid, uname, email, phash, fname, role, phone))
+
+    # 2. Asegurar que existe el Equipo 1 con líder Juan Pérez García (id: 3)
+    cursor.execute('''
+        INSERT OR REPLACE INTO teams (id, nombre, descripcion, lider_id, created_at)
+        VALUES (1, 'Equipo de Sistemas e Infraestructura', 'Área de TI, desarrollo interno, infraestructura y soporte', 3, CURRENT_TIMESTAMP)
+    ''')
+    
+    # 3. Vincular colaboradores al Equipo 1
+    cursor.execute("UPDATE users SET team_id = 1 WHERE id IN (3, 4, 5, 6)")
         
     today_str = datetime.now().strftime('%Y-%m-%d')
     yesterday_str = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
