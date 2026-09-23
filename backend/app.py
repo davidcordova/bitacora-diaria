@@ -126,6 +126,8 @@ def clean_production_data():
     conn = get_db()
     cursor = conn.cursor()
     try:
+        cursor.execute("UPDATE users SET team_id = NULL")
+        cursor.execute("UPDATE teams SET lider_id = NULL")
         cursor.execute("DELETE FROM actividades")
         cursor.execute("DELETE FROM bitacoras")
         cursor.execute("DELETE FROM users WHERE username != 'admin'")
