@@ -26,6 +26,9 @@ import {
   Eye,
   LogIn,
   CalendarCheck,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react';
 import { User, Team, UserRole, SystemSettings } from '../types';
 import { api } from '../services/api';
@@ -57,6 +60,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [loginBgType, setLoginBgType] = useState<'gradient' | 'image'>(systemSettings?.login_bg_type || 'gradient');
   const [loginHeading, setLoginHeading] = useState(systemSettings?.login_heading || 'Bitácora Oficial');
   const [loginSubheading, setLoginSubheading] = useState(systemSettings?.login_subheading || 'Marketing Alterno Perú');
+  const [systemMode, setSystemMode] = useState<'production' | 'demo'>(systemSettings?.system_mode || 'production');
+  const [showDemoLogins, setShowDemoLogins] = useState(systemSettings?.show_demo_logins === 'true');
+  const [cleaningData, setCleaningData] = useState(false);
+  const [seedingData, setSeedingData] = useState(false);
+  const [showCleanConfirmModal, setShowCleanConfirmModal] = useState(false);
 
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -113,6 +121,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         if (s.login_bg_type) setLoginBgType(s.login_bg_type);
         if (s.login_heading) setLoginHeading(s.login_heading);
         if (s.login_subheading) setLoginSubheading(s.login_subheading);
+        if (s.system_mode) setSystemMode(s.system_mode as 'production' | 'demo');
+        if (s.show_demo_logins !== undefined) setShowDemoLogins(s.show_demo_logins === 'true');
       }
     }).catch(() => {});
   }, []);
@@ -149,17 +159,62 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         login_bg_type: loginBgType,
         login_heading: loginHeading.trim(),
         login_subheading: loginSubheading.trim(),
+        system_mode: systemMode,
+        show_demo_logins: showDemoLogins ? 'true' : 'false',
       };
       const updated = await api.updateSettings(payload);
       if (onUpdateSettings) {
         onUpdateSettings(updated);
       }
-      setFeedbackMsg('¡Identidad visual, login y ajustes guardados con éxito!');
+      setFeedbackMsg('¡Identidad visual, modo de sistema y ajustes guardados con éxito!');
       setTimeout(() => setFeedbackMsg(''), 4000);
     } catch (err: any) {
       setFeedbackMsg(err.message || 'Error al guardar la configuración');
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  const handleCleanProductionData = async () => {
+    setCleaningData(true);
+    try {
+      const res = await api.cleanProductionData();
+      setFeedbackMsg(res.message);
+      setSystemMode('production');
+      setShowDemoLogins(false);
+      setShowCleanConfirmModal(false);
+      loadUsers();
+      onRefreshTeams();
+      if (onUpdateSettings) {
+        const updated = await api.getSettings();
+        onUpdateSettings(updated);
+      }
+      setTimeout(() => setFeedbackMsg(''), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Error al purgar datos');
+    } finally {
+      setCleaningData(false);
+    }
+  };
+
+  const handleSeedDemoData = async () => {
+    setSeedingData(true);
+    try {
+      const res = await api.seedDemoData();
+      setFeedbackMsg(res.message);
+      setSystemMode('demo');
+      setShowDemoLogins(true);
+      loadUsers();
+      onRefreshTeams();
+      if (onUpdateSettings) {
+        const updated = await api.getSettings();
+        onUpdateSettings(updated);
+      }
+      setTimeout(() => setFeedbackMsg(''), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Error al cargar datos de demostración');
+    } finally {
+      setSeedingData(false);
     }
   };
 
@@ -603,6 +658,126 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <span>{feedbackMsg}</span>
             </div>
           )}
+
+          {/* CARD 0: MODO DEL SISTEMA & ENTORNO */}
+          <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-6 shadow-sm">
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100 dark:border-[#252636] gap-4 flex-wrap">
+              <div className="flex items-start gap-3.5">
+                <div className={`p-2.5 rounded-2xl shrink-0 border ${
+                  systemMode === 'production'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                    : 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                }`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                      Modo del Sistema y Entorno
+                    </h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
+                      systemMode === 'production'
+                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                        : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                    }`}>
+                      {systemMode === 'production' ? '● Producción' : '⚡ Demostración'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Define si la plataforma opera para el equipo real de la empresa o en modo demostración para pruebas.
+                  </p>
+                </div>
+              </div>
+
+              {/* Botón selector de modo */}
+              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-1 rounded-full border border-slate-200 dark:border-[#252636]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemMode('production');
+                    setShowDemoLogins(false);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    systemMode === 'production'
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Producción</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemMode('demo');
+                    setShowDemoLogins(true);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    systemMode === 'demo'
+                      ? 'bg-amber-400 text-slate-950 shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Demostración</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              {/* Checkbox accesos rápidos */}
+              <label className="flex items-center gap-3 p-3.5 rounded-xl bg-slate-50 dark:bg-[#161722] border border-slate-200/80 dark:border-[#252636] cursor-pointer hover:bg-slate-100/70 dark:hover:bg-[#1C1D2A] transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showDemoLogins}
+                  onChange={(e) => setShowDemoLogins(e.target.checked)}
+                  className="w-4 h-4 rounded text-[#00F0FF] focus:ring-[#00F0FF] dark:bg-[#13141F] dark:border-[#252636]"
+                />
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                    Mostrar accesos rápidos para demostración en la pantalla de Login
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                    Muestra los botones de un clic (Admin, Líder, Analista) en la pantalla de inicio de sesión. Desmárcalo en producción para que sólo se ingrese con usuario y contraseña válidos.
+                  </span>
+                </div>
+              </label>
+
+              {/* Acciones de Base de Datos y Purga */}
+              <div className="pt-3 border-t border-slate-100 dark:border-[#252636] flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Limpieza y Purga de Datos
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Vacía las bitácoras y colaboradores de prueba para dejar el sistema impecable en producción con únicamente el Administrador.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCleanConfirmModal(true)}
+                    disabled={cleaningData || seedingData}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{cleaningData ? 'Purgando...' : 'Limpiar datos demo (Solo Admin)'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSeedDemoData}
+                    disabled={cleaningData || seedingData}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#161722] hover:bg-slate-200 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#252636] transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${seedingData ? 'animate-spin' : ''}`} />
+                    <span>{seedingData ? 'Cargando demo...' : 'Restaurar datos demo'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* CARD 1: IDENTIDAD VISUAL Y MARCA */}
           <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-6 shadow-sm">
@@ -1274,6 +1449,62 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR DATOS DE PRUEBA */}
+      {showCleanConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative">
+            <div className="flex items-center gap-3.5 mb-4 text-rose-500">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+                  ¿Purgar todos los datos demo?
+                </h3>
+                <p className="text-xs text-rose-500 font-semibold mt-0.5">
+                  Esta acción es irreversible
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+              <p>
+                Se eliminarán de forma permanente:
+              </p>
+              <ul className="list-disc pl-5 space-y-1 text-slate-500 dark:text-slate-400">
+                <li>Todas las bitácoras generadas y registros diarios</li>
+                <li>Todas las actividades individuales y colaborativas</li>
+                <li>Los colaboradores de prueba (Juan, María, Carlos, Pedro)</li>
+                <li>Los equipos de demostración</li>
+              </ul>
+              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-semibold mt-2">
+                ✓ Tu usuario Administrador (<code className="font-mono">admin</code>) se conservará intacto con su contraseña actual.
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowCleanConfirmModal(false)}
+                disabled={cleaningData}
+                className="px-4 py-2 rounded-full text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#161722] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleCleanProductionData}
+                disabled={cleaningData}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-xs font-bold bg-rose-600 hover:bg-rose-500 active:scale-98 text-white shadow-lg shadow-rose-600/25 cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{cleaningData ? 'Purgando...' : 'Sí, Purgar y Dejar en Producción'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

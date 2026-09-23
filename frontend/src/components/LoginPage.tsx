@@ -23,8 +23,9 @@ interface LoginPageProps {
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSettings }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('M1un1c4cl4v3');
+  const isDemoMode = systemSettings?.system_mode === 'demo' || systemSettings?.show_demo_logins === 'true';
+  const [username, setUsername] = useState(isDemoMode ? 'admin' : '');
+  const [password, setPassword] = useState(isDemoMode ? 'M1un1c4cl4v3' : '');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -224,54 +225,56 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
             </button>
           </form>
 
-          {/* Quick Access Roles Section */}
-          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-[#252636]">
-            <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-              <span>Accesos rápidos para demostración</span>
-              <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
+          {/* Quick Access Roles Section (Only visible in Demo Mode) */}
+          {isDemoMode && (
+            <div className="mt-6 pt-5 border-t border-slate-100 dark:border-[#252636]">
+              <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                <span>Accesos rápidos para demostración</span>
+                <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('admin', 'M1un1c4cl4v3')}
+                  className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
+                    username === 'admin'
+                      ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 ring-2 ring-rose-100 dark:ring-rose-900 shadow-2xs'
+                      : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
+                  }`}
+                >
+                  <Shield className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                  <span>Admin</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('juan', '123456')}
+                  className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
+                    username === 'juan'
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 ring-2 ring-amber-100 dark:ring-amber-900 shadow-2xs'
+                      : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>Líder</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin('maria', '123456')}
+                  className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
+                    username === 'maria'
+                      ? 'bg-[#00F0FF]/15 dark:bg-[#00F0FF]/15 border-[#00F0FF]/40 text-cyan-600 dark:text-[#00F0FF] ring-2 ring-[#00F0FF]/20 shadow-2xs'
+                      : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
+                  <span>Analista</span>
+                </button>
+              </div>
             </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin', 'M1un1c4cl4v3')}
-                className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
-                  username === 'admin'
-                    ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 ring-2 ring-rose-100 dark:ring-rose-900 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                <span>Admin</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('juan', '123456')}
-                className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
-                  username === 'juan'
-                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 ring-2 ring-amber-100 dark:ring-amber-900 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
-                }`}
-              >
-                <Star className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>Líder</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('maria', '123456')}
-                className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
-                  username === 'maria'
-                    ? 'bg-[#00F0FF]/15 dark:bg-[#00F0FF]/15 border-[#00F0FF]/40 text-cyan-600 dark:text-[#00F0FF] ring-2 ring-[#00F0FF]/20 shadow-2xs'
-                    : 'bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]'
-                }`}
-              >
-                <User className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
-                <span>Analista</span>
-              </button>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Security / System Footer Note */}

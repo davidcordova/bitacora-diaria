@@ -11,8 +11,9 @@ interface LoginModalProps {
 }
 
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess, systemSettings }) => {
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('M1un1c4cl4v3');
+  const isDemoMode = systemSettings?.system_mode === 'demo' || systemSettings?.show_demo_logins === 'true';
+  const [username, setUsername] = useState(isDemoMode ? 'admin' : '');
+  const [password, setPassword] = useState(isDemoMode ? 'M1un1c4cl4v3' : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -113,53 +114,55 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
           </button>
         </form>
 
-        {/* Quick Test Demo Buttons */}
-        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-[#252636]">
-          <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5 flex items-center justify-between">
-            <span>Accesos rápidos de prueba</span>
-            <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={() => setQuickUser('admin', 'M1un1c4cl4v3')}
-              className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
-                username === 'admin'
-                  ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
-                  : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
-              }`}
-            >
-              <Shield className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-              <span>Admin</span>
-            </button>
+        {/* Quick Test Demo Buttons (Only in Demo Mode) */}
+        {isDemoMode && (
+          <div className="mt-6 pt-5 border-t border-slate-100 dark:border-[#252636]">
+            <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2.5 flex items-center justify-between">
+              <span>Accesos rápidos de prueba</span>
+              <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]" />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setQuickUser('admin', 'M1un1c4cl4v3')}
+                className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
+                  username === 'admin'
+                    ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                    : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>Admin</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setQuickUser('juan', '123456')}
-              className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
-                username === 'juan'
-                  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
-                  : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
-              }`}
-            >
-              <Star className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Líder</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setQuickUser('juan', '123456')}
+                className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
+                  username === 'juan'
+                    ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300'
+                    : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
+                }`}
+              >
+                <Star className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>Líder</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setQuickUser('maria', '123456')}
-              className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
-                username === 'maria'
-                  ? 'bg-[#00F0FF]/15 dark:bg-[#00F0FF]/15 border-[#00F0FF]/40 text-cyan-600 dark:text-[#00F0FF]'
-                  : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
-              }`}
-            >
-              <User className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
-              <span>Analista</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setQuickUser('maria', '123456')}
+                className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
+                  username === 'maria'
+                    ? 'bg-[#00F0FF]/15 dark:bg-[#00F0FF]/15 border-[#00F0FF]/40 text-cyan-600 dark:text-[#00F0FF]'
+                    : 'bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
+                }`}
+              >
+                <User className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
+                <span>Analista</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <button
           type="button"

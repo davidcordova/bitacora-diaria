@@ -83,7 +83,8 @@ def handle_settings():
         data = request.get_json() or {}
         allowed_keys = [
             'hora_inicio_default', 'system_title', 'logo_url', 'favicon_url',
-            'login_bg_url', 'login_bg_type', 'login_heading', 'login_subheading'
+            'login_bg_url', 'login_bg_type', 'login_heading', 'login_subheading',
+            'system_mode', 'show_demo_logins'
         ]
         for key in allowed_keys:
             if key in data:
@@ -105,7 +106,9 @@ def handle_settings():
         'login_bg_url': '',
         'login_bg_type': 'gradient',
         'login_heading': 'Bitácora Oficial',
-        'login_subheading': 'Marketing Alterno Perú'
+        'login_subheading': 'Marketing Alterno Perú',
+        'system_mode': 'production',
+        'show_demo_logins': 'false'
     }
     for k, v in defaults.items():
         if k not in settings:
@@ -113,6 +116,69 @@ def handle_settings():
 
     conn.close()
     return jsonify(settings), 200
+
+@app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
+def clean_production_data():
+    """Purga todas las bitácoras, actividades y usuarios de prueba dejando el sistema limpio en producción con sólo el admin"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM actividades")
+        cursor.execute("DELETE FROM bitacoras")
+        cursor.execute("DELETE FROM users WHERE username != 'admin'")
+        cursor.execute("DELETE FROM teams")
+        
+        cursor.execute('''
+            INSERT INTO system_settings (key, value, updated_at) VALUES ('system_mode', 'production', CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = 'production', updated_at = CURRENT_TIMESTAMP
+        ''')
+        cursor.execute('''
+            INSERT INTO system_settings (key, value, updated_at) VALUES ('show_demo_logins', 'false', CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = 'false', updated_at = CURRENT_TIMESTAMP
+        ''')
+        conn.commit()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "Datos de prueba purgados exitosamente. El sistema está limpio en Modo Producción con el usuario Administrador."
+        }), 200
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": f"Error al limpiar datos: {str(e)}"}), 500
+
+@app.route('/api/admin/seed-demo-data', methods=['POST', 'OPTIONS'])
+def seed_demo_data():
+    """Restaura los datos de prueba (usuarios, equipos y bitácoras de ejemplo) para modo demostración"""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+        
+    try:
+        from seed_data import seed_team_and_activities
+        seed_team_and_activities()
+        
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO system_settings (key, value, updated_at) VALUES ('system_mode', 'demo', CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = 'demo', updated_at = CURRENT_TIMESTAMP
+        ''')
+        cursor.execute('''
+            INSERT INTO system_settings (key, value, updated_at) VALUES ('show_demo_logins', 'true', CURRENT_TIMESTAMP)
+            ON CONFLICT(key) DO UPDATE SET value = 'true', updated_at = CURRENT_TIMESTAMP
+        ''')
+        conn.commit()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "message": "Datos de demostración y usuarios de prueba cargados correctamente en Modo Demo."
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al cargar datos de demostración: {str(e)}"}), 500
+
 
 # ==================== GESTIÓN DE ARCHIVOS Y EVIDENCIAS ====================
 

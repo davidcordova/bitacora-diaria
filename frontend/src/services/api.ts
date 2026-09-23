@@ -326,6 +326,30 @@ export const api = {
     return await res.json();
   },
 
+  async cleanProductionData(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/clean-production-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al purgar datos' }));
+      throw new Error(err.error || 'Error al purgar datos');
+    }
+    return await res.json();
+  },
+
+  async seedDemoData(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/admin/seed-demo-data`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al cargar datos demo' }));
+      throw new Error(err.error || 'Error al cargar datos demo');
+    }
+    return await res.json();
+  },
+
   saveToLocalStorage(bitacora: Bitacora) {
     try {
       const existingStr = localStorage.getItem('bitacoras_history');

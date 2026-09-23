@@ -142,4 +142,7 @@ export interface SystemSettings {
   login_bg_type?: 'gradient' | 'image';
   login_heading?: string;
   login_subheading?: string;
+  system_mode?: 'production' | 'demo';
+  show_demo_logins?: 'true' | 'false';
 }
+

@@ -1,9 +1,10 @@
 import sqlite3
 from datetime import datetime, timedelta
+from werkzeug.security import generate_password_hash
+from database import get_db
 
 def seed_team_and_activities():
-    conn = sqlite3.connect('bitacora.db')
-    conn.row_factory = sqlite3.Row
+    conn = get_db()
     cursor = conn.cursor()
     
     print("Inicializando datos de prueba para equipo y bitácoras...")
@@ -15,25 +16,28 @@ def seed_team_and_activities():
     ''')
     
     # 2. Asignar a todos los colaboradores al Equipo 1 con teléfonos válidos
+    admin_hash = generate_password_hash('M1un1c4cl4v3')
+    user_hash = generate_password_hash('123456')
     users_data = [
-        (1, 'admin', 'admin@marketingalterno.pe', 'Administrador Principal', 'admin', None, '51999888777'),
-        (3, 'juan', 'juan.perez@marketingalterno.pe', 'Juan Pérez García', 'lider', 1, '51987654321'),
-        (4, 'maria', 'maria.lopez@marketingalterno.pe', 'María López', 'analista', 1, '51912345678'),
-        (5, 'carlos', 'carlos.mendoza@marketingalterno.pe', 'Carlos Mendoza', 'analista', 1, '51923456789'),
-        (6, 'pedro', 'pedro.gomez@marketingalterno.pe', 'Pedro Gómez', 'analista', 1, '51934567890'),
+        (1, 'admin', 'admin@marketingalterno.pe', admin_hash, 'Administrador Principal', 'admin', None, '51999888777'),
+        (3, 'juan', 'juan.perez@marketingalterno.pe', user_hash, 'Juan Pérez García', 'lider', 1, '51987654321'),
+        (4, 'maria', 'maria.lopez@marketingalterno.pe', user_hash, 'María López', 'analista', 1, '51912345678'),
+        (5, 'carlos', 'carlos.mendoza@marketingalterno.pe', user_hash, 'Carlos Mendoza', 'analista', 1, '51923456789'),
+        (6, 'pedro', 'pedro.gomez@marketingalterno.pe', user_hash, 'Pedro Gómez', 'analista', 1, '51934567890'),
     ]
     
-    for uid, uname, email, fname, role, tid, phone in users_data:
+    for uid, uname, email, phash, fname, role, tid, phone in users_data:
         cursor.execute('''
             INSERT INTO users (id, username, email, password_hash, full_name, role, team_id, phone, is_active, created_at)
-            VALUES (?, ?, ?, '123456', ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
             ON CONFLICT(id) DO UPDATE SET
                 email = excluded.email,
+                password_hash = excluded.password_hash,
                 full_name = excluded.full_name,
                 role = excluded.role,
                 team_id = excluded.team_id,
                 phone = excluded.phone
-        ''', (uid, uname, email, fname, role, tid, phone))
+        ''', (uid, uname, email, phash, fname, role, tid, phone))
         
     today_str = datetime.now().strftime('%Y-%m-%d')
     yesterday_str = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
