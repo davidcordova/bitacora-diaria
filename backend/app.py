@@ -1433,8 +1433,13 @@ def start_midnight_scheduler():
     t = threading.Thread(target=run_scheduler, daemon=True)
     t.start()
 
-if __name__ == '__main__':
+# Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
+try:
     init_db()
     start_midnight_scheduler()
+except Exception as e:
+    print("[Startup] Error inicializando DB o scheduler:", e)
+
+if __name__ == '__main__':
     print("Iniciando servidor Flask de Bitácoras con soporte de Usuarios, Equipos, Dashboard y Rollover 00:00 en http://localhost:5000...")
     app.run(host='0.0.0.0', port=5000, debug=False)
