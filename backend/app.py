@@ -156,6 +156,25 @@ def diagnose_db():
         except Exception:
             pass
             
+        import re
+        raw_matches = []
+        for fname in ['bitacora.db', 'bitacora.db-wal']:
+            fpath = os.path.join(db_dir, fname)
+            if os.path.exists(fpath):
+                try:
+                    with open(fpath, 'rb') as fp:
+                        raw_bytes = fp.read()
+                    raw_strs = re.findall(b'[\x20-\x7E\xC0-\xFF]{6,}', raw_bytes)
+                    for s in raw_strs:
+                        try:
+                            txt = s.decode('latin1')
+                            if any(k in txt.lower() for k in ['masivo', 'rh', 'chamba', 'ayala', 'ticket', 'wifi', 'switch', 'vpn', 'incidente', 'odoo']):
+                                raw_matches.append(f"[{fname}] {txt}")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    raw_matches.append(f"Error reading {fname}: {str(e)}")
+
         conn.close()
         return jsonify({
             "db_path": DB_PATH,
@@ -163,7 +182,9 @@ def diagnose_db():
             "tables": tables,
             "total_actividades": len(all_acts),
             "actividades": all_acts,
-            "bitacoras": all_b
+            "bitacoras": all_b,
+            "raw_matches_count": len(raw_matches),
+            "raw_matches": list(set(raw_matches))[:200]
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
