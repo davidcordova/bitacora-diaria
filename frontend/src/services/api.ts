@@ -170,13 +170,14 @@ export const api = {
   },
 
   // ================= BITACORAS =================
-  async getBitacoras(fecha?: string, colaborador?: string, team_id?: number, requesting_user_id?: number): Promise<Bitacora[]> {
+  async getBitacoras(fecha?: string, colaborador?: string, team_id?: number, requesting_user_id?: number, user_id?: number): Promise<Bitacora[]> {
     try {
       const params = new URLSearchParams();
       if (fecha) params.append('fecha', fecha);
       if (colaborador) params.append('colaborador', colaborador);
       if (team_id) params.append('team_id', String(team_id));
       if (requesting_user_id) params.append('requesting_user_id', String(requesting_user_id));
+      if (user_id) params.append('user_id', String(user_id));
       const res = await fetch(`${API_BASE}/bitacoras?${params.toString()}`);
       if (res.ok) {
         return await res.json();

@@ -38,6 +38,8 @@ interface ActividadesListaProps {
   onDateChange?: (date: string) => void;
   horaInicio?: string;
   onHoraInicioChange?: (time: string) => void;
+  autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  lastSavedTime?: Date | null;
 }
 
 export const ActividadesLista: React.FC<ActividadesListaProps> = ({
@@ -53,6 +55,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   onDateChange,
   horaInicio = '08:30',
   onHoraInicioChange,
+  autoSaveStatus = 'idle',
+  lastSavedTime = null,
 }) => {
   // Modal states
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -223,6 +227,20 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               <span>EN JORNADA</span>
             </span>
 
+            {/* Auto-save Status Indicator */}
+            {autoSaveStatus === 'saving' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
+                <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
+                <span>Guardando...</span>
+              </span>
+            )}
+            {autoSaveStatus === 'saved' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
+                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                <span>Guardado {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : 'automático'}</span>
+              </span>
+            )}
+
             {/* Inline Date Navigator */}
             {fecha && onDateChange && (
               <div className="flex items-center gap-0.5 bg-white dark:bg-[#1A1C29] p-0.5 rounded-full border border-slate-200/90 dark:border-[#252636] shadow-2xs">
@@ -327,7 +345,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             <ListChecks className="w-6 h-6" />
           </div>
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">
-            No hay actividades registradas hoy
+            No hay actividades registradas {isToday(fecha) ? 'hoy' : 'para esta fecha'}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
             Comienza agregando tu primera actividad individual o asigna colaboradores en paralelo para sincronizar el avance.
