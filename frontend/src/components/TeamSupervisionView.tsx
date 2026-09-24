@@ -92,7 +92,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
   // Filter teams accessible to this leader / admin
   const accessibleTeams = useMemo(() => {
-    return currentUser?.role === 'admin'
+    return currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader
       ? teams
       : teams.filter((t) => t.id === currentUser?.team_id || t.lider_id === currentUser?.id);
   }, [teams, currentUser]);
@@ -104,13 +104,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     if (users && users.length > 0) {
       let filteredUsers = users.filter((u) => u.is_active !== 0 && (u.is_active as any) !== false);
 
-      if (currentUser?.role === 'admin') {
+      if (currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader) {
         if (selectedTeamFilter !== 'all') {
           const tid = Number(selectedTeamFilter);
           filteredUsers = filteredUsers.filter((u) => u.team_id === tid);
         }
       } else {
-        // Leader: can see members of teams they lead or belong to
+        // Operador/Analista: miembros de su propio equipo
         const leaderTeamIds = new Set(accessibleTeams.map((t) => t.id));
         filteredUsers = filteredUsers.filter(
           (u) =>
@@ -160,13 +160,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       ]);
 
       // Filter bitacoras that belong to accessible members
-      const memberNames = new Set(allMembers.map((m) => m.full_name));
+      const memberNames = new Set(allMembers.map((m) => m.full_name.toLowerCase()));
+      const memberUsernames = new Set(allMembers.map((m) => (m.username || '').toLowerCase()).filter(Boolean));
       const memberIds = new Set(allMembers.map((m) => m.id));
 
       const filteredBitacoras = (bitacorasList || []).filter(
         (b) =>
           (b.user_id && memberIds.has(b.user_id)) ||
-          memberNames.has(b.colaborador)
+          memberNames.has((b.colaborador || '').toLowerCase()) ||
+          memberUsernames.has((b.colaborador || '').toLowerCase())
       );
 
       setTeamBitacoras(filteredBitacoras);
@@ -203,7 +205,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     return allMembers.map((member) => {
       // Find bitacora matching member AND selectedDate
       const memberLogs = teamBitacoras.filter(
-        (b) => b.user_id === member.id || b.colaborador === member.full_name
+        (b) =>
+          b.user_id === member.id ||
+          b.colaborador.toLowerCase() === member.full_name.toLowerCase() ||
+          (member.username && b.colaborador.toLowerCase() === member.username.toLowerCase())
       );
       const dateLog = memberLogs.find((b) => b.fecha === selectedDate) || null;
 
@@ -264,7 +269,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
     allMembers.forEach((member) => {
       const memberLogs = teamBitacoras.filter(
-        (b) => b.user_id === member.id || b.colaborador === member.full_name
+        (b) =>
+          b.user_id === member.id ||
+          b.colaborador.toLowerCase() === member.full_name.toLowerCase() ||
+          (member.username && b.colaborador.toLowerCase() === member.username.toLowerCase())
       );
       const activeLog = memberLogs.find((b) => b.fecha === selectedDate);
       if (activeLog && activeLog.actividades) {
@@ -288,7 +296,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const filteredLiveFeed = useMemo(() => {
     let list = liveActivities;
     if (selectedMemberId !== 'all') {
-      list = list.filter((act) => act.user_id === selectedMemberId || act.colaborador === allMembers.find((m) => m.id === selectedMemberId)?.full_name);
+      const targetM = allMembers.find((m) => m.id === selectedMemberId);
+      list = list.filter(
+        (act) =>
+          act.user_id === selectedMemberId ||
+          (targetM && act.colaborador.toLowerCase() === targetM.full_name.toLowerCase()) ||
+          (targetM?.username && act.colaborador.toLowerCase() === targetM.username.toLowerCase())
+      );
     }
     if (feedSearch.trim()) {
       const q = feedSearch.toLowerCase();
@@ -312,7 +326,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const currentIndividualBitacora = useMemo(() => {
     if (!selectedMember) return null;
     const memberLogs = teamBitacoras.filter(
-      (b) => b.user_id === selectedMember.id || b.colaborador === selectedMember.full_name
+      (b) =>
+        b.user_id === selectedMember.id ||
+        b.colaborador.toLowerCase() === selectedMember.full_name.toLowerCase() ||
+        (selectedMember.username && b.colaborador.toLowerCase() === selectedMember.username.toLowerCase())
     );
     return memberLogs.find((b) => b.fecha === selectedDate) || null;
   }, [selectedMember, teamBitacoras, selectedDate]);

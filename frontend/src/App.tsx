@@ -224,11 +224,13 @@ export function App() {
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
 
-        if (result.bitacora?.id && result.bitacora.id !== bitacora.id) {
+        if (result.bitacora) {
           setBitacora((prev) => ({
             ...prev,
             id: result.bitacora.id,
-            actividades: result.bitacora.actividades || prev.actividades,
+            actividades: result.bitacora.actividades && result.bitacora.actividades.length > 0
+              ? result.bitacora.actividades
+              : prev.actividades,
           }));
         }
 
@@ -274,7 +276,11 @@ export function App() {
 
       if (activeUser) {
         const todayMatch = hList.find(
-          (b) => (b.user_id === activeUser.id || b.colaborador === activeUser.full_name) && b.fecha === todayStr
+          (b) =>
+            (b.user_id === activeUser.id ||
+              b.colaborador.toLowerCase() === activeUser.full_name.toLowerCase() ||
+              (activeUser.username && b.colaborador.toLowerCase() === activeUser.username.toLowerCase())) &&
+            b.fecha === todayStr
         );
         if (todayMatch) {
           setBitacora(todayMatch);
@@ -385,7 +391,11 @@ export function App() {
       // 2. Consultar al backend por la bitácora de la nueva fecha
       const serverBitacoras = await api.getBitacoras(newDate, undefined, undefined, activeUid, activeUid);
       const serverMatch = serverBitacoras.find(
-        (b) => (b.user_id === activeUid || b.colaborador === activeName) && b.fecha === newDate
+        (b) =>
+          (b.user_id === activeUid ||
+            b.colaborador.toLowerCase() === activeName.toLowerCase() ||
+            (currentUser?.username && b.colaborador.toLowerCase() === currentUser.username.toLowerCase())) &&
+          b.fecha === newDate
       );
 
       if (serverMatch) {
@@ -413,6 +423,17 @@ export function App() {
             if (parsed && parsed.fecha === newDate) {
               setBitacora(parsed);
               setIsGenerated(false);
+              lastSavedSignature.current = JSON.stringify({
+                fecha: parsed.fecha,
+                colaborador: parsed.colaborador,
+                user_id: parsed.user_id,
+                actividades: parsed.actividades,
+                pendientes: parsed.pendientes,
+                necesita_apoyo: parsed.necesita_apoyo,
+                apoyo_detalle: parsed.apoyo_detalle,
+                prioridad_siguiente: parsed.prioridad_siguiente,
+                hora_inicio: parsed.hora_inicio,
+              });
               return;
             }
           } catch (e) {}
@@ -453,7 +474,7 @@ export function App() {
     } finally {
       setTimeout(() => {
         isSwitchingDateRef.current = false;
-      }, 250);
+      }, 300);
     }
   };
 
@@ -464,7 +485,11 @@ export function App() {
     try {
       const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, activeUid, activeUid);
       const serverMatch = serverBitacoras.find(
-        (b) => (b.user_id === activeUid || b.colaborador === activeName) && b.fecha === bitacora.fecha
+        (b) =>
+          (b.user_id === activeUid ||
+            b.colaborador.toLowerCase() === activeName.toLowerCase() ||
+            (currentUser?.username && b.colaborador.toLowerCase() === currentUser.username.toLowerCase())) &&
+          b.fecha === bitacora.fecha
       );
       if (serverMatch) {
         setBitacora(serverMatch);

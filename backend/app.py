@@ -703,7 +703,7 @@ def get_bitacoras():
     query = '''
         SELECT b.*, u.team_id, t.nombre as team_name
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE 1=1
     '''
@@ -711,36 +711,27 @@ def get_bitacoras():
     
     # PRIVACIDAD ESTRICTA POR ROL:
     if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
         if req_u:
             r_role = req_u['role']
             if r_role in ('analista', 'operador'):
-                # Los analistas SOLO pueden ver sus propias bitácoras
-                query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                params.extend([req_u['id'], req_u['full_name']])
-            elif r_role == 'lider':
-                # Los líderes pueden ver bitácoras de los miembros de sus equipos o las suyas
-                lider_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? UNION SELECT team_id FROM users WHERE id = ? AND team_id IS NOT NULL", (req_u['id'], req_u['id'])).fetchall()]
-                if lider_teams:
-                    placeholders = ','.join(['?'] * len(lider_teams))
-                    query += f" AND (u.team_id IN ({placeholders}) OR b.user_id = ? OR b.colaborador = ?)"
-                    params.extend(lider_teams + [req_u['id'], req_u['full_name']])
-                else:
-                    query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                    params.extend([req_u['id'], req_u['full_name']])
-            # Si es admin, no se aplica restricción automática
+                # Los analistas/operadores SOLO pueden ver sus propias bitácoras
+                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
+            # Si es lider o admin, pueden ver todas las bitácoras o filtrar por team_id si se pasa como parámetro
     
     if fecha:
         query += " AND b.fecha = ?"
         params.append(fecha)
     if colaborador:
-        query += " AND b.colaborador LIKE ?"
-        params.append(f"%{colaborador}%")
+        query += " AND (b.colaborador LIKE ? OR u.username LIKE ?)"
+        params.extend([f"%{colaborador}%", f"%{colaborador}%"])
     if team_id:
         query += " AND u.team_id = ?"
         params.append(team_id)
     if user_id:
         query += " AND (b.user_id = ? OR u.id = ?)"
+        params.extend([user_id, user_id])
     if fecha:
         query += " ORDER BY b.fecha DESC, b.id DESC LIMIT 500"
     else:
@@ -821,11 +812,19 @@ def save_bitacora():
     conn = get_db()
     cursor = conn.cursor()
     
-    # Si no viene user_id, buscarlo por nombre
+    # Canonicalizar user_id y colaborador con la tabla users
     if not user_id:
-        u_match = cursor.execute("SELECT id FROM users WHERE full_name = ?", (colaborador,)).fetchone()
+        u_match = cursor.execute(
+            "SELECT id, full_name FROM users WHERE LOWER(full_name) = LOWER(?) OR LOWER(username) = LOWER(?)",
+            (colaborador, colaborador)
+        ).fetchone()
         if u_match:
             user_id = u_match['id']
+            colaborador = u_match['full_name']
+    else:
+        u_by_id = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (user_id,)).fetchone()
+        if u_by_id:
+            colaborador = u_by_id['full_name']
 
     try:
         actividades_data = data.get('actividades', [])
@@ -872,7 +871,7 @@ def save_bitacora():
         if not bitacora_id:
             # Si ya existe una bitácora para este colaborador y fecha, actualizarla para no duplicar
             existing_by_date = cursor.execute(
-                "SELECT id FROM bitacoras WHERE (user_id = ? OR colaborador = ?) AND fecha = ?",
+                "SELECT id FROM bitacoras WHERE (user_id = ? OR LOWER(colaborador) = LOWER(?)) AND fecha = ?",
                 (user_id, colaborador, fecha)
             ).fetchone()
             if existing_by_date:
@@ -995,12 +994,6 @@ def save_bitacora():
                 ))
                 kept_ids.add(cursor.lastrowid)
 
-        # Mover a papelera únicamente actividades removidas por el usuario, desvinculando referencias hijas
-        for old_id in existing_acts:
-            if old_id not in kept_ids:
-                cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (old_id,))
-                cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (old_id,))
-            
             # Sincronización automática de tarea compartida en paralelo con el otro usuario
             if shared_with_val and shared_uuid:
                 for target_uid in shared_with_val:
@@ -1008,7 +1001,7 @@ def save_bitacora():
                         target_u = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
                         if target_u:
                             target_b = cursor.execute(
-                                "SELECT id FROM bitacoras WHERE (user_id = ? OR colaborador = ?) AND fecha = ?",
+                                "SELECT id FROM bitacoras WHERE (user_id = ? OR LOWER(colaborador) = LOWER(?)) AND fecha = ?",
                                 (target_u['id'], target_u['full_name'], fecha)
                             ).fetchone()
                             if not target_b:
@@ -1085,6 +1078,18 @@ def save_bitacora():
                                     SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
                                 ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
                             ''', (target_b_id, target_b_id))
+
+        # Safeguard de integridad: si vienen 0 actividades pero la bitácora ya tenía actividades previas,
+        # NO borrarlas todas a menos que venga explícitamente confirm_empty=True
+        # Esto previene pérdida accidental de datos por fallas de red, debounce o cambios rápidos de fecha
+        if len(actividades_data) == 0 and len(existing_acts) > 0 and not data.get('confirm_empty'):
+            kept_ids = set(existing_acts.keys())
+
+        # Mover a papelera únicamente actividades removidas conscientemente por el usuario
+        for old_id in existing_acts:
+            if old_id not in kept_ids:
+                cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (old_id,))
+                cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (old_id,))
 
         conn.commit()
         
@@ -1256,30 +1261,19 @@ def get_papelera():
                u.team_id, t.nombre as team_name
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE a.is_deleted = 1
     '''
     params = []
     
     if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
         if req_u:
             if req_u['role'] in ('analista', 'operador'):
-                query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                params.extend([req_u['id'], req_u['full_name']])
-            elif req_u['role'] == 'lider':
-                lider_teams = [r['id'] for r in cursor.execute(
-                    "SELECT id FROM teams WHERE lider_id = ? UNION SELECT team_id FROM users WHERE id = ? AND team_id IS NOT NULL",
-                    (req_u['id'], req_u['id'])
-                ).fetchall()]
-                if lider_teams:
-                    placeholders = ','.join(['?'] * len(lider_teams))
-                    query += f" AND (u.team_id IN ({placeholders}) OR b.user_id = ? OR b.colaborador = ?)"
-                    params.extend(lider_teams + [req_u['id'], req_u['full_name']])
-                else:
-                    query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                    params.extend([req_u['id'], req_u['full_name']])
+                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
+            # Admin y líderes pueden supervisar la papelera del equipo
     elif user_id:
         query += " AND (b.user_id = ? OR u.id = ?)"
         params.extend([user_id, user_id])
@@ -1445,30 +1439,19 @@ def get_equipo_actividades_en_vivo():
                u.team_id, t.nombre as team_name, u.full_name as user_full_name, u.phone as colaborador_phone
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE b.fecha = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
     '''
     params = [fecha]
     
     if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
         if req_u:
             if req_u['role'] in ('analista', 'operador'):
-                query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                params.extend([req_u['id'], req_u['full_name']])
-            elif req_u['role'] == 'lider':
-                lider_teams = [r['id'] for r in cursor.execute(
-                    "SELECT id FROM teams WHERE lider_id = ? UNION SELECT team_id FROM users WHERE id = ? AND team_id IS NOT NULL",
-                    (req_u['id'], req_u['id'])
-                ).fetchall()]
-                if lider_teams:
-                    placeholders = ','.join(['?'] * len(lider_teams))
-                    query += f" AND (u.team_id IN ({placeholders}) OR b.user_id = ? OR b.colaborador = ?)"
-                    params.extend(lider_teams + [req_u['id'], req_u['full_name']])
-                else:
-                    query += " AND (b.user_id = ? OR b.colaborador = ?)"
-                    params.extend([req_u['id'], req_u['full_name']])
+                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
+            # Admin y líderes pueden ver las actividades de todo el equipo o filtrar por team_id
                     
     if team_id and team_id != 'all':
         query += " AND u.team_id = ?"
