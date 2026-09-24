@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from database import get_db, init_db
+from database import get_db, init_db, DB_PATH
 
 app = Flask(__name__)
 
@@ -134,36 +134,39 @@ def handle_settings():
 
 @app.route('/api/admin/diagnose-db', methods=['GET'])
 def diagnose_db():
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    all_acts = [dict(r) for r in cursor.execute("""
-        SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.is_deleted, a.deleted_at, a.created_at,
-               b.colaborador, b.fecha, b.user_id
-        FROM actividades a
-        LEFT JOIN bitacoras b ON a.bitacora_id = b.id
-        ORDER BY a.id DESC
-    """).fetchall()]
-    
-    all_b = [dict(r) for r in cursor.execute("SELECT * FROM bitacoras ORDER BY id DESC").fetchall()]
-    tables = [r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-    
-    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
-    db_files = []
     try:
-        db_files = [f for f in os.listdir(db_dir) if any(ext in f for ext in ['db', 'sqlite', 'wal', 'bak'])]
-    except Exception:
-        pass
+        conn = get_db()
+        cursor = conn.cursor()
         
-    conn.close()
-    return jsonify({
-        "db_path": DB_PATH,
-        "db_files": db_files,
-        "tables": tables,
-        "total_actividades": len(all_acts),
-        "actividades": all_acts,
-        "bitacoras": all_b
-    })
+        all_acts = [dict(r) for r in cursor.execute("""
+            SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.is_deleted, a.deleted_at, a.created_at,
+                   b.colaborador, b.fecha, b.user_id
+            FROM actividades a
+            LEFT JOIN bitacoras b ON a.bitacora_id = b.id
+            ORDER BY a.id DESC
+        """).fetchall()]
+        
+        all_b = [dict(r) for r in cursor.execute("SELECT * FROM bitacoras ORDER BY id DESC").fetchall()]
+        tables = [r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        
+        db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+        db_files = []
+        try:
+            db_files = [f for f in os.listdir(db_dir) if any(ext in f for ext in ['db', 'sqlite', 'wal', 'bak'])]
+        except Exception:
+            pass
+            
+        conn.close()
+        return jsonify({
+            "db_path": DB_PATH,
+            "db_files": db_files,
+            "tables": tables,
+            "total_actividades": len(all_acts),
+            "actividades": all_acts,
+            "bitacoras": all_b
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
 def clean_production_data():
