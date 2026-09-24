@@ -8,27 +8,13 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from database import get_db, init_db, DB_PATH
+from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
 
 app = Flask(__name__)
 
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-try:
-    from zoneinfo import ZoneInfo
-    PERU_TZ = ZoneInfo("America/Lima")
-except Exception:
-    PERU_TZ = None
-
-def get_peru_now():
-    if PERU_TZ:
-        return datetime.now(PERU_TZ)
-    from datetime import timezone
-    return datetime.now(timezone(timedelta(hours=-5)))
-
-def get_peru_today_str():
-    return get_peru_now().strftime('%Y-%m-%d')
 
 # Helper para normalizar evidencias y tareas compartidas en el diccionario de una actividad
 def format_actividad_dict(act_row, users_map=None):
@@ -82,7 +68,17 @@ def get_default_hora_inicio():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    return jsonify({"status": "ok", "service": "Bitácora API", "version": "2.1.0"})
+    now_dt = get_peru_now()
+    return jsonify({
+        "status": "ok",
+        "service": "Bitácora API",
+        "version": "2.2.0",
+        "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
+        "peru_date": get_peru_today_str(),
+        "timezone": "America/Lima (UTC-5)",
+        "env_tz": os.environ.get('TZ', 'not_set')
+    })
+
 
 # ==================== CONFIGURACIONES GLOBALES (SETTINGS) ====================
 
@@ -189,16 +185,55 @@ def diagnose_db():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def cleanup_synthetic_historical_data():
+    """
+    Elimina bitácoras y actividades sintéticas/falsas inyectadas por scripts antiguos
+    para la fecha 2026-09-23 creadas a las 19:40:16 UTC que confunden al usuario administrador.
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Eliminar actividades asociadas a bitácoras sintéticas del 2026-09-23 creadas a las 19:40:16
+        cursor.execute("""
+            DELETE FROM actividades 
+            WHERE bitacora_id IN (
+                SELECT id FROM bitacoras 
+                WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:16%'
+            )
+        """)
+        
+        # Eliminar las bitácoras sintéticas del 2026-09-23
+        cursor.execute("""
+            DELETE FROM bitacoras 
+            WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:16%'
+        """)
+        
+        conn.commit()
+        conn.close()
+        print("[Cleanup] Bitácoras sintéticas del 2026-09-23 purgadas exitosamente.")
+    except Exception as e:
+        print("[Cleanup] Error en cleanup_synthetic_historical_data:", e)
+
+@app.route('/api/admin/clean-synthetic-history', methods=['POST', 'GET', 'OPTIONS'])
+def clean_synthetic_history_endpoint():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    cleanup_synthetic_historical_data()
+    return jsonify({"success": True, "message": "Bitácoras sintéticas de prueba del 2026-09-23 purgadas correctamente."})
+
 def fix_mock_data_jayala():
     """Limpia las actividades mock generadas por el script de sincronización para Josué Ayala y registra su actividad real 're rh masivo'"""
     try:
         conn = get_db()
         cursor = conn.cursor()
+        now_peru = get_peru_now_str()
         
         b_jayala = cursor.execute("""
             SELECT id FROM bitacoras 
             WHERE (user_id = 5 OR LOWER(colaborador) = 'josue ayala') AND fecha = '2026-09-24'
         """).fetchone()
+
         
         if b_jayala:
             b_id = b_jayala['id']
@@ -212,9 +247,9 @@ def fix_mock_data_jayala():
             ]
             for desc in mock_descriptions:
                 cursor.execute("""
-                    UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+                    UPDATE actividades SET is_deleted = 1, deleted_at = ?
                     WHERE bitacora_id = ? AND descripcion = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                """, (b_id, desc))
+                """, (now_peru, b_id, desc))
             
             exact_description = """Se agregó soporte para Carné de Extranjería (CE) como tipo de documento alternativo al DNI en el módulo RH Masivo (mkt_rh_management): nuevo campo "Tipo de Documento" en las líneas de importación, con validaciones diferenciadas (DNI exige 8 dígitos y validación RENIEC; CE exige 9 dígitos con validación manual). Se mantienen intactas las validaciones de correo, celular, provincia, cargo y fechas para ambos tipos.
 
@@ -234,9 +269,9 @@ Durante las pruebas en el sistema se detectaron y corrigieron 2 bugs relacionado
                     UPDATE actividades SET 
                         descripcion = ?, duracion_min = 240, para_cliente = 'mkt_rh_management / RR.HH.',
                         tipo_trabajo = 'Desarrollo', estado = 'completada', is_deleted = 0, deleted_at = NULL,
-                        updated_at = CURRENT_TIMESTAMP
+                        updated_at = ?
                     WHERE id = ?
-                """, (exact_description, existing_real['id']))
+                """, (exact_description, now_peru, existing_real['id']))
             else:
                 cursor.execute("""
                     INSERT INTO actividades (
@@ -246,15 +281,16 @@ Durante las pruebas en el sistema se detectaron y corrigieron 2 bugs relacionado
                     ) VALUES (
                         ?, 0, '08:30', 240,
                         'Desarrollo', ?, 'mkt_rh_management / RR.HH.', 'completada', '[]',
-                        '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                        '[]', ?, ?
                     )
-                """, (b_id, exact_description))
+                """, (b_id, exact_description, now_peru, now_peru))
             
             cursor.execute("""
                 UPDATE bitacoras SET tiempo_total_min = (
                     SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
-            """, (b_id, b_id))
+                ), updated_at = ? WHERE id = ?
+            """, (b_id, now_peru, b_id))
+
             
             conn.commit()
         conn.close()
@@ -975,6 +1011,7 @@ def save_bitacora():
             colaborador = u_by_id['full_name']
 
     try:
+        now_peru = get_peru_now_str()
         actividades_data = data.get('actividades', [])
         tiempo_total = sum(int(a.get('duracion_min', 0) or 0) for a in actividades_data)
         bitacora_id = data.get('id')
@@ -996,7 +1033,7 @@ def save_bitacora():
                         tiempo_total_min = ?,
                         resumen_texto = ?,
                         estado = ?,
-                        updated_at = CURRENT_TIMESTAMP
+                        updated_at = ?
                     WHERE id = ?
                 ''', (
                     user_id,
@@ -1011,6 +1048,7 @@ def save_bitacora():
                     tiempo_total,
                     data.get('resumen_texto', ''),
                     data.get('estado', 'generada'),
+                    now_peru,
                     bitacora_id
                 ))
             else:
@@ -1037,7 +1075,7 @@ def save_bitacora():
                         tiempo_total_min = ?,
                         resumen_texto = ?,
                         estado = ?,
-                        updated_at = CURRENT_TIMESTAMP
+                        updated_at = ?
                     WHERE id = ?
                 ''', (
                     user_id,
@@ -1051,6 +1089,7 @@ def save_bitacora():
                     tiempo_total,
                     data.get('resumen_texto', ''),
                     data.get('estado', 'generada'),
+                    now_peru,
                     bitacora_id
                 ))
             else:
@@ -1058,8 +1097,8 @@ def save_bitacora():
                     INSERT INTO bitacoras (
                         user_id, fecha, hora_inicio, colaborador, area, pendientes,
                         necesita_apoyo, apoyo_detalle, prioridad_siguiente,
-                        tiempo_total_min, resumen_texto, estado
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        tiempo_total_min, resumen_texto, estado, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     user_id,
                     fecha,
@@ -1072,9 +1111,12 @@ def save_bitacora():
                     data.get('prioridad_siguiente', ''),
                     tiempo_total,
                     data.get('resumen_texto', ''),
-                    data.get('estado', 'generada')
+                    data.get('estado', 'generada'),
+                    now_peru,
+                    now_peru
                 ))
                 bitacora_id = cursor.lastrowid
+
 
         # Mapeo de actividades previas para actualización quirúrgica (conserva IDs y árbol genealógico)
         existing_acts = {r['id']: r for r in cursor.execute("SELECT id FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)", (bitacora_id,)).fetchall()}
@@ -1111,7 +1153,7 @@ def save_bitacora():
                         tipo_trabajo = ?, descripcion = ?, para_cliente = ?,
                         estado = ?, evidencias = ?, shared_with = ?,
                         shared_uuid = COALESCE(?, shared_uuid),
-                        updated_at = CURRENT_TIMESTAMP
+                        updated_at = ?
                     WHERE id = ?
                 ''', (
                     idx,
@@ -1124,6 +1166,7 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
+                    now_peru,
                     target_act_id
                 ))
                 kept_ids.add(target_act_id)
@@ -1133,7 +1176,7 @@ def save_bitacora():
                         bitacora_id, orden, hora_inicio, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
                         shared_with, shared_uuid, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     bitacora_id,
                     idx,
@@ -1145,7 +1188,9 @@ def save_bitacora():
                     act.get('estado', 'completada'),
                     evidencias_json,
                     shared_with_json,
-                    shared_uuid
+                    shared_uuid,
+                    now_peru,
+                    now_peru
                 ))
                 kept_ids.add(cursor.lastrowid)
 
@@ -1165,8 +1210,8 @@ def save_bitacora():
                                         user_id, fecha, hora_inicio, colaborador, area,
                                         pendientes, necesita_apoyo, prioridad_siguiente,
                                         tiempo_total_min, estado, created_at, updated_at
-                                    ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                                ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(), target_u['full_name']))
+                                    ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
+                                ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(), target_u['full_name'], now_peru, now_peru))
                                 target_b_id = cursor.lastrowid
                             else:
                                 target_b_id = target_b['id']
@@ -1189,7 +1234,7 @@ def save_bitacora():
                                         estado = ?,
                                         evidencias = ?,
                                         shared_with = ?,
-                                        updated_at = CURRENT_TIMESTAMP
+                                        updated_at = ?
                                     WHERE id = ?
                                 ''', (
                                     act.get('hora_inicio', ''),
@@ -1200,6 +1245,7 @@ def save_bitacora():
                                     act.get('estado', 'en_proceso'),
                                     evidencias_json,
                                     counterpart_shared,
+                                    now_peru,
                                     existing_sync_act['id']
                                 ))
                             else:
@@ -1212,7 +1258,7 @@ def save_bitacora():
                                         bitacora_id, orden, hora_inicio, duracion_min,
                                         tipo_trabajo, descripcion, para_cliente, estado,
                                         evidencias, shared_with, shared_uuid, created_at, updated_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ''', (
                                     target_b_id,
                                     next_ord,
@@ -1224,15 +1270,17 @@ def save_bitacora():
                                     act.get('estado', 'en_proceso'),
                                     evidencias_json,
                                     counterpart_shared,
-                                    shared_uuid
+                                    shared_uuid,
+                                    now_peru,
+                                    now_peru
                                 ))
                                 
                             # Recalcular el tiempo_total_min de la bitácora del colaborador
                             cursor.execute('''
                                 UPDATE bitacoras SET tiempo_total_min = (
                                     SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                                ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
-                            ''', (target_b_id, target_b_id))
+                                ), updated_at = ? WHERE id = ?
+                            ''', (now_peru, target_b_id, target_b_id))
 
         # Safeguard de integridad: si vienen 0 actividades pero la bitácora ya tenía actividades previas,
         # NO borrarlas todas a menos que venga explícitamente confirm_empty=True
@@ -1244,7 +1292,8 @@ def save_bitacora():
         for old_id in existing_acts:
             if old_id not in kept_ids:
                 cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (old_id,))
-                cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (old_id,))
+                cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, old_id))
+
 
         conn.commit()
         
@@ -1273,11 +1322,12 @@ def update_actividad_estado(act_id):
         
     conn = get_db()
     cursor = conn.cursor()
+    now_peru = get_peru_now_str()
     act = cursor.execute("SELECT shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
     if act and act['shared_uuid']:
-        cursor.execute("UPDATE actividades SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE shared_uuid = ?", (nuevo_estado, act['shared_uuid']))
+        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE shared_uuid = ?", (nuevo_estado, now_peru, act['shared_uuid']))
     else:
-        cursor.execute("UPDATE actividades SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (nuevo_estado, act_id))
+        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, act_id))
     conn.commit()
     conn.close()
     return jsonify({"success": True, "id": act_id, "nuevo_estado": nuevo_estado})
@@ -1295,6 +1345,7 @@ def update_actividad_detalle(act_id):
         
     conn = get_db()
     cursor = conn.cursor()
+    now_peru = get_peru_now_str()
     act = cursor.execute("SELECT shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
     
     shared_with_val = data.get('shared_with')
@@ -1311,7 +1362,7 @@ def update_actividad_detalle(act_id):
                 estado = COALESCE(?, estado),
                 evidencias = COALESCE(?, evidencias),
                 shared_with = COALESCE(?, shared_with),
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = ?
             WHERE shared_uuid = ?
         ''', (
             data.get('hora_inicio'),
@@ -1322,6 +1373,7 @@ def update_actividad_detalle(act_id):
             data.get('estado'),
             evidencias_json,
             shared_with_json,
+            now_peru,
             act['shared_uuid']
         ))
     else:
@@ -1335,7 +1387,7 @@ def update_actividad_detalle(act_id):
                 estado = COALESCE(?, estado),
                 evidencias = COALESCE(?, evidencias),
                 shared_with = COALESCE(?, shared_with),
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = ?
             WHERE id = ?
         ''', (
             data.get('hora_inicio'),
@@ -1346,6 +1398,7 @@ def update_actividad_detalle(act_id):
             data.get('estado'),
             evidencias_json,
             shared_with_json,
+            now_peru,
             act_id
         ))
         
@@ -1354,6 +1407,7 @@ def update_actividad_detalle(act_id):
     updated_act = cursor.execute("SELECT * FROM actividades WHERE id = ?", (act_id,)).fetchone()
     conn.close()
     return jsonify({"success": True, "actividad": format_actividad_dict(updated_act, users_map) if updated_act else None})
+
 
 @app.route('/api/actividades/pendientes', methods=['GET'])
 def get_actividades_pendientes():
@@ -1448,9 +1502,10 @@ def get_papelera():
         
         if deleted_at_str:
             try:
-                # SQLite CURRENT_TIMESTAMP formato 'YYYY-MM-DD HH:MM:SS' en UTC
                 del_dt = datetime.strptime(deleted_at_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
-                dias_transcurridos = max(0, (now_utc - del_dt).days)
+                now_p = get_peru_now()
+                now_naive = datetime(now_p.year, now_p.month, now_p.day, now_p.hour, now_p.minute, now_p.second)
+                dias_transcurridos = max(0, (now_naive - del_dt).days)
                 dias_restantes = max(0, min(15, 15 - dias_transcurridos))
                 expira_dt = del_dt + timedelta(days=15)
                 expira_en = expira_dt.strftime('%Y-%m-%d')
@@ -1475,6 +1530,7 @@ def restaurar_actividad(act_id):
         
     conn = get_db()
     cursor = conn.cursor()
+    now_peru = get_peru_now_str()
     
     act = cursor.execute("SELECT * FROM actividades WHERE id = ?", (act_id,)).fetchone()
     if not act:
@@ -1484,17 +1540,18 @@ def restaurar_actividad(act_id):
     # Restaurar actividad
     cursor.execute('''
         UPDATE actividades 
-        SET is_deleted = 0, deleted_at = NULL, updated_at = CURRENT_TIMESTAMP 
+        SET is_deleted = 0, deleted_at = NULL, updated_at = ? 
         WHERE id = ?
-    ''', (act_id,))
+    ''', (now_peru, act_id))
     
     # Recalcular tiempo total de la bitácora
     cursor.execute('''
         UPDATE bitacoras SET tiempo_total_min = (
             SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
             WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-        ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    ''', (act['bitacora_id'], act['bitacora_id']))
+        ), updated_at = ? WHERE id = ?
+    ''', (act['bitacora_id'], now_peru, act['bitacora_id']))
+
     
     conn.commit()
     conn.close()
@@ -1560,15 +1617,17 @@ def soft_delete_actividad(act_id):
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
         
-    cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP WHERE id = ?", (act_id,))
+    now_peru = get_peru_now_str()
+    cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, act_id))
     
     # Recalcular tiempo_total_min
     cursor.execute('''
         UPDATE bitacoras SET tiempo_total_min = (
             SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
             WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-        ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    ''', (act['bitacora_id'], act['bitacora_id']))
+        ), updated_at = ? WHERE id = ?
+    ''', (act['bitacora_id'], now_peru, act['bitacora_id']))
+
     
     conn.commit()
     conn.close()
@@ -1815,10 +1874,12 @@ def execute_daily_rollover(today_str=None):
     cursor = conn.cursor()
     closed_count = 0
     rolled_count = 0
+    now_peru = get_peru_now_str()
     
     try:
-        # 0. Auto-purga permanente de actividades eliminadas con más de 15 días de antigüedad
-        cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < datetime('now', '-15 days')")
+        # 0. Auto-purga permanente de actividades eliminadas con más de 15 días de antigüedad según horario de Perú
+        purge_threshold = (get_peru_now() - timedelta(days=15)).strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < ?", (purge_threshold,))
 
         # 1. Auto-cerrar bitácoras de días pasados (< today_str) que no estén formalmente cerradas
         past_open = cursor.execute('''
@@ -1848,9 +1909,9 @@ def execute_daily_rollover(today_str=None):
                     estado = 'cerrada_sistema',
                     tiempo_total_min = ?,
                     pendientes = ?,
-                    updated_at = CURRENT_TIMESTAMP
+                    updated_at = ?
                 WHERE id = ?
-            ''', (dur, auto_pend, b['id']))
+            ''', (dur, auto_pend, now_peru, b['id']))
             closed_count += 1
 
         # 2. Arrastre de actividades abiertas hacia el día de hoy
@@ -1901,9 +1962,10 @@ def execute_daily_rollover(today_str=None):
                         user_id, fecha, hora_inicio, colaborador, area,
                         pendientes, necesita_apoyo, prioridad_siguiente,
                         tiempo_total_min, estado, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val))
+                    ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
+                ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val, now_peru, now_peru))
                 today_b_id = cursor.lastrowid
+
                 
             # IDs de tareas que ya fueron arrastradas a hoy
             existing_parent_ids = [
@@ -2050,9 +2112,11 @@ def start_midnight_scheduler():
 # Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
 try:
     init_db()
+    cleanup_synthetic_historical_data()
     fix_mock_data_jayala()
     start_midnight_scheduler()
 except Exception as e:
+
     print("[Startup] Error inicializando DB o scheduler:", e)
 
 if __name__ == '__main__':

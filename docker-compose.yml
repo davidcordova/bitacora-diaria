@@ -11,6 +11,7 @@ services:
       - FLASK_ENV=production
       - DATABASE_PATH=/data/bitacora.db
       - UPLOAD_FOLDER=/data/uploads
+      - TZ=America/Lima
     volumes:
       - bitacora_data:/data
     networks:
@@ -22,6 +23,8 @@ services:
       dockerfile: Dockerfile
     container_name: bitacora_frontend
     restart: always
+    environment:
+      - TZ=America/Lima
     expose:
       - "80"
     depends_on:

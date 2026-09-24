@@ -1,6 +1,25 @@
 import sqlite3
 import os
+from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
+
+try:
+    from zoneinfo import ZoneInfo
+    PERU_TZ = ZoneInfo("America/Lima")
+except Exception:
+    PERU_TZ = None
+
+def get_peru_now():
+    if PERU_TZ:
+        return datetime.now(PERU_TZ)
+    from datetime import timezone
+    return datetime.now(timezone(timedelta(hours=-5)))
+
+def get_peru_now_str():
+    return get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
+
+def get_peru_today_str():
+    return get_peru_now().strftime('%Y-%m-%d')
 
 DB_PATH = os.environ.get('DATABASE_PATH') or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bitacora.db'
@@ -9,6 +28,8 @@ DB_PATH = os.environ.get('DATABASE_PATH') or os.path.join(
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.create_function("peru_now", 0, get_peru_now_str)
+    conn.create_function("peru_today", 0, get_peru_today_str)
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 30000")
     conn.execute("PRAGMA foreign_keys = ON")
@@ -17,6 +38,7 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
+
     
     # 0. Crear tabla users si no existe
     cursor.execute('''

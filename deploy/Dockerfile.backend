@@ -2,6 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Configurar zona horaria del sistema a America/Lima (Perú, UTC-5)
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && \
+    cp /usr/share/zoneinfo/America/Lima /etc/localtime && \
+    echo "America/Lima" > /etc/timezone && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=America/Lima
+
 # Instalar dependencias
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -15,3 +23,4 @@ ENV DATABASE_PATH=/data/bitacora.db
 EXPOSE 5000
 
 CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+
