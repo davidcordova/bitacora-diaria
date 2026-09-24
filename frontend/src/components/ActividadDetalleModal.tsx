@@ -20,8 +20,9 @@ import {
   FileText,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
-import { formatDuration, getTimeInStatusInfo } from '../utils/formatters';
+import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 interface ActividadDetalleModalProps {
   isOpen: boolean;
@@ -47,7 +48,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   if (!isOpen || !actividad) return null;
 
   const handleCopyDescription = () => {
-    navigator.clipboard.writeText(actividad.descripcion);
+    navigator.clipboard.writeText(stripHtml(actividad.descripcion));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -256,8 +257,10 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </button>
               </div>
 
-              <div className="p-4 bg-slate-50/80 dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] leading-relaxed text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap font-medium">
-                {actividad.descripcion || (
+              <div className="p-4 bg-slate-50/80 dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] leading-relaxed text-sm text-slate-800 dark:text-slate-200 font-medium">
+                {actividad.descripcion ? (
+                  <RichHtmlRenderer content={actividad.descripcion} />
+                ) : (
                   <span className="text-slate-400 dark:text-slate-500 italic">No se registró descripción para esta tarea.</span>
                 )}
               </div>

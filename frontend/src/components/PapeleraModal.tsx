@@ -15,7 +15,8 @@ import {
 } from 'lucide-react';
 import { ActividadPapelera, User } from '../types';
 import { api } from '../services/api';
-import { formatDateDisplay, formatDuration } from '../utils/formatters';
+import { formatDateDisplay, formatDuration, stripHtml } from '../utils/formatters';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 interface PapeleraModalProps {
   currentUser: User | null;
@@ -72,7 +73,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
       await api.restaurarActividad(act.id);
       setItems((prev) => prev.filter((item) => item.id !== act.id));
       setFeedbackMsg({
-        text: `"${act.descripcion.slice(0, 35)}..." restaurada con éxito.`,
+        text: `"${stripHtml(act.descripcion).slice(0, 35)}..." restaurada con éxito.`,
         type: 'success',
       });
       if (onActivityRestored) {
@@ -353,9 +354,9 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
                       )}
                     </div>
 
-                    <p className="text-sm font-medium text-slate-800 break-words line-clamp-2">
-                      {act.descripcion}
-                    </p>
+                    <div className="text-sm font-medium text-slate-800 break-words">
+                      <RichHtmlRenderer content={act.descripcion} clampLines={2} />
+                    </div>
 
                     <div className="text-[11px] text-slate-400 flex items-center gap-2">
                       <span>Tipo: <strong className="text-slate-600 font-normal">{act.tipo_trabajo}</strong></span>

@@ -166,6 +166,24 @@ export const getTimeInStatusInfo = (
   return { label, isStalled, hours, days, tooltip };
 };
 
+export const stripHtml = (html?: string): string => {
+  if (!html) return '';
+  // Convert common block elements and breaks to newlines before stripping
+  const withLineBreaks = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n')
+    .replace(/<\/div>/gi, '\n');
+  
+  if (typeof document !== 'undefined') {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = withLineBreaks;
+    return (tmp.textContent || tmp.innerText || '').trim();
+  }
+  return withLineBreaks.replace(/<[^>]+>/g, '').trim();
+};
+
 export const generateSummaryText = (bitacora: Bitacora): string => {
   const totalMin = bitacora.actividades.reduce(
     (acc, cur) => acc + (Number(cur.duracion_min) || 0),
@@ -188,7 +206,7 @@ export const generateSummaryText = (bitacora: Bitacora): string => {
     text += `${idx + 1}. ${act.hora_inicio || '--:--'} | ${act.duracion_min || 0} min ${
       act.tipo_trabajo ? `[${act.tipo_trabajo}]` : ''
     }\n`;
-    text += `   ${act.descripcion}\n`;
+    text += `   ${stripHtml(act.descripcion)}\n`;
     if (act.para_cliente) {
       text += `   Para: ${act.para_cliente} | Estado: ${estadoInfo.label}\n`;
     } else {
@@ -244,7 +262,7 @@ export const exportActivitiesToCSV = (
     escapeCSV(act.hora_inicio || ''),
     escapeCSV(act.duracion_min || 0),
     escapeCSV(act.tipo_trabajo || ''),
-    escapeCSV(act.descripcion || ''),
+    escapeCSV(stripHtml(act.descripcion) || ''),
     escapeCSV(act.para_cliente || ''),
     escapeCSV(getEstadoBadgeInfo(act.estado).label),
     escapeCSV(act.evidencias ? act.evidencias.length : 0),

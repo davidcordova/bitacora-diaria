@@ -25,6 +25,7 @@ import {
   formatDateLong,
   getTodayLocalDateStr,
   getYesterdayLocalDateStr,
+  stripHtml,
 } from '../utils/formatters';
 import { HistorialResumenModal } from './HistorialResumenModal';
 import { EmptyState } from './EmptyState';
@@ -119,7 +120,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         const matchesColab = b.colaborador.toLowerCase().includes(term);
         const matchesFecha = b.fecha.includes(term);
         const matchesArea = b.area.toLowerCase().includes(term);
-        const matchesAct = b.actividades.some((a) => a.descripcion.toLowerCase().includes(term));
+        const matchesAct = b.actividades.some((a) => stripHtml(a.descripcion).toLowerCase().includes(term));
         if (!matchesColab && !matchesFecha && !matchesArea && !matchesAct) {
           return false;
         }
@@ -407,7 +408,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         {item.actividades.slice(0, 2).map((act, aIdx) => (
                           <div key={aIdx} className="text-xs text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
-                            <span className="truncate">{act.descripcion}</span>
+                            <span className="truncate">{stripHtml(act.descripcion)}</span>
                           </div>
                         ))}
                         {item.actividades.length > 2 && (
@@ -503,7 +504,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                     {item.actividades.length > 0 && (
                       <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
                         <span className="text-[#00C9A7] font-bold">• </span>
-                        {item.actividades[0].descripcion}
+                        {stripHtml(item.actividades[0].descripcion)}
                         {item.actividades.length > 1 && ` (+${item.actividades.length - 1} más)`}
                       </div>
                     )}
@@ -607,7 +608,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                     {item.actividades.slice(0, 3).map((act, aIdx) => (
                       <div key={aIdx} className="text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
                         <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">•</span>
-                        <span className="truncate flex-1">{act.descripcion}</span>
+                        <span className="truncate flex-1">{stripHtml(act.descripcion)}</span>
                       </div>
                     ))}
                     {item.actividades.length > 3 && (

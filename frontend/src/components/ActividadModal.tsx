@@ -17,7 +17,9 @@ import {
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { EvidenceDropzone } from './EvidenceDropzone';
+import { HtmlEditor } from './HtmlEditor';
 import { api } from '../services/api';
+
 
 interface ActividadModalProps {
   isOpen: boolean;
@@ -132,10 +134,12 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!descripcion.trim()) {
+    const plainText = descripcion.replace(/<[^>]*>/g, '').trim();
+    if (!plainText && !/<img\s+[^>]*src=/i.test(descripcion)) {
       setErrorMsg('La descripción de la actividad es obligatoria.');
       return;
     }
+
 
     const actividadResult: Actividad = {
       ...(actividadToEdit || {}),
@@ -390,18 +394,19 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                 Descripción de la Actividad <span className="text-rose-500">*</span>
               </label>
               <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                Pega capturas con Ctrl+V
+                Editor enriquecido HTML con formato y enlaces
               </span>
             </div>
-            <textarea
-              rows={3}
+            <HtmlEditor
               value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              onPaste={handlePasteInDescription}
-              placeholder="Describe lo realizado en esta actividad... (puedes pegar imágenes capturadas aquí)"
-              className="w-full p-3 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-2xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all resize-y"
+              onChange={(newHtml) => setDescripcion(newHtml)}
+              placeholder="Describe lo realizado en esta actividad... (puedes dar formato en negrita, insertar viñetas, adjuntar enlaces o pegar imágenes aquí)"
+              onAttachEvidence={(newEv) => {
+                setEvidencias((prev) => [...prev, newEv]);
+              }}
             />
           </div>
+
 
           {/* Row 5: Evidencias Adjuntas */}
           <div>

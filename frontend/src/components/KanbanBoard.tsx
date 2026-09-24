@@ -26,10 +26,12 @@ import {
   Eye,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
-import { formatDuration, getEstadoBadgeInfo, getTimeInStatusInfo } from '../utils/formatters';
+import { formatDuration, getEstadoBadgeInfo, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { EvidenceDropzone } from './EvidenceDropzone';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { HtmlEditor } from './HtmlEditor';
 
 interface KanbanBoardProps {
   actividades: Actividad[];
@@ -320,7 +322,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                 const clean = (act.colaborador_phone || '').replace(/\D/g, '');
                                 const phone = clean.length === 9 ? `51${clean}` : clean;
                                 const msg = encodeURIComponent(
-                                  `Hola ${act.colaborador || ''}, te escribo sobre tu tarea: "${act.descripcion}".`
+                                  `Hola ${act.colaborador || ''}, te escribo sobre tu tarea: "${stripHtml(act.descripcion)}".`
                                 );
                                 window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                               }}
@@ -432,9 +434,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       )}
 
                       {/* Description */}
-                      <p className="text-xs text-slate-800 dark:text-slate-200 font-normal leading-relaxed mb-2 line-clamp-3">
-                        {act.descripcion || '(Sin descripción)'}
-                      </p>
+                      <div className="mb-2">
+                        {act.descripcion ? (
+                          <RichHtmlRenderer
+                            content={act.descripcion}
+                            clampLines={3}
+                            className="text-xs text-slate-800 dark:text-slate-200 font-normal leading-relaxed"
+                          />
+                        ) : (
+                          <p className="text-xs text-slate-400 dark:text-slate-500 italic">(Sin descripción)</p>
+                        )}
+                      </div>
 
                       {/* Client / Target */}
                       {act.para_cliente && (
@@ -587,13 +597,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción</label>
-                <textarea
-                  rows={3}
+                <HtmlEditor
                   value={editForm.descripcion || ''}
-                  onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })}
+                  onChange={(val) => setEditForm({ ...editForm, descripcion: val })}
                   placeholder="Detalle de la tarea..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/80 dark:border-[#252636] focus:outline-hidden focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 resize-none transition-all"
-                  required
+                  minHeight="130px"
+                  onAttachEvidence={(newEv) => {
+                    const current = editForm.evidencias || [];
+                    setEditForm({ ...editForm, evidencias: [...current, newEv] });
+                  }}
                 />
               </div>
 

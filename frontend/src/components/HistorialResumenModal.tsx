@@ -22,9 +22,10 @@ import {
   FileText,
 } from 'lucide-react';
 import { Bitacora, Actividad, EstadoActividad, Evidencia, User, Team } from '../types';
-import { formatDateLong, formatDateDisplay, formatDuration } from '../utils/formatters';
+import { formatDateLong, formatDateDisplay, formatDuration, stripHtml } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 interface HistorialResumenModalProps {
   isOpen: boolean;
@@ -74,7 +75,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
       text += `\n${idx + 1}. [${act.hora_inicio || '--:--'}] (${act.duracion_min} min) - ${act.estado.toUpperCase()}\n`;
       if (act.tipo_trabajo) text += `   Tipo: ${act.tipo_trabajo}\n`;
       if (act.para_cliente) text += `   Para / Cliente: ${act.para_cliente}\n`;
-      text += `   Descripción: ${act.descripcion}\n`;
+      text += `   Descripción: ${stripHtml(act.descripcion)}\n`;
       if (act.shared_with_names && act.shared_with_names.length > 0) {
         text += `   👥 Tarea compartida con: ${act.shared_with_names.join(', ')}\n`;
       }
@@ -296,9 +297,9 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                         </div>
 
                         {/* Description */}
-                        <p className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
-                          {act.descripcion}
-                        </p>
+                        <div className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed">
+                          <RichHtmlRenderer content={act.descripcion} />
+                        </div>
 
                         {/* Evidences */}
                         {act.evidencias && act.evidencias.length > 0 && (

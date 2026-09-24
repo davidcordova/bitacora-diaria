@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import confetti from 'canvas-confetti';
+
 import { Sidebar } from './components/Sidebar';
 import { ActividadesLista } from './components/ActividadesLista';
 import { CierreJornada } from './components/CierreJornada';
@@ -162,14 +163,15 @@ export function App() {
     }
   };
 
-  const showToast = (type: ToastType, message: string, title?: string) => {
+  const showToast = useCallback((type: ToastType, message: string, title?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
-    setToasts((prev) => [...prev, { id, type, message, title }]);
-  };
+    setToasts((prev) => [...prev.slice(-2), { id, type, message, title }]);
+  }, []);
 
-  const dismissToast = (id: string) => {
+  const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
+
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     const saved = localStorage.getItem('sidebar_collapsed');

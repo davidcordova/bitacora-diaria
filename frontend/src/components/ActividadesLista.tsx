@@ -26,6 +26,8 @@ import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration } from '../utils/formatters';
 import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
+
 
 interface ActividadesListaProps {
   actividades: Actividad[];
@@ -445,14 +447,14 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
                       {/* Actividad / Descripción */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-start gap-1.5">
-                          <p
-                            className="font-medium text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed group-hover:text-slate-950 dark:group-hover:text-white transition-colors"
-                            title="Haz clic para ver la descripción completa y detalles"
-                          >
-                            {act.descripcion || <span className="text-slate-400 dark:text-slate-500 italic">Sin descripción</span>}
-                          </p>
+                        <div className="flex items-start gap-1.5 max-w-xl">
+                          <RichHtmlRenderer
+                            content={act.descripcion}
+                            clampLines={2}
+                            className="font-medium text-slate-800 dark:text-slate-200 leading-relaxed group-hover:text-slate-950 dark:group-hover:text-white transition-colors"
+                          />
                         </div>
+
                       </td>
 
                       {/* Tipo de Trabajo */}
@@ -633,9 +635,14 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     </div>
                   </div>
 
-                  <p className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 line-clamp-2 leading-relaxed mb-2">
-                    {act.descripcion || <span className="text-slate-400 dark:text-slate-500 italic">Sin descripción</span>}
-                  </p>
+                  <div className="mb-2">
+                    <RichHtmlRenderer
+                      content={act.descripcion}
+                      clampLines={2}
+                      className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed"
+                    />
+                  </div>
+
 
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-2">

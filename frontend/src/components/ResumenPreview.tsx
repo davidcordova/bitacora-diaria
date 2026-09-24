@@ -21,6 +21,7 @@ import {
   generateSummaryText,
 } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 interface ResumenPreviewProps {
   bitacora: Bitacora;
@@ -170,9 +171,13 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
                             {estadoBadge.label}
                           </span>
                         </div>
-                        <p className="text-slate-700 dark:text-slate-300 font-normal leading-relaxed">
-                          {act.descripcion || '(Sin descripción)'}
-                        </p>
+                        <div className="text-slate-700 dark:text-slate-300 font-normal leading-relaxed">
+                          {act.descripcion ? (
+                            <RichHtmlRenderer content={act.descripcion} />
+                          ) : (
+                            <span className="text-slate-400 italic">(Sin descripción)</span>
+                          )}
+                        </div>
                         {act.para_cliente && (
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
                             Para: <span className="font-medium text-slate-700 dark:text-slate-300">{act.para_cliente}</span>

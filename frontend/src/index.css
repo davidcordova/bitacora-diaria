@@ -242,3 +242,12 @@
 .dark textarea {
   color-scheme: dark;
 }
+
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+.animate-toast-progress {
+  animation: toastProgress 3.2s linear forwards;
+}
+

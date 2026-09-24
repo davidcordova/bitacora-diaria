@@ -45,6 +45,7 @@ import {
   exportActivitiesToCSV,
 } from '../utils/formatters';
 import { api } from '../services/api';
+import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 interface TeamSupervisionViewProps {
   currentUser: User | null;
@@ -791,9 +792,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                               </span>
                             </div>
 
-                            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium break-words">
-                              {act.descripcion}
-                            </p>
+                            <div className="text-sm text-slate-800 dark:text-slate-200 font-medium break-words">
+                              <RichHtmlRenderer content={act.descripcion} />
+                            </div>
 
                             <div className="flex items-center gap-2 text-xs text-slate-400">
                               <span>Tipo: <strong className="text-slate-600 dark:text-slate-300 font-normal">{act.tipo_trabajo}</strong></span>
@@ -1304,9 +1305,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                           className="p-3.5 bg-white dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] shadow-2xs space-y-2 hover:border-slate-300 dark:hover:border-[#00F0FF]/40 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">
-                              {act.descripcion}
-                            </p>
+                            <div className="text-xs font-semibold text-slate-900 dark:text-white leading-snug flex-1">
+                              <RichHtmlRenderer content={act.descripcion} clampLines={2} />
+                            </div>
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
                                 act.estado === 'completada'
