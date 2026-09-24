@@ -169,3 +169,13 @@ export interface SystemSettings {
   show_demo_logins?: 'true' | 'false';
 }
 
+export interface SystemNotification {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  type: 'info' | 'success' | 'warning' | 'alert' | 'error';
+  category?: 'actividad' | 'sistema' | 'sincronizacion' | 'seguridad';
+}
+

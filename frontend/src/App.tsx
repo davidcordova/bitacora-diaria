@@ -18,9 +18,10 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BottomNav } from './components/BottomNav';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { PapeleraModal } from './components/PapeleraModal';
+import { NotificationsModal } from './components/NotificationsModal';
 import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings } from './types';
+import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
 import { defaultBitacora } from './utils/initialData';
 import { api } from './services/api';
 import { getTodayLocalDateStr } from './utils/formatters';
@@ -152,6 +153,93 @@ export function App() {
   const [papeleraModalOpen, setPapeleraModalOpen] = useState(false);
   const [papeleraCount, setPapeleraCount] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
+  const [notifications, setNotifications] = useState<SystemNotification[]>(() => {
+    try {
+      const saved = localStorage.getItem('system_notifications_history');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [
+      {
+        id: 'init-notif',
+        title: 'Centro de Notificaciones Activo',
+        message: 'Tus actividades guardadas, sincronizaciones y eventos aparecerán registrados aquí.',
+        timestamp: new Date().toISOString(),
+        read: false,
+        type: 'info',
+        category: 'sistema',
+      },
+    ];
+  });
+
+  const addNotification = useCallback(
+    (
+      title: string,
+      message: string,
+      type: SystemNotification['type'] = 'info',
+      category?: SystemNotification['category']
+    ) => {
+      const newNotif: SystemNotification = {
+        id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        title,
+        message,
+        timestamp: new Date().toISOString(),
+        read: false,
+        type,
+        category,
+      };
+      setNotifications((prev) => {
+        const updated = [newNotif, ...prev.slice(0, 49)];
+        localStorage.setItem('system_notifications_history', JSON.stringify(updated));
+        return updated;
+      });
+    },
+    []
+  );
+
+  const handleMarkNotificationAsRead = (id: string) => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.id === id ? { ...n, read: true } : n));
+      localStorage.setItem('system_notifications_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleMarkAllNotificationsAsRead = () => {
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, read: true }));
+      localStorage.setItem('system_notifications_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const handleClearAllNotifications = () => {
+    setNotifications([]);
+    localStorage.removeItem('system_notifications_history');
+  };
+
+  const handleRemoveNotification = (id: string) => {
+    setNotifications((prev) => {
+      const updated = prev.filter((n) => n.id !== id);
+      localStorage.setItem('system_notifications_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const showToast = useCallback((type: ToastType, message: string, title?: string) => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
+    setToasts((prev) => [...prev.slice(-2), { id, type, message, title }]);
+
+    // Registrar en el Centro de Notificaciones de la campana
+    const notifTitle =
+      title ||
+      (type === 'success' ? 'Operación exitosa' : type === 'error' ? 'Aviso del sistema' : 'Notificación');
+    addNotification(notifTitle, message, type);
+  }, [addNotification]);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   const refreshPapeleraCount = async () => {
     if (!currentUser) return;
@@ -162,15 +250,6 @@ export function App() {
       console.warn('Error loading papelera count:', e);
     }
   };
-
-  const showToast = useCallback((type: ToastType, message: string, title?: string) => {
-    const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
-    setToasts((prev) => [...prev.slice(-2), { id, type, message, title }]);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
-  }, []);
 
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -296,6 +375,23 @@ export function App() {
               ? result.bitacora.actividades
               : prev.actividades,
           }));
+
+          if (uid && bitacora.fecha) {
+            localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(result.bitacora));
+            localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
+          }
+
+          lastSavedSignature.current = JSON.stringify({
+            fecha: result.bitacora.fecha,
+            colaborador: result.bitacora.colaborador,
+            user_id: result.bitacora.user_id,
+            actividades: result.bitacora.actividades,
+            pendientes: result.bitacora.pendientes,
+            necesita_apoyo: result.bitacora.necesita_apoyo,
+            apoyo_detalle: result.bitacora.apoyo_detalle,
+            prioridad_siguiente: result.bitacora.prioridad_siguiente,
+            hora_inicio: result.bitacora.hora_inicio,
+          });
         }
 
         // Actualizar historial local silenciosamente
@@ -676,15 +772,16 @@ export function App() {
   };
 
   const handleAddActividad = (actData?: Actividad) => {
-    const newAct: Actividad = actData || {
-      id: `act-${Date.now()}`,
+    const newAct: Actividad = {
+      ...(actData || {}),
+      id: actData?.id || `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       orden: bitacora.actividades.length,
-      hora_inicio: bitacora.hora_inicio || '08:30',
-      duracion_min: 30,
-      tipo_trabajo: 'Desarrollo',
-      descripcion: '',
-      para_cliente: '',
-      estado: 'completada',
+      hora_inicio: actData?.hora_inicio || bitacora.hora_inicio || '08:30',
+      duracion_min: actData?.duracion_min !== undefined ? actData.duracion_min : 30,
+      tipo_trabajo: actData?.tipo_trabajo || 'Desarrollo',
+      descripcion: actData?.descripcion || '',
+      para_cliente: actData?.para_cliente || '',
+      estado: actData?.estado || 'completada',
     };
     setBitacora((prev) => ({
       ...prev,
@@ -694,7 +791,7 @@ export function App() {
 
   const handleAddActividadConEstado = (estado: EstadoActividad) => {
     const newAct: Actividad = {
-      id: `act-${Date.now()}`,
+      id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       orden: bitacora.actividades.length,
       hora_inicio: '',
       duracion_min: 30,
@@ -936,6 +1033,8 @@ export function App() {
           papeleraCount={papeleraCount}
           autoSaveStatus={autoSaveStatus}
           onForceSyncCloud={handleForceSyncCloud}
+          unreadNotificationsCount={notifications.filter((n) => !n.read).length}
+          onOpenNotifications={() => setNotificationsModalOpen(true)}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -1081,6 +1180,17 @@ export function App() {
         onClose={() => setPapeleraModalOpen(false)}
         currentUser={currentUser}
         onActivityRestored={reloadActiveBitacora}
+      />
+
+      {/* Notifications Drawer / Modal */}
+      <NotificationsModal
+        isOpen={notificationsModalOpen}
+        onClose={() => setNotificationsModalOpen(false)}
+        notifications={notifications}
+        onMarkAsRead={handleMarkNotificationAsRead}
+        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+        onClearAll={handleClearAllNotifications}
+        onRemoveNotification={handleRemoveNotification}
       />
     </div>
   );

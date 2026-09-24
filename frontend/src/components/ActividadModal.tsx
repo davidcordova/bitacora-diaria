@@ -143,6 +143,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
     const actividadResult: Actividad = {
       ...(actividadToEdit || {}),
+      id: actividadToEdit?.id,
       hora_inicio: horaInicio,
       duracion_min: Number(duracionMin) || 0,
       tipo_trabajo: tipoTrabajo,

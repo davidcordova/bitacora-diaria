@@ -11,6 +11,8 @@ interface TopHeaderProps {
   papeleraCount?: number;
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onForceSyncCloud?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotificationsCount?: number;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -22,6 +24,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   papeleraCount = 0,
   autoSaveStatus = 'idle',
   onForceSyncCloud,
+  onOpenNotifications,
+  unreadNotificationsCount = 0,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -94,11 +98,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {/* Notification Bell */}
         <button
           type="button"
-          title="Notificaciones"
-          className="relative p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+          onClick={onOpenNotifications}
+          title={
+            unreadNotificationsCount > 0
+              ? `${unreadNotificationsCount} notificación(es) nueva(s) - Clic para ver historial`
+              : 'Centro de Notificaciones'
+          }
+          className="relative p-2 text-slate-500 hover:text-[#00F0FF] dark:text-slate-400 dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
         >
           <Bell className="w-4 h-4" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-[#0D0E15]" />
+          {unreadNotificationsCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 px-1.5 py-0.2 min-w-[16px] h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center shadow-xs animate-in zoom-in duration-150">
+              {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+            </span>
+          )}
         </button>
 
         {/* Help Circle */}

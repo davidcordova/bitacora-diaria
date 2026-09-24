@@ -189,6 +189,20 @@ def init_db():
     for key, val in default_settings:
         cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)", (key, val))
 
+    # 7. Limpieza de actividades duplicadas en papelera generadas accidentalmente por ediciones previas
+    cursor.execute('''
+        DELETE FROM actividades 
+        WHERE is_deleted = 1 
+          AND id IN (
+              SELECT a_del.id
+              FROM actividades a_del
+              JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
+                  AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
+                  AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
+              WHERE a_del.is_deleted = 1
+          )
+    ''')
+
     conn.commit()
     conn.close()
 

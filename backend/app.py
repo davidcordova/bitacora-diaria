@@ -1119,9 +1119,60 @@ def save_bitacora():
                 bitacora_id = cursor.lastrowid
 
 
-        # Mapeo de actividades previas para actualización quirúrgica (conserva IDs y árbol genealógico)
-        existing_acts = {r['id']: r for r in cursor.execute("SELECT id FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)", (bitacora_id,)).fetchall()}
+        # Mapeo de actividades previas para actualización quirúrgica (conserva IDs y evita duplicados al editar)
+        existing_acts_list = [dict(r) for r in cursor.execute(
+            "SELECT id, orden, hora_inicio, tipo_trabajo, descripcion, shared_uuid FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY orden ASC, id ASC",
+            (bitacora_id,)
+        ).fetchall()]
+        existing_acts_by_id = {r['id']: r for r in existing_acts_list}
         kept_ids = set()
+        matched_target_ids = {}
+
+        # Fase 1: Coincidencia exacta por ID numérico en la base de datos
+        for idx, act in enumerate(actividades_data):
+            act_id = act.get('id')
+            act_id_num = None
+            try:
+                act_id_num = int(act_id)
+            except (ValueError, TypeError):
+                pass
+            if act_id_num and act_id_num in existing_acts_by_id and act_id_num not in kept_ids:
+                matched_target_ids[idx] = act_id_num
+                kept_ids.add(act_id_num)
+
+        # Fase 2: Coincidencia por shared_uuid para actividades sincronizadas entre usuarios
+        for idx, act in enumerate(actividades_data):
+            if idx in matched_target_ids:
+                continue
+            shared_uuid = act.get('shared_uuid')
+            if shared_uuid:
+                for ex in existing_acts_list:
+                    if ex['id'] not in kept_ids and ex.get('shared_uuid') == shared_uuid:
+                        matched_target_ids[idx] = ex['id']
+                        kept_ids.add(ex['id'])
+                        break
+
+        # Fase 3: Coincidencia por posición (orden) para actividades que vienen sin ID numérico (ej. borrador local o ediciones en vuelo)
+        # Esto PREVIENE que una edición de actividad genere un duplicado y mande la original a la papelera
+        for idx, act in enumerate(actividades_data):
+            if idx in matched_target_ids:
+                continue
+            act_orden = act.get('orden', idx)
+            for ex in existing_acts_list:
+                if ex['id'] not in kept_ids and ex.get('orden') == act_orden:
+                    matched_target_ids[idx] = ex['id']
+                    kept_ids.add(ex['id'])
+                    break
+
+        # Fase 4: Si la cantidad de actividades es >= a las existentes, emparejar unassigned por índice
+        unmatched_existing = [ex['id'] for ex in existing_acts_list if ex['id'] not in kept_ids]
+        unmatched_incoming = [idx for idx in range(len(actividades_data)) if idx not in matched_target_ids]
+        if len(actividades_data) >= len(existing_acts_list):
+            for i, idx in enumerate(unmatched_incoming):
+                if i < len(unmatched_existing):
+                    target_id = unmatched_existing[i]
+                    matched_target_ids[idx] = target_id
+                    kept_ids.add(target_id)
 
         for idx, act in enumerate(actividades_data):
             evidencias_val = act.get('evidencias', [])
@@ -1139,13 +1190,7 @@ def save_bitacora():
             if shared_with_val and not shared_uuid:
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
 
-            act_id = act.get('id')
-            act_id_num = None
-            try:
-                act_id_num = int(act_id)
-            except (ValueError, TypeError):
-                pass
-            target_act_id = act_id_num if (act_id_num and act_id_num in existing_acts) else (act_id if act_id in existing_acts else None)
+            target_act_id = matched_target_ids.get(idx)
 
             if target_act_id:
                 cursor.execute('''
@@ -1286,11 +1331,11 @@ def save_bitacora():
         # Safeguard de integridad: si vienen 0 actividades pero la bitácora ya tenía actividades previas,
         # NO borrarlas todas a menos que venga explícitamente confirm_empty=True
         # Esto previene pérdida accidental de datos por fallas de red, debounce o cambios rápidos de fecha
-        if len(actividades_data) == 0 and len(existing_acts) > 0 and not data.get('confirm_empty'):
-            kept_ids = set(existing_acts.keys())
+        if len(actividades_data) == 0 and len(existing_acts_by_id) > 0 and not data.get('confirm_empty'):
+            kept_ids = set(existing_acts_by_id.keys())
 
         # Mover a papelera únicamente actividades removidas conscientemente por el usuario
-        for old_id in existing_acts:
+        for old_id in existing_acts_by_id:
             if old_id not in kept_ids:
                 cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (old_id,))
                 cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, old_id))
@@ -1461,6 +1506,20 @@ def get_papelera():
     
     # Auto-purga de actividades con más de 15 días en papelera
     cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < datetime('now', '-15 days')")
+    
+    # Auto-purga de duplicados en papelera generados accidentalmente por ediciones previas
+    cursor.execute('''
+        DELETE FROM actividades 
+        WHERE is_deleted = 1 
+          AND id IN (
+              SELECT a_del.id
+              FROM actividades a_del
+              JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
+                  AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
+                  AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
+              WHERE a_del.is_deleted = 1
+          )
+    ''')
     conn.commit()
     
     user_id = request.args.get('user_id')
