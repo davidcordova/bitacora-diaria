@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad } from '../types';
 
 const API_BASE = '/api';
 
@@ -365,6 +365,74 @@ export const api = {
       const err = await res.json().catch(() => ({ error: 'Error al cargar datos demo' }));
       throw new Error(err.error || 'Error al cargar datos demo');
     }
+    return await res.json();
+  },
+
+  // ================= PAPELERA DE RECICLAJE (RETENCIÓN 15 DÍAS) =================
+  async getPapelera(userId?: number, requestingUserId?: number): Promise<{ items: ActividadPapelera[]; total: number }> {
+    const params = new URLSearchParams();
+    if (userId) params.append('user_id', userId.toString());
+    if (requestingUserId) params.append('requesting_user_id', requestingUserId.toString());
+    const res = await fetch(`${API_BASE}/papelera?${params.toString()}`);
+    if (!res.ok) throw new Error('Error al cargar la papelera');
+    return await res.json();
+  },
+
+  async restaurarActividad(actId: number | string): Promise<{ success: boolean; message: string; bitacora_id: number }> {
+    const res = await fetch(`${API_BASE}/papelera/restaurar/${actId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al restaurar actividad' }));
+      throw new Error(err.error || 'Error al restaurar actividad');
+    }
+    return await res.json();
+  },
+
+  async eliminarDefinitivoActividad(actId: number | string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/papelera/eliminar/${actId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar actividad definitivamente' }));
+      throw new Error(err.error || 'Error al eliminar actividad definitivamente');
+    }
+    return await res.json();
+  },
+
+  async vaciarPapelera(userId?: number, role?: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/papelera/vaciar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, role }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al vaciar papelera' }));
+      throw new Error(err.error || 'Error al vaciar papelera');
+    }
+    return await res.json();
+  },
+
+  async softDeleteActividad(actId: number | string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/actividades/${actId}/eliminar`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al mover a papelera' }));
+      throw new Error(err.error || 'Error al mover a papelera');
+    }
+    return await res.json();
+  },
+
+  // ================= FEED DE EQUIPO EN VIVO =================
+  async getEquipoActividadesEnVivo(fecha?: string, requestingUserId?: number, teamId?: number | string): Promise<{ success: boolean; fecha: string; total: number; actividades: LiveFeedActividad[] }> {
+    const params = new URLSearchParams();
+    if (fecha) params.append('fecha', fecha);
+    if (requestingUserId) params.append('requesting_user_id', requestingUserId.toString());
+    if (teamId && teamId !== 'all') params.append('team_id', teamId.toString());
+    const res = await fetch(`${API_BASE}/equipo/actividades-en-vivo?${params.toString()}`);
+    if (!res.ok) throw new Error('Error al cargar feed de actividades en vivo');
     return await res.json();
   },
 

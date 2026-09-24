@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   KeyRound,
+  Trash2,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
 
@@ -38,6 +39,8 @@ interface SidebarProps {
   isDark?: boolean;
   onToggleTheme?: () => void;
   onOpenChangePassword?: () => void;
+  onOpenPapelera?: () => void;
+  papeleraCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -57,6 +60,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isDark = false,
   onToggleTheme,
   onOpenChangePassword,
+  onOpenPapelera,
+  papeleraCount = 0,
 }) => {
   const role = currentUser?.role || 'analista';
   const isAdmin = role === 'admin';
@@ -284,6 +289,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <HelpCircle className="w-4 h-4 text-[#00F0FF] shrink-0" />
             {(!isCollapsed || isOpenMobile) && <span>Guía rápida</span>}
+          </button>
+        )}
+
+        {/* Papelera de Reciclaje */}
+        {onOpenPapelera && (
+          <button
+            type="button"
+            onClick={() => {
+              onOpenPapelera();
+              if (onCloseMobile) onCloseMobile();
+            }}
+            title={isCollapsed && !isOpenMobile ? `Papelera (${papeleraCount})` : undefined}
+            className={`w-full flex items-center gap-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50/50 dark:hover:bg-red-950/20 text-xs font-semibold py-2 rounded-2xl transition-all cursor-pointer min-h-[40px] ${
+              isCollapsed && !isOpenMobile ? 'justify-center px-0' : 'px-3'
+            }`}
+          >
+            <div className="relative flex items-center justify-center">
+              <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+              {papeleraCount > 0 && isCollapsed && !isOpenMobile && (
+                <span className="absolute -top-1.5 -right-2 min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-black bg-red-500 text-white flex items-center justify-center">
+                  {papeleraCount}
+                </span>
+              )}
+            </div>
+            {(!isCollapsed || isOpenMobile) && (
+              <>
+                <span className="flex-1 text-left">Papelera (15 días)</span>
+                {papeleraCount > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                    {papeleraCount}
+                  </span>
+                )}
+              </>
+            )}
           </button>
         )}
 

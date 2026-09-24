@@ -32,6 +32,29 @@ export interface Actividad {
   shared_with?: number[];
   shared_with_names?: string[];
   shared_uuid?: string;
+  is_deleted?: number;
+  deleted_at?: string;
+}
+
+export interface ActividadPapelera extends Actividad {
+  bitacora_fecha?: string;
+  bitacora_colaborador?: string;
+  bitacora_user_id?: number;
+  team_name?: string;
+  dias_restantes: number;
+  expira_en?: string;
+}
+
+export interface LiveFeedActividad extends Actividad {
+  bitacora_fecha: string;
+  colaborador: string;
+  user_id?: number;
+  area?: string;
+  necesita_apoyo?: string;
+  apoyo_detalle?: string;
+  team_id?: number;
+  team_name?: string;
+  avatar?: string;
 }
 
 export interface Bitacora {

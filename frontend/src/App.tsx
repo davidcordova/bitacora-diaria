@@ -16,6 +16,7 @@ import { WhatsAppShareModal } from './components/WhatsAppShareModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { BottomNav } from './components/BottomNav';
 import { HelpGuideModal } from './components/HelpGuideModal';
+import { PapeleraModal } from './components/PapeleraModal';
 import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings } from './types';
@@ -85,7 +86,19 @@ export function App() {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [papeleraModalOpen, setPapeleraModalOpen] = useState(false);
+  const [papeleraCount, setPapeleraCount] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const refreshPapeleraCount = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await api.getPapelera(currentUser.id, currentUser.id);
+      setPapeleraCount(res.total || 0);
+    } catch (e) {
+      console.warn('Error loading papelera count:', e);
+    }
+  };
 
   const showToast = (type: ToastType, message: string, title?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
@@ -254,6 +267,7 @@ export function App() {
       if (sysSettings) {
         setSystemSettings(sysSettings);
       }
+      refreshPapeleraCount();
 
       const todayStr = getTodayLocalDateStr();
       const defaultStart = sysSettings?.hora_inicio_default || '08:30';
@@ -443,6 +457,24 @@ export function App() {
     }
   };
 
+  const reloadActiveBitacora = async () => {
+    refreshPapeleraCount();
+    const activeUid = currentUser?.id || bitacora.user_id;
+    const activeName = currentUser?.full_name || bitacora.colaborador;
+    try {
+      const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, activeUid, activeUid);
+      const serverMatch = serverBitacoras.find(
+        (b) => (b.user_id === activeUid || b.colaborador === activeName) && b.fecha === bitacora.fecha
+      );
+      if (serverMatch) {
+        setBitacora(serverMatch);
+        setIsGenerated(serverMatch.estado === 'generada' || serverMatch.estado === 'cerrada' || serverMatch.estado === 'cerrada_sistema');
+      }
+    } catch (e) {
+      console.warn('Error reloading bitacora:', e);
+    }
+  };
+
   const handleAddActividad = (actData?: Actividad) => {
     const newAct: Actividad = actData || {
       id: `act-${Date.now()}`,
@@ -525,12 +557,21 @@ export function App() {
     }
   };
 
-  const handleRemoveActividad = (index: number) => {
+  const handleRemoveActividad = async (index: number) => {
+    const act = bitacora.actividades[index];
     setBitacora((prev) => ({
       ...prev,
       actividades: prev.actividades.filter((_, i) => i !== index),
     }));
-    showToast('info', 'Actividad eliminada de la lista');
+    showToast('info', 'Actividad movida a la papelera (retención 15 días)');
+    if (act && act.id && typeof act.id === 'number') {
+      try {
+        await api.softDeleteActividad(act.id);
+        refreshPapeleraCount();
+      } catch (e) {
+        console.warn('Error soft-deleting act:', e);
+      }
+    }
   };
 
   const handleSyncWithBitacora = async () => {
@@ -680,6 +721,8 @@ export function App() {
         isDark={isDark}
         onToggleTheme={toggleTheme}
         onOpenChangePassword={() => setChangePasswordModalOpen(true)}
+        onOpenPapelera={() => setPapeleraModalOpen(true)}
+        papeleraCount={papeleraCount}
       />
 
       {/* Main Content Area */}
@@ -689,6 +732,8 @@ export function App() {
           currentUser={currentUser}
           onOpenHelp={() => setHelpModalOpen(true)}
           onOpenChangePassword={() => setChangePasswordModalOpen(true)}
+          onOpenPapelera={() => setPapeleraModalOpen(true)}
+          papeleraCount={papeleraCount}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -739,7 +784,7 @@ export function App() {
 
           {/* VIEW 3: SEGUIMIENTO DE EQUIPO (Líderes y Admin) */}
           {viewMode === 'equipo' && isLider && (
-            <TeamSupervisionView currentUser={currentUser} teams={teams} />
+            <TeamSupervisionView currentUser={currentUser} teams={teams} users={users} />
           )}
 
           {/* VIEW 4: DASHBOARD DE ANALÍTICA Y KPIS (Líderes y Admin) */}
@@ -825,6 +870,14 @@ export function App() {
         onClose={() => setChangePasswordModalOpen(false)}
         currentUser={currentUser}
         onSuccess={() => showToast('success', 'Contraseña actualizada exitosamente')}
+      />
+
+      {/* Papelera Modal */}
+      <PapeleraModal
+        isOpen={papeleraModalOpen}
+        onClose={() => setPapeleraModalOpen(false)}
+        currentUser={currentUser}
+        onActivityRestored={reloadActiveBitacora}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, HelpCircle, User as UserIcon, KeyRound } from 'lucide-react';
+import { Search, Bell, HelpCircle, User as UserIcon, KeyRound, Trash2 } from 'lucide-react';
 import { User } from '../types';
 
 interface TopHeaderProps {
@@ -7,6 +7,8 @@ interface TopHeaderProps {
   onOpenHelp?: () => void;
   onSearch?: (query: string) => void;
   onOpenChangePassword?: () => void;
+  onOpenPapelera?: () => void;
+  papeleraCount?: number;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -14,6 +16,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenHelp,
   onSearch,
   onOpenChangePassword,
+  onOpenPapelera,
+  papeleraCount = 0,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -70,6 +74,23 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             className="p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
           >
             <HelpCircle className="w-4 h-4" />
+          </button>
+        )}
+
+        {/* Papelera de Reciclaje */}
+        {onOpenPapelera && (
+          <button
+            type="button"
+            onClick={onOpenPapelera}
+            title="Papelera de reciclaje (15 días de retención)"
+            className="relative p-2 text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+            {papeleraCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 px-1.5 py-0.2 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
+                {papeleraCount}
+              </span>
+            )}
           </button>
         )}
 

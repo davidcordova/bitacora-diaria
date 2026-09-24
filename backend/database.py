@@ -115,6 +115,10 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN shared_uuid TEXT")
     if 'shared_origin_id' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN shared_origin_id INTEGER")
+    if 'deleted_at' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN deleted_at DATETIME")
+    if 'is_deleted' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN is_deleted INTEGER DEFAULT 0")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
@@ -123,6 +127,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_parent ON actividades(parent_task_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_shared ON actividades(shared_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_estado ON actividades(estado)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_deleted ON actividades(is_deleted, deleted_at)")
 
     # 5. Configurar el usuario admin obligatorio con contraseña M1un1c4cl4v3
     admin_hash = generate_password_hash('M1un1c4cl4v3')

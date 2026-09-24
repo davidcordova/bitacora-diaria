@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Users,
   UserCheck,
@@ -27,8 +27,11 @@ import {
   ChevronDown,
   ArrowRight,
   BarChart2,
+  Radio,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
-import { User, Bitacora, Team, Actividad, EstadoActividad } from '../types';
+import { User, Bitacora, Team, Actividad, EstadoActividad, LiveFeedActividad } from '../types';
 import { KanbanBoard } from './KanbanBoard';
 import { ResumenPreview } from './ResumenPreview';
 import { EmptyState } from './EmptyState';
@@ -46,22 +49,28 @@ import { api } from '../services/api';
 interface TeamSupervisionViewProps {
   currentUser: User | null;
   teams: Team[];
+  users?: User[];
 }
 
-export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ currentUser, teams }) => {
+export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ currentUser, teams, users }) => {
   // Date selection state: Defaults to today (local timezone)
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateStr());
+  // Team selection filter for admin / leaders with multiple teams: 'all' or team ID
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
   // 'all' for Master Team View, or user ID for Individual View
   const [selectedMemberId, setSelectedMemberId] = useState<number | 'all'>('all');
-  // In Team Mode: 'semaforo' (default clean overview) vs 'kanban' (full drag/drop board)
-  const [teamTab, setTeamTab] = useState<'semaforo' | 'kanban'>('semaforo');
+  // In Team Mode: 'feed' (realtime live stream), 'semaforo' (workload radar) or 'kanban' (board)
+  const [teamTab, setTeamTab] = useState<'feed' | 'semaforo' | 'kanban'>('feed');
   // Side drawer for inspecting a member's activities without switching view
   const [drawerMemberId, setDrawerMemberId] = useState<number | null>(null);
 
   const [teamBitacoras, setTeamBitacoras] = useState<Bitacora[]>([]);
+  const [liveActivities, setLiveActivities] = useState<LiveFeedActividad[]>([]);
   const [subView, setSubView] = useState<'kanban' | 'resumen'>('kanban');
   const [loading, setLoading] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
+  const [feedSearch, setFeedSearch] = useState('');
 
   const todayStr = useMemo(() => getTodayLocalDateStr(), []);
   const yesterdayStr = useMemo(() => getYesterdayLocalDateStr(), []);
@@ -74,6 +83,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const isSelectedToday = selectedDate === todayStr;
   const isSelectedYesterday = selectedDate === yesterdayStr;
 
+  // Teams mapping dictionary
+  const teamsMap = useMemo(() => {
+    const map = new Map<number, Team>();
+    teams.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [teams]);
+
   // Filter teams accessible to this leader / admin
   const accessibleTeams = useMemo(() => {
     return currentUser?.role === 'admin'
@@ -83,8 +99,38 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
   const primaryTeam = accessibleTeams[0] || teams[0] || null;
 
-  // Flatten accessible members
+  // Flatten accessible members using both users list and teams list
   const allMembers = useMemo(() => {
+    if (users && users.length > 0) {
+      let filteredUsers = users.filter((u) => u.is_active !== 0 && (u.is_active as any) !== false);
+
+      if (currentUser?.role === 'admin') {
+        if (selectedTeamFilter !== 'all') {
+          const tid = Number(selectedTeamFilter);
+          filteredUsers = filteredUsers.filter((u) => u.team_id === tid);
+        }
+      } else {
+        // Leader: can see members of teams they lead or belong to
+        const leaderTeamIds = new Set(accessibleTeams.map((t) => t.id));
+        filteredUsers = filteredUsers.filter(
+          (u) =>
+            (u.team_id && leaderTeamIds.has(u.team_id)) ||
+            u.id === currentUser?.id ||
+            accessibleTeams.some((t) => t.members?.some((m) => m.id === u.id))
+        );
+        if (selectedTeamFilter !== 'all') {
+          const tid = Number(selectedTeamFilter);
+          filteredUsers = filteredUsers.filter((u) => u.team_id === tid);
+        }
+      }
+
+      return filteredUsers.map((u) => ({
+        ...u,
+        team_name: (u.team_id && teamsMap.get(u.team_id)?.nombre) || u.team_name || 'Sin Equipo',
+      }));
+    }
+
+    // Fallback if users prop is not provided:
     const list: User[] = [];
     accessibleTeams.forEach((t) => {
       if (t.members) {
@@ -96,22 +142,36 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       }
     });
     return list;
-  }, [accessibleTeams]);
+  }, [accessibleTeams, users, currentUser, selectedTeamFilter, teamsMap]);
 
-  // Load bitacoras for all members in the accessible teams
+  // Load bitacoras and live activities for all members in the accessible teams
   const loadAllTeamData = async () => {
     setLoading(true);
     try {
-      const bitacorasList = await api.getBitacoras(undefined, undefined, undefined, currentUser?.id);
-      // Filter bitacoras that belong to members of the leader's teams
+      const teamIdParam = selectedTeamFilter !== 'all' ? selectedTeamFilter : undefined;
+      const [bitacorasList, liveRes] = await Promise.all([
+        api.getBitacoras(selectedDate, undefined, teamIdParam ? Number(teamIdParam) : undefined, currentUser?.id),
+        api.getEquipoActividadesEnVivo(selectedDate, currentUser?.id, teamIdParam).catch(() => ({
+          actividades: [],
+          fecha: selectedDate,
+          success: true,
+          total: 0,
+        })),
+      ]);
+
+      // Filter bitacoras that belong to accessible members
       const memberNames = new Set(allMembers.map((m) => m.full_name));
       const memberIds = new Set(allMembers.map((m) => m.id));
-      const filtered = bitacorasList.filter(
+
+      const filteredBitacoras = (bitacorasList || []).filter(
         (b) =>
           (b.user_id && memberIds.has(b.user_id)) ||
           memberNames.has(b.colaborador)
       );
-      setTeamBitacoras(filtered);
+
+      setTeamBitacoras(filteredBitacoras);
+      setLiveActivities(liveRes.actividades || []);
+      setLastRefreshTime(new Date());
     } catch (e) {
       console.error('Error fetching team bitacoras', e);
     } finally {
@@ -119,11 +179,18 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     }
   };
 
+  // Immediate fetch on mount, date change, or team filter change
   useEffect(() => {
-    if (allMembers.length > 0) {
+    loadAllTeamData();
+  }, [selectedDate, selectedTeamFilter, currentUser?.id]);
+
+  // Periodic Auto-refresh polling every 20 seconds so leaders always see live activities
+  useEffect(() => {
+    const interval = setInterval(() => {
       loadAllTeamData();
-    }
-  }, [allMembers]);
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [selectedDate, selectedTeamFilter, currentUser?.id, allMembers.length]);
 
   // List of unique dates that have recorded bitacoras for quick jump
   const recordedDates = useMemo(() => {
@@ -140,7 +207,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       );
       const dateLog = memberLogs.find((b) => b.fecha === selectedDate) || null;
 
-      const activities = dateLog ? dateLog.actividades : [];
+      const activities = dateLog ? (dateLog.actividades || []).filter((a) => !a.is_deleted) : [];
       const totalMinutos = activities.reduce(
         (sum, a) => sum + (Number(a.duracion_min) || 0),
         0
@@ -201,19 +268,40 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       );
       const activeLog = memberLogs.find((b) => b.fecha === selectedDate);
       if (activeLog && activeLog.actividades) {
-        activeLog.actividades.forEach((act) => {
-          list.push({
-            ...act,
-            colaborador: member.full_name,
-            colaborador_id: member.id,
-            colaborador_phone: member.phone,
+        activeLog.actividades
+          .filter((a) => !a.is_deleted)
+          .forEach((act) => {
+            list.push({
+              ...act,
+              colaborador: member.full_name,
+              colaborador_id: member.id,
+              colaborador_phone: member.phone,
+            });
           });
-        });
       }
     });
 
     return list;
   }, [allMembers, teamBitacoras, selectedDate]);
+
+  // Filtered live feed activities based on search and member selection
+  const filteredLiveFeed = useMemo(() => {
+    let list = liveActivities;
+    if (selectedMemberId !== 'all') {
+      list = list.filter((act) => act.user_id === selectedMemberId || act.colaborador === allMembers.find((m) => m.id === selectedMemberId)?.full_name);
+    }
+    if (feedSearch.trim()) {
+      const q = feedSearch.toLowerCase();
+      list = list.filter(
+        (act) =>
+          act.descripcion.toLowerCase().includes(q) ||
+          act.colaborador.toLowerCase().includes(q) ||
+          (act.para_cliente && act.para_cliente.toLowerCase().includes(q)) ||
+          (act.tipo_trabajo && act.tipo_trabajo.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [liveActivities, selectedMemberId, feedSearch, allMembers]);
 
   // Individual selected member and bitacora for selectedDate
   const selectedMember = useMemo(() => {
@@ -236,7 +324,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   }, [drawerMemberId, memberWorkload]);
 
   // Handle Leader 1-Click Approval
-  const handleApproveActivity = async (activityId: number | string, index?: number) => {
+  const handleApproveActivity = async (activityId: number | string) => {
     try {
       if (typeof activityId === 'number') {
         await api.updateActividadEstado(activityId, 'completada');
@@ -250,7 +338,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   };
 
   // Handle Leader 1-Click Reject / Return to In Process
-  const handleRejectActivity = async (activityId: number | string, index?: number) => {
+  const handleRejectActivity = async (activityId: number | string) => {
     try {
       if (typeof activityId === 'number') {
         await api.updateActividadEstado(activityId, 'en_proceso');
@@ -285,12 +373,12 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
   return (
     <div className="space-y-6">
-      {/* ================= PANEL DE CONTROL UNIFICADO (CYBERNETIC CORE) ================= */}
+      {/* ================= PANEL DE CONTROL UNIFICADO ================= */}
       <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 shadow-sm space-y-3.5 transition-all duration-200">
-        {/* FILA 1: TÍTULO, EQUIPO Y ACCIONES GLOBALES */}
+        {/* FILA 1: TÍTULO, SELECTOR DE EQUIPO, LIVE BADGE Y ACCIONES GLOBALES */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-[#252636]/60">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00F0FF]/20 to-[#00A3BF]/20 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center shrink-0 border border-[#00F0FF]/30">
               <Users className="w-5 h-5 text-[#00A3BF] dark:text-[#00F0FF]" />
             </div>
             <div>
@@ -298,21 +386,94 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
                   Supervisión de Equipo
                 </h2>
-                {primaryTeam && (
+
+                {/* Filtro de Equipo si es Admin o tiene más de 1 equipo */}
+                {accessibleTeams.length > 1 ? (
+                  <select
+                    value={selectedTeamFilter}
+                    onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-[#252636] focus:outline-none focus:ring-1 focus:ring-[#00F0FF] cursor-pointer"
+                  >
+                    <option value="all">🏢 Todos los Equipos ({accessibleTeams.length})</option>
+                    {accessibleTeams.map((t) => (
+                      <option key={t.id} value={t.id.toString()}>
+                        👥 {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                ) : primaryTeam ? (
                   <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30">
                     {primaryTeam.nombre}
                   </span>
-                )}
+                ) : null}
+
+                {/* Pulsing Live Monitor Badge */}
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                  <span>En Vivo (auto 20s)</span>
+                </div>
               </div>
               <p className="text-xs text-slate-400 dark:text-slate-500">
-                Auditoría en vivo, semáforo de horas y aprobación de tareas
+                Línea de tiempo en vivo, semáforo de horas acumuladas y aprobación de tareas con 1 clic
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Si está en modo individual, toggle Kanban / Resumen */}
-            {selectedMemberId !== 'all' ? (
+            {/* Botón Refrescar Manual */}
+            <button
+              type="button"
+              onClick={loadAllTeamData}
+              disabled={loading}
+              title={`Última actualización: ${lastRefreshTime.toLocaleTimeString()}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-[#1A1C29] hover:bg-slate-200 dark:hover:bg-[#252636] text-slate-700 dark:text-slate-300 rounded-full text-xs font-bold transition-all cursor-pointer border border-slate-200 dark:border-[#252636]"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
+              <span className="hidden sm:inline">Refrescar</span>
+            </button>
+
+            {/* Toggle de Vistas del Equipo: Feed en Vivo / Semáforo / Kanban */}
+            {selectedMemberId === 'all' ? (
+              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
+                <button
+                  type="button"
+                  onClick={() => setTeamTab('feed')}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                    teamTab === 'feed'
+                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                  }`}
+                >
+                  <Radio className="w-3.5 h-3.5 text-current animate-pulse" />
+                  <span>Feed en Vivo ({liveActivities.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTeamTab('semaforo')}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                    teamTab === 'semaforo'
+                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                  }`}
+                >
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>Semáforo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTeamTab('kanban')}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                    teamTab === 'kanban'
+                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                  }`}
+                >
+                  <KanbanIcon className="w-3.5 h-3.5" />
+                  <span>Tablero ({unifiedActivities.length})</span>
+                </button>
+              </div>
+            ) : (
+              /* Si está en modo individual, toggle Kanban / Resumen */
               <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
                 <button
                   type="button"
@@ -339,37 +500,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   <span>Resumen</span>
                 </button>
               </div>
-            ) : (
-              /* Si está en modo grupal, toggle Semáforo / Kanban */
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
-                <button
-                  type="button"
-                  onClick={() => setTeamTab('semaforo')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
-                    teamTab === 'semaforo'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
-                  }`}
-                >
-                  <TrendingUp className="w-3.5 h-3.5" />
-                  <span>Semáforo</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTeamTab('kanban')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
-                    teamTab === 'kanban'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
-                  }`}
-                >
-                  <KanbanIcon className="w-3.5 h-3.5" />
-                  <span>Tablero ({unifiedActivities.length})</span>
-                </button>
-              </div>
             )}
 
-            {/* Exportar Excel CSV - Purple Gradient Pill Button */}
+            {/* Exportar Excel CSV */}
             <button
               type="button"
               onClick={handleExportCSV}
@@ -467,7 +600,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           </div>
         </div>
 
-        {/* FILA 3: FILTRO DE COLABORADORES (PÍLDORAS HORIZONTALES ELEGANTES) */}
+        {/* FILA 3: FILTRO DE COLABORADORES (PÍLDORAS HORIZONTALES) */}
         <div className="pt-2 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
             {/* Botón Todo el Equipo */}
@@ -484,10 +617,12 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <span>Todo el Equipo</span>
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  selectedMemberId === 'all' ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
+                  selectedMemberId === 'all'
+                    ? 'bg-slate-950/20 text-slate-950'
+                    : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
                 }`}
               >
-                {unifiedActivities.length}
+                {allMembers.length}
               </span>
             </button>
 
@@ -497,7 +632,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               const memberLog = teamBitacoras.find(
                 (b) => (b.user_id === m.id || b.colaborador === m.full_name) && b.fecha === selectedDate
               );
-              const count = memberLog ? memberLog.actividades.length : 0;
+              const count = memberLog ? (memberLog.actividades || []).filter((a) => !a.is_deleted).length : 0;
               const hasSupport = memberLog?.necesita_apoyo === 'Si';
 
               return (
@@ -513,13 +648,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-slate-950' : 'bg-[#00F0FF]/60'
+                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-slate-950' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
                     }`}
                   />
                   <span>{m.full_name}</span>
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
+                      isSelected
+                        ? 'bg-slate-950/20 text-slate-950'
+                        : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {count}
@@ -545,7 +682,167 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       {/* ================= CONTENIDO PRINCIPAL ================= */}
       {selectedMemberId === 'all' ? (
         <div className="space-y-6">
-          {/* TAB 1: RADAR / SEMÁFORO + TABLA RESUMEN */}
+          {/* TAB 1: FEED EN VIVO (LÍNEA DE TIEMPO DE ACTIVIDADES EN TIEMPO REAL) */}
+          {teamTab === 'feed' && (
+            <div className="space-y-4">
+              {/* Header & Feed Search */}
+              <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center">
+                    <Radio className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Línea de Tiempo de Actividades en Tiempo Real
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Viendo lo que tus colaboradores han anotado y actualizado para el {formatDateDisplay(selectedDate)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="relative w-full sm:w-72">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Filtrar por tarea, cliente o miembro..."
+                    value={feedSearch}
+                    onChange={(e) => setFeedSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/30 text-slate-800 dark:text-white placeholder:text-slate-400"
+                  />
+                  {feedSearch && (
+                    <button
+                      onClick={() => setFeedSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Feed Stream Cards */}
+              {loading && liveActivities.length === 0 ? (
+                <div className="py-16 text-center text-slate-400">
+                  <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-[#00F0FF]" />
+                  <p className="text-sm font-medium">Sincronizando actividades del equipo en vivo...</p>
+                </div>
+              ) : filteredLiveFeed.length === 0 ? (
+                <EmptyState
+                  icon={Clock}
+                  title={`No hay actividades anotadas para el ${formatDateDisplay(selectedDate)}`}
+                  description="Los colaboradores aún no han registrado tareas en esta fecha, o están redactando en su panel. Las tareas aparecerán aquí en vivo en cuanto se sincronicen."
+                  actionText="Ir al día de Hoy"
+                  onAction={handleToday}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {filteredLiveFeed.map((act) => {
+                    const isCompleted = act.estado === 'completada';
+                    const isInReview = act.estado === 'en_revision';
+                    const isInProgress = act.estado === 'en_proceso';
+
+                    return (
+                      <div
+                        key={act.id}
+                        className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 shadow-xs hover:border-[#00F0FF]/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+                      >
+                        <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                          {/* Avatar */}
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                            {act.colaborador.charAt(0)}
+                          </div>
+
+                          <div className="space-y-1.5 flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-slate-900 dark:text-white">
+                                {act.colaborador}
+                              </span>
+                              {act.team_name && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]">
+                                  {act.team_name}
+                                </span>
+                              )}
+                              {act.para_cliente && (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
+                                  {act.para_cliente}
+                                </span>
+                              )}
+                              <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {act.hora_inicio || '08:30'} ({formatDuration(act.duracion_min || 0)})
+                              </span>
+                            </div>
+
+                            <p className="text-sm text-slate-800 dark:text-slate-200 font-medium break-words">
+                              {act.descripcion}
+                            </p>
+
+                            <div className="flex items-center gap-2 text-xs text-slate-400">
+                              <span>Tipo: <strong className="text-slate-600 dark:text-slate-300 font-normal">{act.tipo_trabajo}</strong></span>
+                              {act.updated_at && (
+                                <>
+                                  <span>•</span>
+                                  <span>Actualizado: {act.updated_at}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Status badge & Leader fast actions */}
+                        <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-[#252636]">
+                          {/* Estado Badge */}
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${
+                              isCompleted
+                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60'
+                                : isInReview
+                                ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
+                                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                isCompleted ? 'bg-emerald-500' : isInReview ? 'bg-purple-500 animate-pulse' : 'bg-amber-500 animate-pulse'
+                              }`}
+                            />
+                            {isCompleted ? 'Completada' : isInReview ? 'En Revisión' : 'En Proceso'}
+                          </span>
+
+                          {/* Quick 1-click Approval button */}
+                          {!isCompleted && act.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleApproveActivity(act.id!)}
+                              className="px-3.5 py-1.5 bg-[#00F0FF] hover:bg-[#00D8E6] text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                              title="Aprobar de inmediato esta actividad"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Aprobar</span>
+                            </button>
+                          )}
+
+                          {isCompleted && act.id && (
+                            <button
+                              type="button"
+                              onClick={() => handleRejectActivity(act.id!)}
+                              className="px-2.5 py-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1A1C29] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                              title="Reabrir / pasar a En Proceso"
+                            >
+                              Reabrir
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 2: RADAR / SEMÁFORO + TABLA RESUMEN */}
           {teamTab === 'semaforo' && (
             <div className="space-y-6">
               {/* Radar Cards */}
@@ -745,7 +1042,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             </div>
           )}
 
-          {/* TAB 2: TABLERO KANBAN MAESTRO */}
+          {/* TAB 3: TABLERO KANBAN MAESTRO */}
           {teamTab === 'kanban' && (
             <div className="space-y-4">
               <div className="bg-[#E6F9F5] border border-[#00C9A7]/30 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-800 shadow-2xs">
@@ -769,13 +1066,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   onApproveActivity={(index) => {
                     const act = unifiedActivities[index];
                     if (act && typeof act.id === 'number') {
-                      handleApproveActivity(act.id, index);
+                      handleApproveActivity(act.id);
                     }
                   }}
                   onRejectActivity={(index) => {
                     const act = unifiedActivities[index];
                     if (act && typeof act.id === 'number') {
-                      handleRejectActivity(act.id, index);
+                      handleRejectActivity(act.id);
                     }
                   }}
                 />
@@ -804,7 +1101,6 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       ) : (
         /* MODO INDIVIDUAL: REVISIÓN DETALLADA POR COLABORADOR */
         <div className="space-y-4">
-
           {/* Support alert banner */}
           {currentIndividualBitacora?.necesita_apoyo === 'Si' && (
             <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 rounded-3xl p-4 shadow-2xs flex items-start justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
@@ -845,7 +1141,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <ResumenPreview bitacora={currentIndividualBitacora} isGenerated={true} />
             ) : (
               <KanbanBoard
-                actividades={currentIndividualBitacora.actividades}
+                actividades={(currentIndividualBitacora.actividades || []).filter((a) => !a.is_deleted)}
                 onUpdateEstado={handleUpdateActivityState}
                 onAddActividadConEstado={() => {}}
                 onRemoveActividad={() => {}}
@@ -853,15 +1149,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 isLeaderView={true}
                 showCollaboratorBadge={false}
                 onApproveActivity={(index) => {
-                  const act = currentIndividualBitacora.actividades[index];
+                  const act = (currentIndividualBitacora.actividades || []).filter((a) => !a.is_deleted)[index];
                   if (act && typeof act.id === 'number') {
-                    handleApproveActivity(act.id, index);
+                    handleApproveActivity(act.id);
                   }
                 }}
                 onRejectActivity={(index) => {
-                  const act = currentIndividualBitacora.actividades[index];
+                  const act = (currentIndividualBitacora.actividades || []).filter((a) => !a.is_deleted)[index];
                   if (act && typeof act.id === 'number') {
-                    handleRejectActivity(act.id, index);
+                    handleRejectActivity(act.id);
                   }
                 }}
               />
@@ -977,68 +1273,70 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Actividades del día ({drawerWorkload.dateLog?.actividades.length || 0})
+                    Actividades del día ({drawerWorkload.dateLog?.actividades.filter((a) => !a.is_deleted).length || 0})
                   </h5>
                 </div>
 
-                {drawerWorkload.dateLog && drawerWorkload.dateLog.actividades.length > 0 ? (
+                {drawerWorkload.dateLog && drawerWorkload.dateLog.actividades.filter((a) => !a.is_deleted).length > 0 ? (
                   <div className="space-y-2.5">
-                    {drawerWorkload.dateLog.actividades.map((act, idx) => (
-                      <div
-                        key={act.id || idx}
-                        className="p-3.5 bg-white dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] shadow-2xs space-y-2 hover:border-slate-300 dark:hover:border-[#00F0FF]/40 transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">
-                            {act.descripcion}
-                          </p>
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                              act.estado === 'completada'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60'
+                    {drawerWorkload.dateLog.actividades
+                      .filter((a) => !a.is_deleted)
+                      .map((act, idx) => (
+                        <div
+                          key={act.id || idx}
+                          className="p-3.5 bg-white dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] shadow-2xs space-y-2 hover:border-slate-300 dark:hover:border-[#00F0FF]/40 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">
+                              {act.descripcion}
+                            </p>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                                act.estado === 'completada'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60'
+                                  : act.estado === 'en_revision'
+                                  ? 'bg-[#A855F7]/15 text-[#C084FC] border border-[#A855F7]/30'
+                                  : 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                              }`}
+                            >
+                              {act.estado === 'completada'
+                                ? 'Completada'
                                 : act.estado === 'en_revision'
-                                ? 'bg-[#A855F7]/15 text-[#C084FC] border border-[#A855F7]/30'
-                                : 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
-                            }`}
-                          >
-                            {act.estado === 'completada'
-                              ? 'Completada'
-                              : act.estado === 'en_revision'
-                              ? 'En Revisión'
-                              : 'En Proceso'}
-                          </span>
-                        </div>
+                                ? 'En Revisión'
+                                : 'En Proceso'}
+                            </span>
+                          </div>
 
-                        <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-[#252636]">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            {act.hora_inicio || '08:30'} ({act.duracion_min || 0} min)
-                          </span>
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-[#252636]">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {act.hora_inicio || '08:30'} ({act.duracion_min || 0} min)
+                            </span>
 
-                          {/* Quick 1-click Approval/Reject */}
-                          <div className="flex items-center gap-1.5">
-                            {act.estado !== 'completada' && (
-                              <button
-                                type="button"
-                                onClick={() => act.id && handleApproveActivity(act.id)}
-                                className="px-3 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
-                              >
-                                Aprobar
-                              </button>
-                            )}
-                            {act.estado === 'completada' && (
-                              <button
-                                type="button"
-                                onClick={() => act.id && handleRejectActivity(act.id)}
-                                className="px-3 py-1 bg-slate-100 dark:bg-[#1A1C29] hover:bg-slate-200 dark:hover:bg-[#252636] text-slate-600 dark:text-slate-300 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
-                              >
-                                Reabrir
-                              </button>
-                            )}
+                            {/* Quick 1-click Approval/Reject */}
+                            <div className="flex items-center gap-1.5">
+                              {act.estado !== 'completada' && (
+                                <button
+                                  type="button"
+                                  onClick={() => act.id && handleApproveActivity(act.id)}
+                                  className="px-3 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+                                >
+                                  Aprobar
+                                </button>
+                              )}
+                              {act.estado === 'completada' && (
+                                <button
+                                  type="button"
+                                  onClick={() => act.id && handleRejectActivity(act.id)}
+                                  className="px-3 py-1 bg-slate-100 dark:bg-[#1A1C29] hover:bg-slate-200 dark:hover:bg-[#252636] text-slate-600 dark:text-slate-300 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
+                                >
+                                  Reabrir
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 ) : (
                   <EmptyState
