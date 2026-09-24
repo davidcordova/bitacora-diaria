@@ -216,24 +216,39 @@ def fix_mock_data_jayala():
                     WHERE bitacora_id = ? AND descripcion = ? AND (is_deleted IS NULL OR is_deleted = 0)
                 """, (b_id, desc))
             
-            # Verificar si ya existe la actividad real de 're rh masivo'
-            real_act = cursor.execute("""
+            exact_description = """Se agregó soporte para Carné de Extranjería (CE) como tipo de documento alternativo al DNI en el módulo RH Masivo (mkt_rh_management): nuevo campo "Tipo de Documento" en las líneas de importación, con validaciones diferenciadas (DNI exige 8 dígitos y validación RENIEC; CE exige 9 dígitos con validación manual). Se mantienen intactas las validaciones de correo, celular, provincia, cargo y fechas para ambos tipos.
+
+Durante las pruebas en el sistema se detectaron y corrigieron 2 bugs relacionados:
+- Una restricción dura del DNI rompía la carga completa del Excel cuando una fila tenía el documento mal formateado, dejando un mensaje de error pegado en la cabecera de la planilla aunque la fila ya estuviera corregida. Se eliminó, dejando solo la validación que marca la fila puntual en rojo sin bloquear el resto de la carga.
+- La plantilla oficial de Excel tenía la columna N° Documento en formato numérico, por lo que Excel borraba los ceros a la izquierda de los Carné de Extranjería antes de guardarse. Se corrigió el formato de esa columna a Texto y se agregó un mensaje de error más claro para detectar este caso a futuro."""
+
+            # Actualizar o insertar con la descripción exacta y fidedigna
+            existing_real = cursor.execute("""
                 SELECT id FROM actividades 
-                WHERE bitacora_id = ? AND (LOWER(descripcion) LIKE '%rh masivo%' OR LOWER(descripcion) LIKE '%re rh%') AND (is_deleted IS NULL OR is_deleted = 0)
+                WHERE bitacora_id = ? AND (LOWER(descripcion) LIKE '%rh masivo%' OR LOWER(descripcion) LIKE '%carné de extranjería%')
+                ORDER BY id DESC LIMIT 1
             """, (b_id,)).fetchone()
-            
-            if not real_act:
+
+            if existing_real:
+                cursor.execute("""
+                    UPDATE actividades SET 
+                        descripcion = ?, duracion_min = 240, para_cliente = 'mkt_rh_management / RR.HH.',
+                        tipo_trabajo = 'Desarrollo', estado = 'completada', is_deleted = 0, deleted_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (exact_description, existing_real['id']))
+            else:
                 cursor.execute("""
                     INSERT INTO actividades (
                         bitacora_id, orden, hora_inicio, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
                         shared_with, created_at, updated_at
                     ) VALUES (
-                        ?, 0, '08:30', 90,
-                        'Desarrollo', 'Revisión y atención de incidencias en reclasificación / requerimientos RH masivo (re rh masivo)', 'RR.HH.', 'completada', '[]',
+                        ?, 0, '08:30', 240,
+                        'Desarrollo', ?, 'mkt_rh_management / RR.HH.', 'completada', '[]',
                         '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                     )
-                """, (b_id,))
+                """, (b_id, exact_description))
             
             cursor.execute("""
                 UPDATE bitacoras SET tiempo_total_min = (
