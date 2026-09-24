@@ -19,6 +19,8 @@ import {
   ChevronLeft,
   Calendar,
   Sparkles,
+  Cloud,
+  CloudOff,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration } from '../utils/formatters';
@@ -40,6 +42,7 @@ interface ActividadesListaProps {
   onHoraInicioChange?: (time: string) => void;
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedTime?: Date | null;
+  onForceSyncCloud?: () => void;
 }
 
 export const ActividadesLista: React.FC<ActividadesListaProps> = ({
@@ -57,6 +60,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   onHoraInicioChange,
   autoSaveStatus = 'idle',
   lastSavedTime = null,
+  onForceSyncCloud,
 }) => {
   // Modal states
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -231,14 +235,38 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             {autoSaveStatus === 'saving' && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
                 <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
-                <span>Guardando...</span>
+                <span>Guardando en la nube...</span>
               </span>
             )}
             {autoSaveStatus === 'saved' && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
                 <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                <span>Guardado {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : 'automático'}</span>
+                <span>En la nube {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : 'al día'}</span>
               </span>
+            )}
+            {autoSaveStatus === 'error' && (
+              <button
+                type="button"
+                onClick={onForceSyncCloud}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 cursor-pointer transition-colors"
+                title="Hubo un problema de conexión al guardar en la nube. Clic para reintentar ahora"
+              >
+                <CloudOff className="w-3 h-3 text-rose-500 animate-bounce" />
+                <span>No sincronizado (Clic para reintentar)</span>
+              </button>
+            )}
+
+            {/* Botón manual para forzar sincronización con el servidor */}
+            {onForceSyncCloud && (
+              <button
+                type="button"
+                onClick={onForceSyncCloud}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] hover:border-[#00F0FF]/50 hover:text-[#00F0FF] transition-all cursor-pointer shadow-2xs"
+                title="Forzar guardado inmediato en la nube para que el equipo lo vea"
+              >
+                <RefreshCw className={`w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF] ${autoSaveStatus === 'saving' ? 'animate-spin' : ''}`} />
+                <span className="hidden md:inline">Sincronizar</span>
+              </button>
             )}
 
             {/* Inline Date Navigator */}

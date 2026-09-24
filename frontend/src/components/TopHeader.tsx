@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Bell, HelpCircle, User as UserIcon, KeyRound, Trash2 } from 'lucide-react';
+import { Search, Bell, HelpCircle, User as UserIcon, KeyRound, Trash2, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { User } from '../types';
 
 interface TopHeaderProps {
@@ -9,6 +9,8 @@ interface TopHeaderProps {
   onOpenChangePassword?: () => void;
   onOpenPapelera?: () => void;
   papeleraCount?: number;
+  autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
+  onForceSyncCloud?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -18,6 +20,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenChangePassword,
   onOpenPapelera,
   papeleraCount = 0,
+  autoSaveStatus = 'idle',
+  onForceSyncCloud,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -43,6 +47,38 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Action Icons Right */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Sincronización en la nube */}
+        {onForceSyncCloud && (
+          <button
+            type="button"
+            onClick={onForceSyncCloud}
+            title={
+              autoSaveStatus === 'saving'
+                ? 'Sincronizando con el servidor...'
+                : autoSaveStatus === 'error'
+                ? 'Error al sincronizar con el servidor. Clic para forzar sincronización'
+                : 'Sincronizado en la nube. Clic para forzar actualización'
+            }
+            className={`p-2 rounded-full transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold ${
+              autoSaveStatus === 'saving'
+                ? 'text-amber-500 bg-amber-50 dark:bg-amber-950/40'
+                : autoSaveStatus === 'error'
+                ? 'text-rose-500 bg-rose-50 dark:bg-rose-950/40 animate-pulse'
+                : 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+            }`}
+          >
+            {autoSaveStatus === 'saving' ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : autoSaveStatus === 'error' ? (
+              <CloudOff className="w-4 h-4 text-rose-500" />
+            ) : (
+              <Cloud className="w-4 h-4 text-emerald-500" />
+            )}
+            <span className="hidden lg:inline text-[11px]">
+              {autoSaveStatus === 'saving' ? 'Guardando...' : autoSaveStatus === 'error' ? 'Sin conexión' : 'Nube OK'}
+            </span>
+          </button>
+        )}
         {/* Cambiar contraseña */}
         {onOpenChangePassword && (
           <button

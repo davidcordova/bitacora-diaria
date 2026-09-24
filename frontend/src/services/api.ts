@@ -200,12 +200,18 @@ export const api = {
         const data = await res.json();
         this.saveToLocalStorage(data.bitacora);
         return data;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson.error || `Error ${res.status} al guardar en el servidor`;
+        console.warn('API error saving bitacora:', errMsg);
+        this.saveToLocalStorage(bitacora);
+        throw new Error(errMsg);
       }
     } catch (e) {
       console.warn('Error saving to server, saving locally', e);
+      this.saveToLocalStorage(bitacora);
+      throw e;
     }
-    this.saveToLocalStorage(bitacora);
-    return { bitacora, message: 'Guardado localmente' };
   },
 
   async updateActividadEstado(actId: number | string, nuevoEstado: EstadoActividad): Promise<boolean> {

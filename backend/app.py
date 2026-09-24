@@ -189,6 +189,82 @@ def diagnose_db():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def fix_mock_data_jayala():
+    """Limpia las actividades mock generadas por el script de sincronización para Josué Ayala y registra su actividad real 're rh masivo'"""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        b_jayala = cursor.execute("""
+            SELECT id FROM bitacoras 
+            WHERE (user_id = 5 OR LOWER(colaborador) = 'josue ayala') AND fecha = '2026-09-24'
+        """).fetchone()
+        
+        if b_jayala:
+            b_id = b_jayala['id']
+            # Desactivar actividades mock generadas automáticamente
+            mock_descriptions = [
+                'Test actividad de depuracion',
+                'Implementación de optimizaciones en endpoints API REST y validaciones de carga.',
+                'Pruebas integrales de flujo de bitácoras y resolución de inconsistencias de navegación.',
+                'Revisión técnica de incidencias y sincronización con el equipo de soporte.',
+                'Desarrollo de módulos interactivos de supervisión y gestión de estados de tareas.'
+            ]
+            for desc in mock_descriptions:
+                cursor.execute("""
+                    UPDATE actividades SET is_deleted = 1, deleted_at = CURRENT_TIMESTAMP
+                    WHERE bitacora_id = ? AND descripcion = ? AND (is_deleted IS NULL OR is_deleted = 0)
+                """, (b_id, desc))
+            
+            # Verificar si ya existe la actividad real de 're rh masivo'
+            real_act = cursor.execute("""
+                SELECT id FROM actividades 
+                WHERE bitacora_id = ? AND (LOWER(descripcion) LIKE '%rh masivo%' OR LOWER(descripcion) LIKE '%re rh%') AND (is_deleted IS NULL OR is_deleted = 0)
+            """, (b_id,)).fetchone()
+            
+            if not real_act:
+                cursor.execute("""
+                    INSERT INTO actividades (
+                        bitacora_id, orden, hora_inicio, duracion_min,
+                        tipo_trabajo, descripcion, para_cliente, estado, evidencias,
+                        shared_with, created_at, updated_at
+                    ) VALUES (
+                        ?, 0, '08:30', 90,
+                        'Desarrollo', 'Revisión y atención de incidencias en reclasificación / requerimientos RH masivo (re rh masivo)', 'RR.HH.', 'completada', '[]',
+                        '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    )
+                """, (b_id,))
+            
+            cursor.execute("""
+                UPDATE bitacoras SET tiempo_total_min = (
+                    SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+                ), updated_at = CURRENT_TIMESTAMP WHERE id = ?
+            """, (b_id, b_id))
+            
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        print("[Repair] Error in fix_mock_data_jayala:", e)
+
+@app.route('/api/admin/repair-mock-jayala', methods=['POST', 'GET', 'OPTIONS'])
+def repair_mock_jayala_endpoint():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    fix_mock_data_jayala()
+    conn = get_db()
+    cursor = conn.cursor()
+    acts = cursor.execute("""
+        SELECT a.* FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE (b.user_id = 5 OR LOWER(b.colaborador) = 'josue ayala') AND b.fecha = '2026-09-24' AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+    """).fetchall()
+    conn.close()
+    return jsonify({
+        "success": True,
+        "message": "Datos mock de Josué Ayala limpiados y actividad real 're rh masivo' registrada con éxito",
+        "actividades": [dict(r) for r in acts]
+    }), 200
+
 @app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
 def clean_production_data():
     """Purga todas las bitácoras, actividades y usuarios de prueba dejando el sistema limpio en producción con sólo el admin"""
@@ -1006,7 +1082,14 @@ def save_bitacora():
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
 
             act_id = act.get('id')
-            if act_id and act_id in existing_acts:
+            act_id_num = None
+            try:
+                act_id_num = int(act_id)
+            except (ValueError, TypeError):
+                pass
+            target_act_id = act_id_num if (act_id_num and act_id_num in existing_acts) else (act_id if act_id in existing_acts else None)
+
+            if target_act_id:
                 cursor.execute('''
                     UPDATE actividades SET
                         orden = ?, hora_inicio = ?, duracion_min = ?,
@@ -1026,9 +1109,9 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
-                    act_id
+                    target_act_id
                 ))
-                kept_ids.add(act_id)
+                kept_ids.add(target_act_id)
             else:
                 cursor.execute('''
                     INSERT INTO actividades (
@@ -1952,6 +2035,7 @@ def start_midnight_scheduler():
 # Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
 try:
     init_db()
+    fix_mock_data_jayala()
     start_midnight_scheduler()
 except Exception as e:
     print("[Startup] Error inicializando DB o scheduler:", e)

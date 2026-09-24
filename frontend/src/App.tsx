@@ -26,6 +26,84 @@ import { getTodayLocalDateStr } from './utils/formatters';
 
 const getDraftKey = (userId?: number, dateStr?: string) => `bitacora_draft_${userId || 'user'}_${dateStr || 'today'}`;
 
+// Busca el borrador local más completo (evita que datos incompletos del servidor pisen el trabajo local)
+const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string): Bitacora | null => {
+  const candidates: Bitacora[] = [];
+  
+  if (userId) {
+    try {
+      const str = localStorage.getItem(getDraftKey(userId, dateStr));
+      if (str) {
+        const parsed = JSON.parse(str);
+        if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
+          candidates.push(parsed);
+        }
+      }
+    } catch (e) {}
+  }
+
+  try {
+    const str = localStorage.getItem(getDraftKey(undefined, dateStr));
+    if (str) {
+      const parsed = JSON.parse(str);
+      if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
+        candidates.push(parsed);
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const str = localStorage.getItem('active_bitacora');
+    if (str) {
+      const parsed = JSON.parse(str);
+      if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
+        if (!userId || parsed.user_id === userId || (userName && parsed.colaborador?.toLowerCase() === userName.toLowerCase())) {
+          candidates.push(parsed);
+        }
+      }
+    }
+  } catch (e) {}
+
+  try {
+    const str = localStorage.getItem('bitacoras_history');
+    if (str) {
+      const list: Bitacora[] = JSON.parse(str);
+      if (Array.isArray(list)) {
+        const match = list.find(b => b.fecha === dateStr && (!userId || b.user_id === userId || (userName && b.colaborador?.toLowerCase() === userName.toLowerCase())));
+        if (match && Array.isArray(match.actividades)) {
+          candidates.push(match);
+        }
+      }
+    }
+  } catch (e) {}
+
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('bitacora_recovery_backup_')) {
+        try {
+          const parsed = JSON.parse(localStorage.getItem(key) || '');
+          if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
+            if (!userId || parsed.user_id === userId || (userName && parsed.colaborador?.toLowerCase() === userName.toLowerCase())) {
+              candidates.push(parsed);
+            }
+          }
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
+
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const countA = (a.actividades || []).filter(act => !act.is_deleted).length;
+    const countB = (b.actividades || []).filter(act => !act.is_deleted).length;
+    return countB - countA;
+  });
+
+  return candidates[0];
+};
+
 export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('lista');
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
@@ -44,27 +122,11 @@ export function App() {
     const savedUser = localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null;
     const userUid = savedUser?.id;
 
-    if (userUid) {
-      const savedDraft = localStorage.getItem(getDraftKey(userUid, todayStr));
-      if (savedDraft) {
-        try {
-          const parsed = JSON.parse(savedDraft);
-          if (parsed && parsed.fecha === todayStr) {
-            return parsed;
-          }
-        } catch (e) {}
-      }
+    const bestDraft = getBestLocalDraft(userUid, todayStr, savedUser?.full_name);
+    if (bestDraft) {
+      return bestDraft;
     }
 
-    const saved = localStorage.getItem('active_bitacora');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.fecha === todayStr) {
-          return parsed;
-        }
-      } catch (e) {}
-    }
     return {
       ...defaultBitacora,
       fecha: todayStr,
@@ -282,7 +344,59 @@ export function App() {
               (activeUser.username && b.colaborador.toLowerCase() === activeUser.username.toLowerCase())) &&
             b.fecha === todayStr
         );
+
+        // Obtener el mejor borrador local para hoy
+        const localDraft = getBestLocalDraft(activeUser.id, todayStr, activeUser.full_name);
+        const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
+        const serverActsCount = (todayMatch?.actividades || []).filter((a) => !a.is_deleted).length;
+
+        // REGLA DE ORO 1: Si el cliente tiene MÁS actividades locales que el servidor,
+        // NUNCA pisar con los datos incompletos del servidor. Priorizar el borrador local y sincronizar a la nube.
+        if (localDraft && localActsCount > serverActsCount) {
+          console.log(`[SmartSync] Priorizando borrador local (${localActsCount} actividades) sobre datos del servidor (${serverActsCount} actividades). Sincronizando con la nube.`);
+          setBitacora(localDraft);
+          setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
+
+          api.saveBitacora(localDraft).then((res) => {
+            if (res.bitacora) {
+              setBitacora(res.bitacora);
+            }
+            setAutoSaveStatus('saved');
+            setLastSavedTime(new Date());
+            showToast('success', `¡Sincronizadas tus ${localActsCount} actividades locales con el servidor!`);
+          }).catch((err) => {
+            console.warn('[SmartSync] Error al sincronizar borrador local con la nube:', err);
+            setAutoSaveStatus('error');
+          });
+          return;
+        }
+
+        // REGLA DE ORO 2: Si el servidor tiene datos, pero el borrador local tiene actividades adicionales no presentes en el servidor,
+        // combinarlas quirúrgicamente para no perder ninguna tarea registrada localmente.
         if (todayMatch) {
+          let mergedBitacora = { ...todayMatch };
+          if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
+            const serverDescriptions = new Set(
+              (todayMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase())
+            );
+            const extraLocalActs = localDraft.actividades.filter(
+              (a) => a.descripcion && a.descripcion.trim() && !serverDescriptions.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
+            );
+            if (extraLocalActs.length > 0) {
+              console.log(`[SmartSync] Fusionando ${extraLocalActs.length} actividades locales que no existían en el servidor.`);
+              mergedBitacora.actividades = [...(todayMatch.actividades || []), ...extraLocalActs];
+              setBitacora(mergedBitacora);
+              setIsGenerated(mergedBitacora.estado === 'generada' || mergedBitacora.estado === 'cerrada' || mergedBitacora.estado === 'cerrada_sistema');
+              api.saveBitacora(mergedBitacora).then((res) => {
+                if (res.bitacora) setBitacora(res.bitacora);
+                setAutoSaveStatus('saved');
+                setLastSavedTime(new Date());
+                showToast('success', `¡Fusionadas y sincronizadas ${extraLocalActs.length} actividades locales adicionales!`);
+              }).catch(console.warn);
+              return;
+            }
+          }
+
           setBitacora(todayMatch);
           setIsGenerated(todayMatch.estado === 'generada' || todayMatch.estado === 'cerrada' || todayMatch.estado === 'cerrada_sistema');
           lastSavedSignature.current = JSON.stringify({
@@ -296,18 +410,17 @@ export function App() {
             prioridad_siguiente: todayMatch.prioridad_siguiente,
             hora_inicio: todayMatch.hora_inicio,
           });
+          // Mantener borrador local sincronizado con el servidor
+          localStorage.setItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(todayMatch));
+        } else if (localDraft) {
+          setBitacora(localDraft);
+          setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
+          api.saveBitacora(localDraft).then((res) => {
+            if (res.bitacora) setBitacora(res.bitacora);
+            setAutoSaveStatus('saved');
+            setLastSavedTime(new Date());
+          }).catch(console.warn);
         } else {
-          // Verificar si hay borrador local para hoy
-          const draft = localStorage.getItem(getDraftKey(activeUser.id, todayStr));
-          if (draft) {
-            try {
-              const parsedDraft = JSON.parse(draft);
-              if (parsedDraft && parsedDraft.fecha === todayStr) {
-                setBitacora(parsedDraft);
-                return;
-              }
-            } catch (e) {}
-          }
           setBitacora((prev) => {
             if (prev.fecha !== todayStr || !prev.colaborador) {
               return {
@@ -332,6 +445,39 @@ export function App() {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Forzar sincronización completa con la nube a demanda
+  const handleForceSyncCloud = async () => {
+    if (!bitacora.colaborador || !bitacora.fecha) {
+      showToast('error', 'No hay datos válidos para sincronizar');
+      return;
+    }
+    setAutoSaveStatus('saving');
+    try {
+      const payload: Bitacora = {
+        ...bitacora,
+        colaborador: currentUser?.full_name || bitacora.colaborador,
+        user_id: currentUser?.id || bitacora.user_id,
+      };
+      const res = await api.saveBitacora(payload);
+      setAutoSaveStatus('saved');
+      setLastSavedTime(new Date());
+      if (res.bitacora) {
+        setBitacora((prev) => ({
+          ...prev,
+          id: res.bitacora.id,
+          actividades: res.bitacora.actividades && res.bitacora.actividades.length > 0
+            ? res.bitacora.actividades
+            : prev.actividades,
+        }));
+      }
+      const count = (res.bitacora?.actividades || bitacora.actividades).filter((a) => !a.is_deleted).length;
+      showToast('success', `¡Bitácora sincronizada exitosamente con el servidor (${count} actividades guardadas en la nube)!`);
+    } catch (err: any) {
+      setAutoSaveStatus('error');
+      showToast('error', `Error al sincronizar con el servidor: ${err.message || 'Fallo de conexión'}`);
+    }
+  };
 
   // Sincronizar título de página y favicon con la configuración institucional
   useEffect(() => {
@@ -398,7 +544,39 @@ export function App() {
           b.fecha === newDate
       );
 
+      // Obtener el borrador local para la nueva fecha
+      const localDraft = getBestLocalDraft(activeUid, newDate, activeName);
+      const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
+      const serverActsCount = (serverMatch?.actividades || []).filter((a) => !a.is_deleted).length;
+
+      // REGLA 1: Si hay más actividades locales en esa fecha, usar el borrador local y sincronizar
+      if (localDraft && localActsCount > serverActsCount) {
+        setBitacora(localDraft);
+        setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
+        api.saveBitacora(localDraft).then((res) => {
+          if (res.bitacora) setBitacora(res.bitacora);
+          setAutoSaveStatus('saved');
+          setLastSavedTime(new Date());
+        }).catch(console.warn);
+        return;
+      }
+
+      // REGLA 2: Si existe en el servidor, cargar y fusionar si hubiera tareas locales no reflejadas
       if (serverMatch) {
+        let merged = { ...serverMatch };
+        if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
+          const sDescs = new Set((serverMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase()));
+          const extra = localDraft.actividades.filter(
+            (a) => a.descripcion && a.descripcion.trim() && !sDescs.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
+          );
+          if (extra.length > 0) {
+            merged.actividades = [...(serverMatch.actividades || []), ...extra];
+            setBitacora(merged);
+            api.saveBitacora(merged).catch(console.warn);
+            return;
+          }
+        }
+
         setBitacora(serverMatch);
         setIsGenerated(serverMatch.estado === 'generada' || serverMatch.estado === 'cerrada' || serverMatch.estado === 'cerrada_sistema');
         lastSavedSignature.current = JSON.stringify({
@@ -414,61 +592,56 @@ export function App() {
         });
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
-      } else {
-        // 3. Si no existe en el backend, buscar en borrador local de esa fecha
-        const localDraft = localStorage.getItem(getDraftKey(activeUid, newDate));
-        if (localDraft) {
-          try {
-            const parsed = JSON.parse(localDraft);
-            if (parsed && parsed.fecha === newDate) {
-              setBitacora(parsed);
-              setIsGenerated(false);
-              lastSavedSignature.current = JSON.stringify({
-                fecha: parsed.fecha,
-                colaborador: parsed.colaborador,
-                user_id: parsed.user_id,
-                actividades: parsed.actividades,
-                pendientes: parsed.pendientes,
-                necesita_apoyo: parsed.necesita_apoyo,
-                apoyo_detalle: parsed.apoyo_detalle,
-                prioridad_siguiente: parsed.prioridad_siguiente,
-                hora_inicio: parsed.hora_inicio,
-              });
-              return;
-            }
-          } catch (e) {}
-        }
+        return;
+      }
 
-        // 4. Si no hay nada, inicializar bitácora limpia vacía para esa fecha
-        const cleanBitacora: Bitacora = {
-          ...defaultBitacora,
-          id: undefined,
-          fecha: newDate,
-          hora_inicio: systemSettings?.hora_inicio_default || bitacora.hora_inicio || '08:30',
-          colaborador: activeName,
-          user_id: activeUid,
-          area: currentUser?.team_name || bitacora.area || 'Sistemas',
-          actividades: [],
-          pendientes: '',
-          necesita_apoyo: 'No',
-          apoyo_detalle: '',
-          prioridad_siguiente: '',
-        };
-        setBitacora(cleanBitacora);
+      // REGLA 3: Si no existe en el backend, usar borrador local
+      if (localDraft) {
+        setBitacora(localDraft);
         setIsGenerated(false);
         lastSavedSignature.current = JSON.stringify({
-          fecha: cleanBitacora.fecha,
-          colaborador: cleanBitacora.colaborador,
-          user_id: cleanBitacora.user_id,
-          actividades: cleanBitacora.actividades,
-          pendientes: cleanBitacora.pendientes,
-          necesita_apoyo: cleanBitacora.necesita_apoyo,
-          apoyo_detalle: cleanBitacora.apoyo_detalle,
-          prioridad_siguiente: cleanBitacora.prioridad_siguiente,
-          hora_inicio: cleanBitacora.hora_inicio,
+          fecha: localDraft.fecha,
+          colaborador: localDraft.colaborador,
+          user_id: localDraft.user_id,
+          actividades: localDraft.actividades,
+          pendientes: localDraft.pendientes,
+          necesita_apoyo: localDraft.necesita_apoyo,
+          apoyo_detalle: localDraft.apoyo_detalle,
+          prioridad_siguiente: localDraft.prioridad_siguiente,
+          hora_inicio: localDraft.hora_inicio,
         });
-        setAutoSaveStatus('idle');
+        return;
       }
+
+      // 4. Si no hay nada, inicializar bitácora limpia vacía para esa fecha
+      const cleanBitacora: Bitacora = {
+        ...defaultBitacora,
+        id: undefined,
+        fecha: newDate,
+        hora_inicio: systemSettings?.hora_inicio_default || bitacora.hora_inicio || '08:30',
+        colaborador: activeName,
+        user_id: activeUid,
+        area: currentUser?.team_name || bitacora.area || 'Sistemas',
+        actividades: [],
+        pendientes: '',
+        necesita_apoyo: 'No',
+        apoyo_detalle: '',
+        prioridad_siguiente: '',
+      };
+      setBitacora(cleanBitacora);
+      setIsGenerated(false);
+      lastSavedSignature.current = JSON.stringify({
+        fecha: cleanBitacora.fecha,
+        colaborador: cleanBitacora.colaborador,
+        user_id: cleanBitacora.user_id,
+        actividades: cleanBitacora.actividades,
+        pendientes: cleanBitacora.pendientes,
+        necesita_apoyo: cleanBitacora.necesita_apoyo,
+        apoyo_detalle: cleanBitacora.apoyo_detalle,
+        prioridad_siguiente: cleanBitacora.prioridad_siguiente,
+        hora_inicio: cleanBitacora.hora_inicio,
+      });
+      setAutoSaveStatus('idle');
     } catch (e) {
       console.warn('Error fetching bitacora for date:', newDate, e);
     } finally {
@@ -759,6 +932,8 @@ export function App() {
           onOpenChangePassword={() => setChangePasswordModalOpen(true)}
           onOpenPapelera={() => setPapeleraModalOpen(true)}
           papeleraCount={papeleraCount}
+          autoSaveStatus={autoSaveStatus}
+          onForceSyncCloud={handleForceSyncCloud}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -780,6 +955,7 @@ export function App() {
                 onHoraInicioChange={(val) => handleFieldChange('hora_inicio', val)}
                 autoSaveStatus={autoSaveStatus}
                 lastSavedTime={lastSavedTime}
+                onForceSyncCloud={handleForceSyncCloud}
               />
 
               <CierreJornada
