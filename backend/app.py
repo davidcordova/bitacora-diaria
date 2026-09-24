@@ -132,6 +132,39 @@ def handle_settings():
     conn.close()
     return jsonify(settings), 200
 
+@app.route('/api/admin/diagnose-db', methods=['GET'])
+def diagnose_db():
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    all_acts = [dict(r) for r in cursor.execute("""
+        SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.is_deleted, a.deleted_at, a.created_at,
+               b.colaborador, b.fecha, b.user_id
+        FROM actividades a
+        LEFT JOIN bitacoras b ON a.bitacora_id = b.id
+        ORDER BY a.id DESC
+    """).fetchall()]
+    
+    all_b = [dict(r) for r in cursor.execute("SELECT * FROM bitacoras ORDER BY id DESC").fetchall()]
+    tables = [r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+    
+    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    db_files = []
+    try:
+        db_files = [f for f in os.listdir(db_dir) if any(ext in f for ext in ['db', 'sqlite', 'wal', 'bak'])]
+    except Exception:
+        pass
+        
+    conn.close()
+    return jsonify({
+        "db_path": DB_PATH,
+        "db_files": db_files,
+        "tables": tables,
+        "total_actividades": len(all_acts),
+        "actividades": all_acts,
+        "bitacoras": all_b
+    })
+
 @app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
 def clean_production_data():
     """Purga todas las bitácoras, actividades y usuarios de prueba dejando el sistema limpio en producción con sólo el admin"""
