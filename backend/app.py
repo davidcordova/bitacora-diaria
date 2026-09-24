@@ -194,20 +194,21 @@ def cleanup_synthetic_historical_data():
         conn = get_db()
         cursor = conn.cursor()
         
-        # Eliminar actividades asociadas a bitácoras sintéticas del 2026-09-23 creadas a las 19:40:16
+        # Eliminar actividades asociadas a bitácoras sintéticas del 2026-09-23 creadas a las 19:40 UTC
         cursor.execute("""
             DELETE FROM actividades 
             WHERE bitacora_id IN (
                 SELECT id FROM bitacoras 
-                WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:16%'
+                WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:%'
             )
         """)
         
         # Eliminar las bitácoras sintéticas del 2026-09-23
         cursor.execute("""
             DELETE FROM bitacoras 
-            WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:16%'
+            WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:%'
         """)
+
         
         conn.commit()
         conn.close()
