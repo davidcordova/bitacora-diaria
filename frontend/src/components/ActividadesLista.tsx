@@ -21,6 +21,8 @@ import {
   Sparkles,
   Cloud,
   CloudOff,
+  Link2,
+  MessageSquare,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration } from '../utils/formatters';
@@ -447,14 +449,33 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
                       {/* Actividad / Descripción */}
                       <td className="py-3.5 px-4">
-                        <div className="flex items-start gap-1.5 max-w-xl">
+                        <div className="flex flex-col gap-1 max-w-xl">
+                          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
+                            {act.parent_task_id && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 px-2 py-0.5 rounded-md border border-[#00F0FF]/30 shrink-0"
+                                title={act.parent_task_desc ? `Vinculada: ${act.parent_task_desc}` : `Vinculada con actividad #${act.parent_task_id}`}
+                              >
+                                <Link2 className="w-2.5 h-2.5" />
+                                <span>Ref #{act.parent_task_id}</span>
+                              </span>
+                            )}
+                            {act.comentarios && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30 shrink-0"
+                                title={`Comentario: ${act.comentarios}`}
+                              >
+                                <MessageSquare className="w-2.5 h-2.5 text-amber-500" />
+                                <span>Nota</span>
+                              </span>
+                            )}
+                          </div>
                           <RichHtmlRenderer
                             content={act.descripcion}
                             clampLines={2}
                             className="font-medium text-slate-800 dark:text-slate-200 leading-relaxed group-hover:text-slate-950 dark:group-hover:text-white transition-colors"
                           />
                         </div>
-
                       </td>
 
                       {/* Tipo de Trabajo */}

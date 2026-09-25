@@ -1010,6 +1010,8 @@ def get_bitacoras():
         b_dict = dict(b)
         acts = cursor.execute('''
             SELECT a.*,
+              p.descripcion as parent_task_desc,
+              p.estado as parent_task_estado,
               COALESCE((
                 WITH RECURSIVE lineage AS (
                   SELECT id, parent_task_id, duracion_min FROM actividades WHERE id = a.id
@@ -1021,6 +1023,7 @@ def get_bitacoras():
                 SELECT SUM(duracion_min) FROM lineage
               ), a.duracion_min) AS tiempo_acumulado_min
             FROM actividades a
+            LEFT JOIN actividades p ON a.parent_task_id = p.id
             WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
             ORDER BY a.orden ASC, a.id ASC
         ''', (b['id'],)).fetchall()
@@ -1043,6 +1046,8 @@ def get_bitacora(bitacora_id):
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
     acts = cursor.execute('''
         SELECT a.*,
+          p.descripcion as parent_task_desc,
+          p.estado as parent_task_estado,
           COALESCE((
             WITH RECURSIVE lineage AS (
               SELECT id, parent_task_id, duracion_min FROM actividades WHERE id = a.id
@@ -1054,6 +1059,7 @@ def get_bitacora(bitacora_id):
             SELECT SUM(duracion_min) FROM lineage
           ), a.duracion_min) AS tiempo_acumulado_min
         FROM actividades a
+        LEFT JOIN actividades p ON a.parent_task_id = p.id
         WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         ORDER BY a.orden ASC, a.id ASC
     ''', (bitacora_id,)).fetchall()
@@ -1271,7 +1277,9 @@ def save_bitacora():
             if shared_with_val and not shared_uuid:
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
 
-            target_act_id = matched_target_ids.get(idx)
+            parent_task_id = int(act['parent_task_id']) if act.get('parent_task_id') and str(act['parent_task_id']).isdigit() else None
+            comentarios = act.get('comentarios', '') or ''
+            tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
 
             if target_act_id:
                 cursor.execute('''
@@ -1280,6 +1288,7 @@ def save_bitacora():
                         tipo_trabajo = ?, descripcion = ?, para_cliente = ?,
                         estado = ?, evidencias = ?, shared_with = ?,
                         shared_uuid = COALESCE(?, shared_uuid),
+                        comentarios = ?, parent_task_id = ?, tipo_vinculo = ?,
                         updated_at = ?
                     WHERE id = ?
                 ''', (
@@ -1293,6 +1302,9 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
+                    comentarios,
+                    parent_task_id,
+                    tipo_vinculo,
                     now_peru,
                     target_act_id
                 ))
@@ -1302,8 +1314,9 @@ def save_bitacora():
                     INSERT INTO actividades (
                         bitacora_id, orden, hora_inicio, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
-                        shared_with, shared_uuid, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        shared_with, shared_uuid, comentarios, parent_task_id, tipo_vinculo,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     bitacora_id,
                     idx,
@@ -1316,6 +1329,9 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
+                    comentarios,
+                    parent_task_id,
+                    tipo_vinculo,
                     now_peru,
                     now_peru
                 ))
@@ -1427,7 +1443,13 @@ def save_bitacora():
         users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
         b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
         b_dict = dict(b)
-        acts = cursor.execute("SELECT * FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY orden ASC, id ASC", (bitacora_id,)).fetchall()
+        acts = cursor.execute('''
+            SELECT a.*, p.descripcion as parent_task_desc, p.estado as parent_task_estado 
+            FROM actividades a 
+            LEFT JOIN actividades p ON a.parent_task_id = p.id 
+            WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0) 
+            ORDER BY a.orden ASC, a.id ASC
+        ''', (bitacora_id,)).fetchall()
         b_dict['actividades'] = [format_actividad_dict(a, users_map) for a in acts]
         
         conn.close()
@@ -1478,6 +1500,10 @@ def update_actividad_detalle(act_id):
     shared_with_val = data.get('shared_with')
     shared_with_json = json.dumps(shared_with_val) if isinstance(shared_with_val, list) else None
 
+    parent_task_id_param = int(data['parent_task_id']) if data.get('parent_task_id') and str(data['parent_task_id']).isdigit() else (None if 'parent_task_id' in data else None)
+    comentarios_param = data.get('comentarios')
+    tipo_vinculo_param = data.get('tipo_vinculo')
+
     if act and act['shared_uuid']:
         cursor.execute('''
             UPDATE actividades SET
@@ -1489,6 +1515,9 @@ def update_actividad_detalle(act_id):
                 estado = COALESCE(?, estado),
                 evidencias = COALESCE(?, evidencias),
                 shared_with = COALESCE(?, shared_with),
+                comentarios = COALESCE(?, comentarios),
+                parent_task_id = COALESCE(?, parent_task_id),
+                tipo_vinculo = COALESCE(?, tipo_vinculo),
                 updated_at = ?
             WHERE shared_uuid = ?
         ''', (
@@ -1500,6 +1529,9 @@ def update_actividad_detalle(act_id):
             data.get('estado'),
             evidencias_json,
             shared_with_json,
+            comentarios_param,
+            parent_task_id_param,
+            tipo_vinculo_param,
             now_peru,
             act['shared_uuid']
         ))
@@ -1514,6 +1546,9 @@ def update_actividad_detalle(act_id):
                 estado = COALESCE(?, estado),
                 evidencias = COALESCE(?, evidencias),
                 shared_with = COALESCE(?, shared_with),
+                comentarios = COALESCE(?, comentarios),
+                parent_task_id = COALESCE(?, parent_task_id),
+                tipo_vinculo = COALESCE(?, tipo_vinculo),
                 updated_at = ?
             WHERE id = ?
         ''', (
@@ -1525,13 +1560,21 @@ def update_actividad_detalle(act_id):
             data.get('estado'),
             evidencias_json,
             shared_with_json,
+            comentarios_param,
+            parent_task_id_param,
+            tipo_vinculo_param,
             now_peru,
             act_id
         ))
         
     conn.commit()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    updated_act = cursor.execute("SELECT * FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    updated_act = cursor.execute('''
+        SELECT a.*, p.descripcion as parent_task_desc, p.estado as parent_task_estado
+        FROM actividades a
+        LEFT JOIN actividades p ON a.parent_task_id = p.id
+        WHERE a.id = ?
+    ''', (act_id,)).fetchone()
     conn.close()
     return jsonify({"success": True, "actividad": format_actividad_dict(updated_act, users_map) if updated_act else None})
 
@@ -2258,6 +2301,248 @@ def importar_actividades_pendientes():
         "pendientes": [format_actividad_dict(t) for t in tasks],
         "count": len(tasks)
     })
+
+# ==================== ACTIVIDADES REFERENCIAS / VÍNCULOS ====================
+
+@app.route('/api/actividades/referencias', methods=['GET', 'OPTIONS'])
+def get_actividades_referencias():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    user_id = request.args.get('user_id')
+    colaborador = request.args.get('colaborador')
+    q = request.args.get('q', '').strip()
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    query = '''
+        SELECT a.id, a.orden, a.hora_inicio, a.duracion_min, a.tipo_trabajo, a.descripcion,
+               a.para_cliente, a.estado, b.fecha as bitacora_fecha, b.colaborador
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE (a.is_deleted IS NULL OR a.is_deleted = 0)
+    '''
+    params = []
+    if user_id:
+        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
+        params.extend([user_id, colaborador or ''])
+    elif colaborador:
+        query += " AND LOWER(b.colaborador) = LOWER(?)"
+        params.append(colaborador)
+
+    if q:
+        query += " AND (a.descripcion LIKE ? OR a.para_cliente LIKE ? OR a.tipo_trabajo LIKE ?)"
+        params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
+        
+    query += " ORDER BY b.fecha DESC, a.orden ASC, a.id DESC LIMIT 80"
+    rows = cursor.execute(query, params).fetchall()
+    conn.close()
+    
+    return jsonify([dict(r) for r in rows]), 200
+
+# ==================== BUZÓN DE SUGERENCIAS & MEJORA CONTINUA ====================
+
+@app.route('/api/sugerencias', methods=['GET', 'POST', 'OPTIONS'])
+def handle_sugerencias():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    now_peru = get_peru_now_str()
+
+    if request.method == 'POST':
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        colaborador = (data.get('colaborador') or '').strip()
+        es_anonimo = 1 if data.get('es_anonimo') else 0
+        categoria = data.get('categoria') or 'sistema'
+        titulo = (data.get('titulo') or '').strip()
+        descripcion = (data.get('descripcion') or '').strip()
+        impacto = data.get('impacto') or 'medio'
+
+        if not titulo or not descripcion:
+            conn.close()
+            return jsonify({"error": "Título y descripción son requeridos"}), 400
+
+        cursor.execute('''
+            INSERT INTO buzon_sugerencias (
+                user_id, colaborador, es_anonimo, categoria,
+                titulo, descripcion, impacto, estado, votos, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', 0, ?, ?)
+        ''', (user_id, colaborador, es_anonimo, categoria, titulo, descripcion, impacto, now_peru, now_peru))
+        sug_id = cursor.lastrowid
+        conn.commit()
+
+        # Notificar a administradores y líderes
+        try:
+            author_label = "Un colaborador (Anónimo)" if es_anonimo else (colaborador or "Un colaborador")
+            cursor.execute('''
+                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                SELECT id, 'Nueva sugerencia en el buzón', ?, 'info', 0, ?
+                FROM users WHERE role IN ('admin', 'lider')
+            ''', (f'{author_label} propuso: "{titulo}"', now_peru))
+            conn.commit()
+        except Exception as e:
+            print("Error creating suggestion notification:", e)
+
+        sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
+        conn.close()
+        return jsonify({"message": "Sugerencia enviada exitosamente", "sugerencia": dict(sug)}), 201
+
+    # GET sugerencias
+    categoria = request.args.get('categoria')
+    estado = request.args.get('estado')
+    user_id = request.args.get('user_id')
+    current_uid = request.args.get('requesting_user_id') or user_id
+
+    query = '''
+        SELECT s.*,
+               CASE WHEN bv.id IS NOT NULL THEN 1 ELSE 0 END as user_has_voted
+        FROM buzon_sugerencias s
+        LEFT JOIN buzon_votos bv ON s.id = bv.sugerencia_id AND bv.user_id = ?
+        WHERE 1=1
+    '''
+    params = [current_uid]
+
+    if categoria and categoria != 'todas':
+        query += " AND s.categoria = ?"
+        params.append(categoria)
+    if estado and estado != 'todas':
+        query += " AND s.estado = ?"
+        params.append(estado)
+    if request.args.get('mine') == 'true' and user_id:
+        query += " AND s.user_id = ?"
+        params.append(user_id)
+
+    order_by = request.args.get('sort', 'reciente')
+    if order_by == 'popular':
+        query += " ORDER BY s.votos DESC, s.created_at DESC"
+    else:
+        query += " ORDER BY s.created_at DESC, s.id DESC"
+
+    rows = cursor.execute(query, params).fetchall()
+    results = []
+    for r in rows:
+        d = dict(r)
+        if d.get('es_anonimo'):
+            d['colaborador'] = 'Colaborador Anónimo'
+            d['user_id'] = None
+        results.append(d)
+
+    conn.close()
+    return jsonify(results), 200
+
+@app.route('/api/sugerencias/<int:sug_id>/votar', methods=['POST', 'OPTIONS'])
+def votar_sugerencia(sug_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({"error": "user_id es requerido para votar"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    existing_vote = cursor.execute(
+        "SELECT id FROM buzon_votos WHERE sugerencia_id = ? AND user_id = ?",
+        (sug_id, user_id)
+    ).fetchone()
+
+    if existing_vote:
+        cursor.execute("DELETE FROM buzon_votos WHERE id = ?", (existing_vote['id'],))
+        cursor.execute("UPDATE buzon_sugerencias SET votos = MAX(0, votos - 1) WHERE id = ?", (sug_id,))
+        voted = False
+    else:
+        cursor.execute("INSERT INTO buzon_votos (sugerencia_id, user_id) VALUES (?, ?)", (sug_id, user_id))
+        cursor.execute("UPDATE buzon_sugerencias SET votos = votos + 1 WHERE id = ?", (sug_id,))
+        voted = True
+
+    conn.commit()
+    sug = cursor.execute("SELECT votos FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "voted": voted,
+        "votos": sug['votos'] if sug else 0
+    }), 200
+
+@app.route('/api/sugerencias/<int:sug_id>/status', methods=['PUT', 'OPTIONS'])
+def update_sugerencia_status(sug_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json() or {}
+    nuevo_estado = data.get('estado')
+    respuesta_admin = data.get('respuesta_admin')
+    respondido_por = data.get('respondido_por') or 'Dirección'
+    now_peru = get_peru_now_str()
+
+    if not nuevo_estado:
+        return jsonify({"error": "estado es requerido"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
+    if not sug:
+        conn.close()
+        return jsonify({"error": "Sugerencia no encontrada"}), 404
+
+    cursor.execute('''
+        UPDATE buzon_sugerencias SET
+            estado = ?,
+            respuesta_admin = COALESCE(?, respuesta_admin),
+            respondido_por = ?,
+            respondido_at = ?,
+            updated_at = ?
+        WHERE id = ?
+    ''', (nuevo_estado, respuesta_admin, respondido_por, now_peru, now_peru, sug_id))
+    conn.commit()
+
+    if sug['user_id'] and not sug['es_anonimo']:
+        try:
+            cursor.execute('''
+                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                VALUES (?, 'Actualización de tu sugerencia', ?, 'success', 0, ?)
+            ''', (sug['user_id'], f'Tu propuesta "{sug["titulo"]}" ahora está: {nuevo_estado.upper()}', now_peru))
+            conn.commit()
+        except Exception:
+            pass
+
+    updated = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
+    conn.close()
+    return jsonify({"success": True, "sugerencia": dict(updated)}), 200
+
+@app.route('/api/sugerencias/<int:sug_id>', methods=['DELETE', 'OPTIONS'])
+def delete_sugerencia(sug_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    user_role = data.get('role')
+
+    conn = get_db()
+    cursor = conn.cursor()
+    sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
+    if not sug:
+        conn.close()
+        return jsonify({"error": "Sugerencia no encontrada"}), 404
+
+    if user_role != 'admin' and (not user_id or sug['user_id'] != user_id):
+        conn.close()
+        return jsonify({"error": "No tienes permiso para eliminar esta sugerencia"}), 403
+
+    cursor.execute("DELETE FROM buzon_votos WHERE sugerencia_id = ?", (sug_id,))
+    cursor.execute("DELETE FROM buzon_sugerencias WHERE id = ?", (sug_id,))
+    conn.commit()
+    conn.close()
+
+    return jsonify({"success": True, "message": "Sugerencia eliminada correctamente"}), 200
 
 LAST_ROLLOVER_DATE = None
 rollover_lock = threading.Lock()

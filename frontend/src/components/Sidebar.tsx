@@ -19,6 +19,7 @@ import {
   Moon,
   KeyRound,
   Trash2,
+  Lightbulb,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
 
@@ -101,6 +102,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Dashboard',
       icon: BarChart3,
       show: isLider,
+      badge: null,
+    },
+    {
+      id: 'buzon' as ViewMode,
+      label: 'Buzón de Ideas',
+      icon: Lightbulb,
+      show: true,
       badge: null,
     },
     {

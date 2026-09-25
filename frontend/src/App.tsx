@@ -11,6 +11,7 @@ import { SummaryDrawer } from './components/SummaryDrawer';
 import { DashboardView } from './components/DashboardView';
 import { TeamSupervisionView } from './components/TeamSupervisionView';
 import { UserManagementView } from './components/UserManagementView';
+import { BuzonView } from './components/BuzonView';
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
@@ -1140,6 +1141,14 @@ export function App() {
               currentUser={currentUser}
               onLoadBitacora={handleLoadBitacora}
               onDeleteBitacora={handleDeleteBitacora}
+            />
+          )}
+
+          {/* VIEW 6: BUZÓN DE SUGERENCIAS */}
+          {viewMode === 'buzon' && (
+            <BuzonView
+              currentUser={currentUser}
+              onShowToast={(msg, type) => showToast(type || 'info', msg)}
             />
           )}
         </main>

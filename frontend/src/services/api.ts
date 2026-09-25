@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia } from '../types';
 
 const API_BASE = '/api';
 
@@ -463,6 +463,103 @@ export const api = {
     if (teamId && teamId !== 'all') params.append('team_id', teamId.toString());
     const res = await fetch(`${API_BASE}/equipo/actividades-en-vivo?${params.toString()}`);
     if (!res.ok) throw new Error('Error al cargar feed de actividades en vivo');
+    return await res.json();
+  },
+
+  // ================= ACTIVIDADES REFERENCIAS / VÍNCULOS =================
+  async getActividadesReferencias(userId?: number, colaborador?: string, q?: string): Promise<ActividadReferencia[]> {
+    const params = new URLSearchParams();
+    if (userId) params.append('user_id', userId.toString());
+    if (colaborador) params.append('colaborador', colaborador);
+    if (q) params.append('q', q);
+    const res = await fetch(`${API_BASE}/actividades/referencias?${params.toString()}`);
+    if (!res.ok) throw new Error('Error al buscar referencias de actividades');
+    return await res.json();
+  },
+
+  // ================= BUZÓN DE SUGERENCIAS =================
+  async getSugerencias(params?: {
+    categoria?: string;
+    estado?: string;
+    user_id?: number;
+    requesting_user_id?: number;
+    mine?: boolean;
+    sort?: 'reciente' | 'popular';
+  }): Promise<Sugerencia[]> {
+    const searchParams = new URLSearchParams();
+    if (params?.categoria) searchParams.append('categoria', params.categoria);
+    if (params?.estado) searchParams.append('estado', params.estado);
+    if (params?.user_id) searchParams.append('user_id', params.user_id.toString());
+    if (params?.requesting_user_id) searchParams.append('requesting_user_id', params.requesting_user_id.toString());
+    if (params?.mine) searchParams.append('mine', 'true');
+    if (params?.sort) searchParams.append('sort', params.sort);
+
+    const res = await fetch(`${API_BASE}/sugerencias?${searchParams.toString()}`);
+    if (!res.ok) throw new Error('Error al cargar buzón de sugerencias');
+    return await res.json();
+  },
+
+  async createSugerencia(data: {
+    user_id?: number;
+    colaborador?: string;
+    es_anonimo?: boolean;
+    categoria?: string;
+    titulo: string;
+    descripcion: string;
+    impacto?: string;
+  }): Promise<{ message: string; sugerencia: Sugerencia }> {
+    const res = await fetch(`${API_BASE}/sugerencias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al enviar sugerencia' }));
+      throw new Error(err.error || 'Error al enviar sugerencia');
+    }
+    return await res.json();
+  },
+
+  async votarSugerencia(sugId: number, userId: number): Promise<{ success: boolean; message: string; voted: boolean; votos: number }> {
+    const res = await fetch(`${API_BASE}/sugerencias/${sugId}/votar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al votar' }));
+      throw new Error(err.error || 'Error al votar');
+    }
+    return await res.json();
+  },
+
+  async updateSugerenciaStatus(sugId: number, data: {
+    estado: string;
+    respuesta_admin?: string;
+    respondido_por?: string;
+  }): Promise<{ success: boolean; message: string; sugerencia: Sugerencia }> {
+    const res = await fetch(`${API_BASE}/sugerencias/${sugId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar sugerencia' }));
+      throw new Error(err.error || 'Error al actualizar sugerencia');
+    }
+    return await res.json();
+  },
+
+  async deleteSugerencia(sugId: number, userId: number, role?: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/sugerencias/${sugId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, role }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar sugerencia' }));
+      throw new Error(err.error || 'Error al eliminar sugerencia');
+    }
     return await res.json();
   },
 

@@ -24,6 +24,8 @@ import {
   ListTodo,
   PlayCircle,
   Eye,
+  Link2,
+  MessageSquare,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
 import { formatDuration, getEstadoBadgeInfo, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
@@ -467,14 +469,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                         </div>
                       </div>
 
-                      {/* Work Type Tag */}
-                      {act.tipo_trabajo && (
-                        <div className="mb-1.5">
+                      {/* Work Type Tag & Link Reference */}
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+                        {act.tipo_trabajo && (
                           <span className="inline-block px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 text-[10px] font-semibold border border-slate-200 dark:border-[#252636]">
                             {act.tipo_trabajo}
                           </span>
-                        </div>
-                      )}
+                        )}
+                        {act.parent_task_id && (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 border border-[#00F0FF]/30 truncate max-w-[140px]"
+                            title={act.parent_task_desc ? `Vinculada: ${act.parent_task_desc}` : `Vinculada con actividad #${act.parent_task_id}`}
+                          >
+                            <Link2 className="w-2.5 h-2.5 shrink-0" />
+                            <span className="truncate">Ref #{act.parent_task_id}</span>
+                          </span>
+                        )}
+                      </div>
 
                       {/* Description */}
                       <div className="mb-2">
@@ -488,6 +499,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           <p className="text-xs text-slate-400 dark:text-slate-500 italic">(Sin descripción)</p>
                         )}
                       </div>
+
+                      {/* Comentarios en tarjeta Kanban */}
+                      {act.comentarios && (
+                        <div className="mb-2 p-1.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-500/20 text-[10px] text-amber-900 dark:text-amber-200 flex items-start gap-1">
+                          <MessageSquare className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2 leading-tight">{act.comentarios}</span>
+                        </div>
+                      )}
 
                       {/* Client / Target */}
                       {act.para_cliente && (
@@ -660,6 +679,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   onChange={(e) => setEditForm({ ...editForm, para_cliente: e.target.value })}
                   placeholder="Ej: RR.HH., Cliente XYZ"
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/80 dark:border-[#252636] focus:outline-hidden focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Comentarios (Opcional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={editForm.comentarios || ''}
+                  onChange={(e) => setEditForm({ ...editForm, comentarios: e.target.value })}
+                  placeholder="Notas internas, observaciones o bloqueos..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/80 dark:border-[#252636] focus:outline-hidden focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 transition-all resize-none"
                 />
               </div>
 

@@ -22,6 +22,10 @@ export interface Actividad {
   estado: EstadoActividad;
   evidencias?: Evidencia[];
   parent_task_id?: number | null;
+  parent_task_desc?: string;
+  parent_task_estado?: string;
+  tipo_vinculo?: 'continuacion' | 'bloqueado_por' | 'subtarea' | 'relacionada' | string;
+  comentarios?: string;
   is_rollover?: boolean;
   updated_at?: string;
   created_at?: string;
@@ -34,6 +38,19 @@ export interface Actividad {
   shared_uuid?: string;
   is_deleted?: number;
   deleted_at?: string;
+}
+
+export interface ActividadReferencia {
+  id: number;
+  orden: number;
+  hora_inicio: string;
+  duracion_min: number;
+  tipo_trabajo: string;
+  descripcion: string;
+  para_cliente: string;
+  estado: EstadoActividad;
+  bitacora_fecha: string;
+  colaborador: string;
 }
 
 export interface ActividadPapelera extends Actividad {
@@ -154,7 +171,7 @@ export interface DashboardStats {
   };
 }
 
-export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion';
+export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon';
 
 export interface SystemSettings {
   hora_inicio_default?: string;
@@ -177,5 +194,28 @@ export interface SystemNotification {
   read: boolean;
   type: 'info' | 'success' | 'warning' | 'alert' | 'error';
   category?: 'actividad' | 'sistema' | 'sincronizacion' | 'seguridad';
+}
+
+export type CategoriaSugerencia = 'mejora_proceso' | 'herramienta_it' | 'bienestar_equipo' | 'innovacion' | 'comunicacion' | 'sistema' | 'otro';
+export type ImpactoSugerencia = 'bajo' | 'medio' | 'alto' | 'estrategico';
+export type EstadoSugerencia = 'pendiente' | 'en_revision' | 'planificada' | 'implementada' | 'descartada';
+
+export interface Sugerencia {
+  id: number;
+  user_id?: number | null;
+  colaborador?: string;
+  es_anonimo: boolean | number;
+  categoria: CategoriaSugerencia;
+  titulo: string;
+  descripcion: string;
+  impacto: ImpactoSugerencia;
+  estado: EstadoSugerencia;
+  respuesta_admin?: string;
+  respondido_por?: string;
+  respondido_at?: string;
+  votos: number;
+  user_has_voted?: boolean | number;
+  created_at: string;
+  updated_at?: string;
 }
 

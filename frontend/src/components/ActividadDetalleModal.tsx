@@ -18,6 +18,8 @@ import {
   History,
   AlertTriangle,
   FileText,
+  Link2,
+  MessageSquare,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
 import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
@@ -206,6 +208,24 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </span>
               )}
 
+              {actividad.parent_task_id && (
+                <div className="w-full flex items-center gap-2 p-2.5 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30">
+                  <Link2 className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
+                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
+                    {actividad.tipo_vinculo === 'subtarea'
+                      ? 'Subtarea de'
+                      : actividad.tipo_vinculo === 'bloqueado_por'
+                      ? 'Bloqueado por'
+                      : actividad.tipo_vinculo === 'relacionada'
+                      ? 'Relacionada con'
+                      : 'Continuación de'}:
+                  </span>
+                  <span className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">
+                    Ref #{actividad.parent_task_id} {actividad.parent_task_desc ? `— ${actividad.parent_task_desc}` : ''}
+                  </span>
+                </div>
+              )}
+
               {hasAccumulated && (
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-[#00A3BF] dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 border border-[#00F0FF]/30 px-3 py-1 rounded-full">
                   <Timer className="w-3.5 h-3.5 text-[#00F0FF]" />
@@ -265,6 +285,21 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 )}
               </div>
             </div>
+
+            {/* Comentarios u Observaciones */}
+            {actividad.comentarios && (
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <MessageSquare className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Comentarios / Observaciones
+                  </label>
+                </div>
+                <div className="p-3.5 bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/20 rounded-2xl text-xs text-slate-800 dark:text-amber-200/90 whitespace-pre-wrap leading-relaxed">
+                  {actividad.comentarios}
+                </div>
+              </div>
+            )}
 
             {/* Attached Evidences */}
             <div>

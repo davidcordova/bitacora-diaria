@@ -141,6 +141,10 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN deleted_at DATETIME")
     if 'is_deleted' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN is_deleted INTEGER DEFAULT 0")
+    if 'comentarios' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN comentarios TEXT")
+    if 'tipo_vinculo' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN tipo_vinculo TEXT DEFAULT 'continuacion'")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
@@ -150,6 +154,42 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_shared ON actividades(shared_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_estado ON actividades(estado)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_deleted ON actividades(is_deleted, deleted_at)")
+
+    # 4.2. Crear tabla buzon_sugerencias y buzon_votos
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS buzon_sugerencias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            colaborador TEXT,
+            es_anonimo INTEGER DEFAULT 0,
+            categoria TEXT DEFAULT 'sistema',
+            titulo TEXT NOT NULL,
+            descripcion TEXT NOT NULL,
+            impacto TEXT DEFAULT 'medio',
+            estado TEXT DEFAULT 'pendiente',
+            respuesta_admin TEXT,
+            respondido_por TEXT,
+            respondido_at DATETIME,
+            votos INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_buzon_estado ON buzon_sugerencias(estado)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_buzon_user ON buzon_sugerencias(user_id)")
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS buzon_votos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sugerencia_id INTEGER,
+            user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(sugerencia_id, user_id),
+            FOREIGN KEY (sugerencia_id) REFERENCES buzon_sugerencias(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
 
     # 5. Configurar el usuario admin obligatorio con contraseña M1un1c4cl4v3
     admin_hash = generate_password_hash('M1un1c4cl4v3')

@@ -13,8 +13,13 @@ import {
   Sparkles,
   AlertCircle,
   Plus,
+  MessageSquare,
+  Link2,
+  Unlink,
+  Search,
+  GitBranch,
 } from 'lucide-react';
-import { Actividad, EstadoActividad, User, Evidencia } from '../types';
+import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { HtmlEditor } from './HtmlEditor';
@@ -48,7 +53,28 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const [estado, setEstado] = useState<EstadoActividad>('completada');
   const [sharedWith, setSharedWith] = useState<number[]>([]);
   const [evidencias, setEvidencias] = useState<Evidencia[]>([]);
+  const [comentarios, setComentarios] = useState('');
+  const [parentTaskId, setParentTaskId] = useState<number | null>(null);
+  const [parentTaskDesc, setParentTaskDesc] = useState<string>('');
+  const [tipoVinculo, setTipoVinculo] = useState<string>('continuacion');
+  const [showLinkSelector, setShowLinkSelector] = useState(false);
+  const [referencias, setReferencias] = useState<ActividadReferencia[]>([]);
+  const [loadingRefs, setLoadingRefs] = useState(false);
+  const [refSearch, setRefSearch] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const loadReferencias = async (query = '') => {
+    try {
+      setLoadingRefs(true);
+      const list = await api.getActividadesReferencias(currentUser?.id, currentUser?.full_name, query);
+      const filtered = actividadToEdit?.id ? list.filter((a) => a.id !== Number(actividadToEdit.id)) : list;
+      setReferencias(filtered);
+    } catch (err) {
+      console.error('Error fetching referencias:', err);
+    } finally {
+      setLoadingRefs(false);
+    }
+  };
 
   // Sync form state when modal opens or actividadToEdit changes
   useEffect(() => {
@@ -62,6 +88,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setEstado(actividadToEdit.estado || 'completada');
         setSharedWith(actividadToEdit.shared_with || []);
         setEvidencias(actividadToEdit.evidencias || []);
+        setComentarios(actividadToEdit.comentarios || '');
+        setParentTaskId(actividadToEdit.parent_task_id ? Number(actividadToEdit.parent_task_id) : null);
+        setParentTaskDesc(actividadToEdit.parent_task_desc || '');
+        setTipoVinculo(actividadToEdit.tipo_vinculo || 'continuacion');
       } else {
         // Defaults for new activity
         const now = new Date();
@@ -75,7 +105,13 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setEstado('completada');
         setSharedWith([]);
         setEvidencias([]);
+        setComentarios('');
+        setParentTaskId(null);
+        setParentTaskDesc('');
+        setTipoVinculo('continuacion');
       }
+      setShowLinkSelector(false);
+      setRefSearch('');
       setErrorMsg(null);
     }
   }, [isOpen, actividadToEdit]);
@@ -140,7 +176,6 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       return;
     }
 
-
     const actividadResult: Actividad = {
       ...(actividadToEdit || {}),
       id: actividadToEdit?.id,
@@ -153,6 +188,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       shared_with: sharedWith,
       evidencias,
       shared_uuid: actividadToEdit?.shared_uuid,
+      comentarios: comentarios.trim() || undefined,
+      parent_task_id: parentTaskId || null,
+      parent_task_desc: parentTaskDesc || undefined,
+      tipo_vinculo: tipoVinculo,
     };
 
     onSave(actividadResult, editIndex);
@@ -409,6 +448,183 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             />
           </div>
 
+          {/* Row 4.5: Comentarios u Observaciones (Opcional) */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5 text-cyan-500" />
+                <span>Comentarios</span>
+                <span className="text-[10px] text-slate-400 font-normal">(Opcional)</span>
+              </label>
+              <span className="text-[10px] text-slate-400 font-medium">Notas internas, observaciones o bloqueos</span>
+            </div>
+            <textarea
+              rows={2}
+              placeholder="Agrega notas o comentarios internos sobre esta actividad (ej: entregable enviado, esperando confirmación, etc.)..."
+              value={comentarios}
+              onChange={(e) => setComentarios(e.target.value)}
+              className="w-full px-3.5 py-2 bg-slate-50 dark:bg-[#161722] text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-none transition-all resize-none"
+            />
+          </div>
+
+          {/* Row 4.8: Vincular / Referenciar Actividades */}
+          <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-[#161722]/80 border border-slate-200/80 dark:border-[#252636] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] border border-[#00F0FF]/20">
+                  <Link2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Vincular / Referenciar Actividad
+                  </span>
+                  <p className="text-[11px] text-slate-400">
+                    Relaciona esta tarea con una actividad anterior (continuación, subtarea o bloqueo).
+                  </p>
+                </div>
+              </div>
+
+              {parentTaskId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setParentTaskId(null);
+                    setParentTaskDesc('');
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                  title="Desvincular actividad"
+                >
+                  <Unlink className="w-3.5 h-3.5" />
+                  <span>Quitar vínculo</span>
+                </button>
+              ) : !showLinkSelector ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkSelector(true);
+                    loadReferencias();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-600 dark:text-[#00F0FF] bg-cyan-500/10 hover:bg-cyan-500/20 border border-[#00F0FF]/30 rounded-xl transition-all cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Vincular con otra</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLinkSelector(false)}
+                  className="text-xs text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Si ya está vinculada, mostrar badge con info */}
+            {parentTaskId ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-500 text-slate-950 shrink-0">
+                    {tipoVinculo === 'continuacion'
+                      ? 'Continuación de'
+                      : tipoVinculo === 'subtarea'
+                      ? 'Subtarea de'
+                      : tipoVinculo === 'bloqueado_por'
+                      ? 'Bloqueado por'
+                      : 'Relacionada con'}
+                  </span>
+                  <span className="text-xs font-medium text-slate-800 dark:text-cyan-200 truncate">
+                    Ref #{parentTaskId}: {parentTaskDesc || 'Actividad previa vinculada'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <select
+                    value={tipoVinculo}
+                    onChange={(e) => setTipoVinculo(e.target.value)}
+                    className="text-[11px] font-semibold bg-white dark:bg-[#13141F] text-slate-800 dark:text-slate-200 rounded-lg px-2 py-1 border border-cyan-500/40 focus:outline-none cursor-pointer"
+                  >
+                    <option value="continuacion">Continuación de</option>
+                    <option value="subtarea">Subtarea de</option>
+                    <option value="bloqueado_por">Bloqueado por</option>
+                    <option value="relacionada">Relacionada con</option>
+                  </select>
+                </div>
+              </div>
+            ) : showLinkSelector && (
+              <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-white/5">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={tipoVinculo}
+                    onChange={(e) => setTipoVinculo(e.target.value)}
+                    className="text-xs font-medium bg-white dark:bg-[#181926] text-slate-800 dark:text-slate-200 rounded-xl px-2.5 py-1.5 border border-slate-200 dark:border-white/10 focus:border-[#00F0FF] focus:outline-none"
+                  >
+                    <option value="continuacion">Continuación de</option>
+                    <option value="subtarea">Subtarea de</option>
+                    <option value="bloqueado_por">Bloqueado por</option>
+                    <option value="relacionada">Relacionada con</option>
+                  </select>
+
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Buscar actividad previa por texto o cliente..."
+                      value={refSearch}
+                      onChange={(e) => {
+                        setRefSearch(e.target.value);
+                        loadReferencias(e.target.value);
+                      }}
+                      className="w-full bg-white dark:bg-[#181926] text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-xl pl-8 pr-3 py-1.5 border border-slate-200 dark:border-white/10 focus:border-[#00F0FF] focus:outline-none"
+                    />
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Lista de sugerencias de actividades */}
+                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                  {loadingRefs ? (
+                    <div className="text-center py-3 text-xs text-slate-400">Cargando actividades recientes...</div>
+                  ) : referencias.length === 0 ? (
+                    <div className="text-center py-3 text-xs text-slate-400">No se encontraron actividades para vincular</div>
+                  ) : (
+                    referencias.map((ref) => {
+                      const cleanDesc = ref.descripcion.replace(/<[^>]*>/g, '').trim();
+                      return (
+                        <button
+                          key={ref.id}
+                          type="button"
+                          onClick={() => {
+                            setParentTaskId(ref.id);
+                            setParentTaskDesc(cleanDesc);
+                            setShowLinkSelector(false);
+                          }}
+                          className="w-full text-left p-2 rounded-xl bg-white dark:bg-[#181926] hover:bg-cyan-50 dark:hover:bg-cyan-950/30 border border-slate-200/60 dark:border-white/5 hover:border-[#00F0FF]/40 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+                              <span className="text-cyan-600 dark:text-[#00F0FF]">#{ref.id}</span>
+                              <span className="text-slate-400">({ref.bitacora_fecha || 'Reciente'})</span>
+                              {ref.para_cliente && (
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                                  {ref.para_cliente}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                              {cleanDesc || 'Sin descripción'}
+                            </p>
+                          </div>
+                          <span className="text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF] shrink-0">
+                            Vincular →
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Row 5: Evidencias Adjuntas */}
           <div>
