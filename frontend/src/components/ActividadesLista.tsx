@@ -611,7 +611,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => handleOpenDetailModal(act, index)}
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors"
+                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                         title="Ver detalle"
                       >
                         <Eye className="w-4 h-4" />
@@ -619,7 +619,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(act, index)}
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors"
+                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                         title="Editar"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -627,7 +627,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => onRemoveActividad(index)}
-                        className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors"
+                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors cursor-pointer"
                         title="Eliminar"
                       >
                         <Trash2 className="w-4 h-4" />

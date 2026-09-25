@@ -452,42 +452,42 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
             {/* Toggle de Vistas del Equipo: Feed en Vivo / Semáforo / Kanban */}
             {selectedMemberId === 'all' ? (
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
+              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636] max-w-full overflow-x-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setTeamTab('feed')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'feed'
                       ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
                   }`}
                 >
-                  <Radio className="w-3.5 h-3.5 text-current animate-pulse" />
-                  <span>Feed en Vivo ({liveActivities.length})</span>
+                  <Radio className="w-3.5 h-3.5 text-current animate-pulse shrink-0" />
+                  <span>Feed <span className="hidden sm:inline">en Vivo</span> ({liveActivities.length})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTeamTab('semaforo')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'semaforo'
                       ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
                   }`}
                 >
-                  <TrendingUp className="w-3.5 h-3.5" />
+                  <TrendingUp className="w-3.5 h-3.5 shrink-0" />
                   <span>Semáforo</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTeamTab('kanban')}
-                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'kanban'
                       ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
                   }`}
                 >
-                  <KanbanIcon className="w-3.5 h-3.5" />
-                  <span>Tablero ({unifiedActivities.length})</span>
+                  <KanbanIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>Tablero <span className="hidden sm:inline">({unifiedActivities.length})</span></span>
                 </button>
               </div>
             ) : (

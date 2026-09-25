@@ -112,6 +112,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<Actividad>>({});
 
+  // Mobile active column selector ('todas' or specific status)
+  const [mobileColumnFilter, setMobileColumnFilter] = useState<EstadoActividad | 'todas'>('todas');
+
   const columnOrder: EstadoActividad[] = ['pendiente', 'en_proceso', 'en_revision', 'completada'];
 
   const moveActivity = (index: number, direction: 'prev' | 'next') => {
@@ -236,6 +239,41 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         </div>
       </div>
 
+      {/* Mobile-Only Status Pill Tabs (< 768px) to Prevent Massive Vertical Scroll */}
+      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 select-none">
+        <button
+          type="button"
+          onClick={() => setMobileColumnFilter('todas')}
+          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer min-h-[34px] ${
+            mobileColumnFilter === 'todas'
+              ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+              : 'bg-white dark:bg-[#13141F] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]'
+          }`}
+        >
+          Todas ({actividades.length})
+        </button>
+        {COLUMNS.map((c) => {
+          const count = actividades.filter((a) => (a.estado || 'pendiente') === c.id).length;
+          return (
+            <button
+              key={`m-col-${c.id}`}
+              type="button"
+              onClick={() => setMobileColumnFilter(c.id)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 min-h-[34px] ${
+                mobileColumnFilter === c.id
+                  ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                  : 'bg-white dark:bg-[#13141F] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]'
+              }`}
+            >
+              <span>{c.title}</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-slate-200">
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Kanban Columns Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {COLUMNS.map((col) => {
@@ -247,12 +285,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             0
           );
 
+          // Check if hidden on mobile
+          const isHiddenOnMobile = mobileColumnFilter !== 'todas' && mobileColumnFilter !== col.id;
+
           return (
             <div
               key={col.id}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`bg-slate-50/70 dark:bg-[#13141F] border border-slate-200/90 dark:border-[#252636] rounded-2xl p-3.5 flex flex-col min-h-[500px] transition-all border-t-4 ${col.borderColor}`}
+              className={`bg-slate-50/70 dark:bg-[#13141F] border border-slate-200/90 dark:border-[#252636] rounded-2xl p-3.5 flex-col min-h-[500px] transition-all border-t-4 ${col.borderColor} ${
+                isHiddenOnMobile ? 'hidden md:flex' : 'flex'
+              }`}
             >
               {/* Column Header */}
               <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200 dark:border-[#252636]/60">
@@ -538,7 +581,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       {/* MODAL EDICIÓN DE ACTIVIDAD DIRECTA DESDE KANBAN */}
       {editingIndex !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636]">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-[#00F0FF]" />

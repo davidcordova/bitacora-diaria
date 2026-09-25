@@ -23,8 +23,8 @@ export const DatosJornada: React.FC<DatosJornadaProps> = ({
   return (
     <div className="saas-card p-5 sm:p-6">
       <div className="flex items-center gap-2.5 mb-4 text-slate-800 dark:text-slate-100">
-        <div className="p-2 rounded-xl bg-mint-50 dark:bg-teal-950/50 text-[#00A88B] dark:text-[#00C9A7]">
-          <Calendar className="w-5 h-5" />
+        <div className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+          <Calendar className="w-5 h-5 text-[#00A3BF] dark:text-[#00F0FF]" />
         </div>
         <h2 className="text-base sm:text-lg font-bold">1. Datos de la jornada</h2>
       </div>
@@ -40,7 +40,7 @@ export const DatosJornada: React.FC<DatosJornadaProps> = ({
               type="date"
               value={fecha}
               onChange={(e) => onChange('fecha', e.target.value)}
-              className="w-full pl-3 pr-8 py-2.5 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 focus:bg-white dark:focus:bg-slate-900 text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#00C9A7] focus:ring-2 focus:ring-mint-100 outline-hidden transition-all"
+              className="w-full pl-3 pr-8 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-2 focus:ring-[#00F0FF]/20 outline-hidden transition-all"
               required
             />
           </div>
@@ -56,7 +56,7 @@ export const DatosJornada: React.FC<DatosJornadaProps> = ({
               type="time"
               value={horaInicio}
               onChange={(e) => onChange('hora_inicio', e.target.value)}
-              className="w-full pl-3 pr-8 py-2.5 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 focus:bg-white dark:focus:bg-slate-900 text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#00C9A7] focus:ring-2 focus:ring-mint-100 outline-hidden transition-all"
+              className="w-full pl-3 pr-8 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-2 focus:ring-[#00F0FF]/20 outline-hidden transition-all"
               placeholder="08:00"
             />
             <Clock className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
@@ -72,17 +72,17 @@ export const DatosJornada: React.FC<DatosJornadaProps> = ({
             <select
               value={colaborador}
               onChange={(e) => onChange('colaborador', e.target.value)}
-              className="w-full pl-3 pr-8 py-2.5 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 focus:bg-white dark:focus:bg-slate-900 text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#00C9A7] focus:ring-2 focus:ring-mint-100 outline-hidden transition-all appearance-none"
+              className="w-full pl-3 pr-8 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-2 focus:ring-[#00F0FF]/20 outline-hidden transition-all appearance-none cursor-pointer"
               required
             >
               {users.map((u) => (
-                <option key={u.id} value={u.full_name}>
+                <option key={u.id} value={u.full_name} className="bg-white dark:bg-[#161722]">
                   {u.full_name}
                 </option>
               ))}
               {/* Opción personalizada si el valor no está en la lista */}
               {!users.some((u) => u.full_name === colaborador) && (
-                <option value={colaborador}>{colaborador}</option>
+                <option value={colaborador} className="bg-white dark:bg-[#161722]">{colaborador}</option>
               )}
             </select>
             <User className="w-4 h-4 text-slate-400 absolute right-3 top-3 pointer-events-none" />
@@ -98,11 +98,11 @@ export const DatosJornada: React.FC<DatosJornadaProps> = ({
             <select
               value={area}
               onChange={(e) => onChange('area', e.target.value)}
-              className="w-full pl-3 pr-8 py-2.5 bg-slate-50/50 dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 focus:bg-white dark:focus:bg-slate-900 text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-slate-700 focus:border-[#00C9A7] focus:ring-2 focus:ring-mint-100 outline-hidden transition-all appearance-none"
+              className="w-full pl-3 pr-8 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-2 focus:ring-[#00F0FF]/20 outline-hidden transition-all appearance-none cursor-pointer"
               required
             >
               {AREAS.map((a) => (
-                <option key={a} value={a}>
+                <option key={a} value={a} className="bg-white dark:bg-[#161722]">
                   {a}
                 </option>
               ))}

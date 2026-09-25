@@ -165,10 +165,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden my-8">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 dark:bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 select-none">
+      <div className="relative w-full max-w-2xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[92dvh] flex flex-col overflow-hidden">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-100 dark:border-[#252636]">
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-50/80 dark:bg-[#161722]/80 border-b border-slate-100 dark:border-[#252636] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
               <Sparkles className="w-5 h-5" />
@@ -192,16 +192,17 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-          {errorMsg && (
-            <div className="flex items-center gap-2 p-3 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl">
-              <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-              <span>{errorMsg}</span>
-            </div>
-          )}
+        {/* Modal Form with Scrollable Body & Sticky Footer */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+            {errorMsg && (
+              <div className="flex items-center gap-2 p-3 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
-          {/* Row 1: Time, Duration & Status */}
+            {/* Row 1: Time, Duration & Status */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Hora Inicio */}
             <div>
@@ -420,19 +421,20 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               compact={false}
             />
           </div>
+          </div>
 
-          {/* Modal Footer */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-[#252636]">
+          {/* Sticky Modal Footer */}
+          <div className="shrink-0 px-6 py-3.5 border-t border-slate-100 dark:border-[#252636] bg-slate-50/90 dark:bg-[#161722]/90 backdrop-blur-md flex items-center justify-end gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer min-h-[40px]"
+              className="px-5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1A1C29] rounded-full transition-colors cursor-pointer min-h-[40px]"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-6 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-full shadow-sm transition-all cursor-pointer min-h-[40px]"
+              className="flex items-center gap-1.5 px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-full shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all cursor-pointer min-h-[40px]"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{editIndex !== null ? 'Actualizar Actividad' : 'Guardar Actividad'}</span>

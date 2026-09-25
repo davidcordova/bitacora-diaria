@@ -1035,6 +1035,7 @@ export function App() {
           onForceSyncCloud={handleForceSyncCloud}
           unreadNotificationsCount={notifications.filter((n) => !n.read).length}
           onOpenNotifications={() => setNotificationsModalOpen(true)}
+          onToggleMobileMenu={() => setMobileMenuOpen(true)}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">

@@ -516,20 +516,20 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                           e.stopPropagation();
                           setSelectedBitacoraForModal(item);
                         }}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#00A88B] dark:hover:text-[#00C9A7] bg-slate-100 dark:bg-slate-800 hover:bg-mint-50 dark:hover:bg-slate-700 px-3 py-1.5 rounded-full cursor-pointer"
+                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] bg-slate-100 dark:bg-[#1A1C29] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Ver Resumen</span>
                       </button>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             onLoadBitacora(item);
                           }}
-                          className="flex items-center gap-1 text-xs font-bold text-[#00A88B] dark:text-[#00C9A7] bg-mint-50 dark:bg-mint-950/40 hover:bg-mint-100 dark:hover:bg-mint-900/50 px-3 py-1.5 rounded-full cursor-pointer"
+                          className="flex items-center gap-1 text-xs font-bold text-[#0090A0] dark:text-[#00F0FF] bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                           <span>Cargar</span>
@@ -543,7 +543,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                                 onDeleteBitacora(item.id as number);
                               }
                             }}
-                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 rounded-full cursor-pointer"
+                            className="p-2 min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>

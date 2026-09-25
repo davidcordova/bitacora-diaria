@@ -465,8 +465,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* TAB 1: USUARIOS */}
       {activeTab === 'usuarios' && (
-        <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 sm:p-6 shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-6 shadow-sm overflow-hidden">
+          {/* DESKTOP TABLE VIEW (>= 768px) */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="text-slate-500 dark:text-slate-400 font-semibold border-b border-slate-200 dark:border-[#252636] pb-2">
@@ -573,6 +574,93 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* MOBILE CARDS VIEW (< 768px) */}
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-[#252636]/60">
+            {users.map((u) => (
+              <div key={`m-user-${u.id}`} className="py-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-full bg-[#00F0FF]/15 border border-[#00F0FF]/30 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-xs font-black shrink-0">
+                      {u.full_name ? u.full_name.charAt(0).toUpperCase() : 'U'}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {u.full_name}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        @{u.username}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Role Badge */}
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                      u.role === 'admin'
+                        ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60'
+                        : u.role === 'lider'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60'
+                        : 'bg-mint-50 dark:bg-mint-950/40 text-[#00A88B] dark:text-[#00C9A7] border border-emerald-200 dark:border-emerald-800/60'
+                    }`}
+                  >
+                    {u.role === 'admin' ? 'Admin' : u.role === 'lider' ? 'Líder' : 'Operador'}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] bg-slate-100 dark:bg-[#1A1C29] px-2 py-0.5 rounded-md font-semibold text-slate-700 dark:text-slate-300">
+                      {u.team_name || 'Sin equipo'}
+                    </span>
+                    {u.phone && (
+                      <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono">
+                        {u.phone}
+                      </span>
+                    )}
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                        u.is_active ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-[#161722] text-slate-400'
+                      }`}
+                    >
+                      {u.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditUser(u)}
+                      className="p-2 text-slate-400 hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full cursor-pointer transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
+                      title="Editar usuario"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {u.username !== 'admin' && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleActiveUser(u)}
+                          className="p-2 text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full cursor-pointer transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
+                          title={Boolean(u.is_active) ? 'Suspender acceso' : 'Reactivar acceso'}
+                        >
+                          {Boolean(u.is_active) ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDeleteModal(u)}
+                          className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full cursor-pointer transition-colors min-w-[36px] min-h-[36px] flex items-center justify-center"
+                          title="Eliminar usuario"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
           {users.length === 0 && (
             <EmptyState
@@ -1282,7 +1370,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* MODAL USUARIO */}
       {showUserModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636]">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                 {editingUserId ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -1430,7 +1518,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* MODAL EQUIPO */}
       {showTeamModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636]">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                 {editingTeamId ? 'Editar Equipo' : 'Nuevo Equipo'}
@@ -1514,7 +1602,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR DATOS DE PRUEBA */}
       {showCleanConfirmModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
@@ -1570,7 +1658,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR O DESACTIVAR USUARIO */}
       {showDeleteUserModal && userToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in select-none">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
