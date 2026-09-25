@@ -14,7 +14,7 @@ import { UserManagementView } from './components/UserManagementView';
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
-import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { UserProfileModal } from './components/UserProfileModal';
 import { BottomNav } from './components/BottomNav';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { PapeleraModal } from './components/PapeleraModal';
@@ -149,7 +149,7 @@ export function App() {
   const [helpModalOpen, setHelpModalOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
-  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
   const [papeleraModalOpen, setPapeleraModalOpen] = useState(false);
   const [papeleraCount, setPapeleraCount] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -771,6 +771,35 @@ export function App() {
     }
   };
 
+  const handleUserUpdated = (updatedUser: User) => {
+    setCurrentUser(updatedUser);
+    localStorage.setItem('bitacora_user', JSON.stringify(updatedUser));
+    if (bitacora.user_id === updatedUser.id) {
+      setBitacora((prev) => ({ ...prev, colaborador: updatedUser.full_name }));
+    }
+    showToast('success', 'Perfil y datos actualizados correctamente', 'Perfil Guardado');
+  };
+
+  const handleActivityRestoredFromPapelera = (restoredAct: any, bitacoraFecha?: string) => {
+    refreshPapeleraCount();
+    if (!bitacoraFecha || bitacoraFecha === bitacora.fecha) {
+      setBitacora((prev) => {
+        const exists = prev.actividades.some((a) => a.id === restoredAct.id);
+        const nextActs = exists
+          ? prev.actividades.map((a) => (a.id === restoredAct.id ? { ...restoredAct, is_deleted: 0 } : a))
+          : [...prev.actividades, { ...restoredAct, is_deleted: 0 }];
+        return {
+          ...prev,
+          actividades: nextActs,
+        };
+      });
+      showToast('success', 'Actividad recuperada y añadida a tus actividades activas', 'Recuperada');
+    } else {
+      showToast('info', `Actividad recuperada en la bitácora del ${bitacoraFecha}`, 'Restaurada');
+      reloadActiveBitacora();
+    }
+  };
+
   const handleAddActividad = (actData?: Actividad) => {
     const newAct: Actividad = {
       ...(actData || {}),
@@ -1017,7 +1046,7 @@ export function App() {
         systemSettings={systemSettings || undefined}
         isDark={isDark}
         onToggleTheme={toggleTheme}
-        onOpenChangePassword={() => setChangePasswordModalOpen(true)}
+        onOpenProfile={() => setUserProfileModalOpen(true)}
         onOpenPapelera={() => setPapeleraModalOpen(true)}
         papeleraCount={papeleraCount}
       />
@@ -1028,9 +1057,7 @@ export function App() {
         <TopHeader
           currentUser={currentUser}
           onOpenHelp={() => setHelpModalOpen(true)}
-          onOpenChangePassword={() => setChangePasswordModalOpen(true)}
-          onOpenPapelera={() => setPapeleraModalOpen(true)}
-          papeleraCount={papeleraCount}
+          onOpenProfile={() => setUserProfileModalOpen(true)}
           autoSaveStatus={autoSaveStatus}
           onForceSyncCloud={handleForceSyncCloud}
           unreadNotificationsCount={notifications.filter((n) => !n.read).length}
@@ -1167,20 +1194,23 @@ export function App() {
         teams={teams}
       />
 
-      {/* Change Password Modal */}
-      <ChangePasswordModal
-        isOpen={changePasswordModalOpen}
-        onClose={() => setChangePasswordModalOpen(false)}
+      {/* Consolidated User Profile & Account Settings Modal */}
+      <UserProfileModal
+        isOpen={userProfileModalOpen}
+        onClose={() => setUserProfileModalOpen(false)}
         currentUser={currentUser}
-        onSuccess={() => showToast('success', 'Contraseña actualizada exitosamente')}
+        teams={teams}
+        onUserUpdated={handleUserUpdated}
       />
 
-      {/* Papelera Modal */}
+      {/* Papelera Modal with Smart Restoring */}
       <PapeleraModal
         isOpen={papeleraModalOpen}
         onClose={() => setPapeleraModalOpen(false)}
         currentUser={currentUser}
-        onActivityRestored={reloadActiveBitacora}
+        onActivityRestored={handleActivityRestoredFromPapelera}
+        currentBitacoraFecha={bitacora.fecha}
+        currentBitacoraId={typeof bitacora.id === 'number' ? bitacora.id : undefined}
       />
 
       {/* Notifications Drawer / Modal */}

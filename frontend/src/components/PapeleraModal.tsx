@@ -22,7 +22,9 @@ interface PapeleraModalProps {
   currentUser: User | null;
   isOpen: boolean;
   onClose: () => void;
-  onActivityRestored?: () => void;
+  onActivityRestored?: (actividad: any, bitacoraFecha?: string) => void;
+  currentBitacoraFecha?: string;
+  currentBitacoraId?: number;
 }
 
 export const PapeleraModal: React.FC<PapeleraModalProps> = ({
@@ -30,6 +32,8 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
   isOpen,
   onClose,
   onActivityRestored,
+  currentBitacoraFecha,
+  currentBitacoraId,
 }) => {
   const [items, setItems] = useState<ActividadPapelera[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,18 +70,38 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
     };
   }, [isOpen]);
 
-  const handleRestaurar = async (act: ActividadPapelera) => {
+  const handleRestaurar = async (act: ActividadPapelera, restoreToToday = false) => {
     if (!act.id) return;
     setActionLoadingId(act.id);
     try {
-      await api.restaurarActividad(act.id);
+      const targetPayload = restoreToToday && currentBitacoraFecha
+        ? {
+            target_fecha: currentBitacoraFecha,
+            target_bitacora_id: currentBitacoraId,
+            target_user_id: currentUser?.id,
+          }
+        : undefined;
+
+      const res = await api.restaurarActividad(act.id, targetPayload);
       setItems((prev) => prev.filter((item) => item.id !== act.id));
+
+      const restoredAct = res.actividad || {
+        ...act,
+        is_deleted: 0,
+        deleted_at: undefined,
+      };
+
+      const restoredFecha = res.bitacora_fecha || (restoreToToday ? currentBitacoraFecha : act.bitacora_fecha);
+
       setFeedbackMsg({
-        text: `"${stripHtml(act.descripcion).slice(0, 35)}..." restaurada con éxito.`,
+        text: `"${stripHtml(act.descripcion).slice(0, 30)}..." restaurada con éxito${
+          restoreToToday ? ' en tus actividades de hoy' : (restoredFecha ? ` en fecha ${restoredFecha}` : '')
+        }.`,
         type: 'success',
       });
+
       if (onActivityRestored) {
-        onActivityRestored();
+        onActivityRestored(restoredAct, restoredFecha);
       }
     } catch (err: any) {
       setFeedbackMsg({
@@ -371,19 +395,43 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-[#252636]">
-                    <button
-                      onClick={() => handleRestaurar(act)}
-                      disabled={actionLoadingId === act.id}
-                      className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer min-h-[38px]"
-                      title="Restaurar actividad a su bitácora original"
-                    >
-                      <RotateCcw className={`w-3.5 h-3.5 ${actionLoadingId === act.id ? 'animate-spin' : ''}`} />
-                      <span>Restaurar</span>
-                    </button>
+                    {currentBitacoraFecha && act.bitacora_fecha && act.bitacora_fecha !== currentBitacoraFecha ? (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          onClick={() => handleRestaurar(act, true)}
+                          disabled={actionLoadingId === act.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/40 transition-colors cursor-pointer min-h-[36px]"
+                          title="Restaurar y traer esta actividad a mis actividades de hoy"
+                        >
+                          <RotateCcw className={`w-3.5 h-3.5 ${actionLoadingId === act.id ? 'animate-spin' : ''}`} />
+                          <span>A mi día de hoy</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleRestaurar(act, false)}
+                          disabled={actionLoadingId === act.id}
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] transition-colors cursor-pointer min-h-[36px]"
+                          title={`Restaurar en la bitácora original del ${act.bitacora_fecha}`}
+                        >
+                          <span>En su fecha ({act.bitacora_fecha.slice(5)})</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleRestaurar(act, true)}
+                        disabled={actionLoadingId === act.id}
+                        className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800/60 transition-colors shadow-2xs disabled:opacity-50 cursor-pointer min-h-[38px]"
+                        title="Restaurar actividad a tus actividades activas"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 ${actionLoadingId === act.id ? 'animate-spin' : ''}`} />
+                        <span>Restaurar</span>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleEliminarDefinitivo(act)}
                       disabled={actionLoadingId === act.id}
-                      className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors disabled:opacity-50 cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
+                      className="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors disabled:opacity-50 cursor-pointer min-w-[38px] min-h-[38px] flex items-center justify-center"
                       title="Eliminar definitivamente"
                     >
                       <Trash2 className="w-4 h-4" />

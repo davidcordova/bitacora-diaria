@@ -38,7 +38,7 @@ interface SidebarProps {
   systemSettings?: SystemSettings;
   isDark?: boolean;
   onToggleTheme?: () => void;
-  onOpenChangePassword?: () => void;
+  onOpenProfile?: () => void;
   onOpenPapelera?: () => void;
   papeleraCount?: number;
 }
@@ -59,7 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   systemSettings,
   isDark = false,
   onToggleTheme,
-  onOpenChangePassword,
+  onOpenProfile,
   onOpenPapelera,
   papeleraCount = 0,
 }) => {
@@ -367,15 +367,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             {/* Avatar Circle */}
             <div
-              className="w-9 h-9 rounded-2xl bg-[#00F0FF] text-slate-950 flex items-center justify-center text-xs font-black shrink-0 shadow-xs"
-              title={currentUser.full_name}
+              onClick={onOpenProfile}
+              className="w-9 h-9 rounded-2xl bg-[#00F0FF] text-slate-950 flex items-center justify-center text-xs font-black shrink-0 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+              title={`Ver y editar perfil de ${currentUser.full_name}`}
             >
               {currentUser.full_name.charAt(0).toUpperCase()}
             </div>
 
             {(!isCollapsed || isOpenMobile) && (
-              <div className="flex-1 min-w-0">
-                <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight block truncate">
+              <div 
+                onClick={onOpenProfile}
+                className="flex-1 min-w-0 cursor-pointer group"
+                title="Clic para ver y editar mi perfil"
+              >
+                <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight block truncate group-hover:text-[#00F0FF] transition-colors">
                   {currentUser.full_name}
                 </span>
                 <div className="flex items-center gap-1.5 mt-0.5">
@@ -394,14 +399,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* User action buttons */}
             <div className="flex items-center gap-0.5 shrink-0">
-              {onOpenChangePassword && (
+              {onOpenProfile && (
                 <button
                   type="button"
-                  onClick={onOpenChangePassword}
-                  title="Cambiar mi contraseña"
+                  onClick={onOpenProfile}
+                  title="Ver y editar mi perfil"
                   className="p-1.5 text-slate-400 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
                 >
-                  <KeyRound className="w-3.5 h-3.5" />
+                  <UserIcon className="w-3.5 h-3.5" />
                 </button>
               )}
               <button

@@ -574,6 +574,87 @@ def change_password():
         "message": "Contraseña actualizada exitosamente"
     }), 200
 
+@app.route('/api/auth/profile', methods=['PUT', 'OPTIONS'])
+def update_profile():
+    """Permite al propio usuario actualizar su nombre, correo, teléfono y opcionalmente su contraseña sin poder modificar roles ni equipos."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+        
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({"error": "Identificador de usuario requerido"}), 400
+        
+    full_name = (data.get('full_name') or '').strip()
+    email = (data.get('email') or '').strip()
+    phone = (data.get('phone') or '').strip()
+    current_password = data.get('current_password') or ''
+    new_password = (data.get('new_password') or '').strip()
+    
+    if not full_name:
+        return jsonify({"error": "El nombre completo es obligatorio"}), 400
+        
+    conn = get_db()
+    cursor = conn.cursor()
+    u = cursor.execute("SELECT id, username, password_hash, role, team_id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not u:
+        conn.close()
+        return jsonify({"error": "Usuario no encontrado"}), 404
+        
+    # Si desea cambiar contraseña
+    if new_password:
+        if len(new_password) < 4:
+            conn.close()
+            return jsonify({"error": "La nueva contraseña debe tener al menos 4 caracteres"}), 400
+        if not current_password:
+            conn.close()
+            return jsonify({"error": "Debes ingresar tu contraseña actual para establecer una nueva"}), 400
+            
+        stored_hash = u['password_hash']
+        password_matches = False
+        try:
+            password_matches = check_password_hash(stored_hash, current_password)
+        except Exception:
+            password_matches = (stored_hash == current_password)
+        if not password_matches and stored_hash == current_password:
+            password_matches = True
+            
+        if not password_matches:
+            conn.close()
+            return jsonify({"error": "La contraseña actual es incorrecta"}), 400
+            
+        new_hash = generate_password_hash(new_password)
+        cursor.execute("""
+            UPDATE users 
+            SET full_name = ?, email = ?, phone = ?, password_hash = ?
+            WHERE id = ?
+        """, (full_name, email, phone, new_hash, user_id))
+    else:
+        cursor.execute("""
+            UPDATE users 
+            SET full_name = ?, email = ?, phone = ?
+            WHERE id = ?
+        """, (full_name, email, phone, user_id))
+        
+    conn.commit()
+    
+    updated_u = cursor.execute("""
+        SELECT u.id, u.username, u.email, u.full_name, u.role, u.phone, u.team_id, u.is_active,
+               t.nombre as team_name,
+               CASE WHEN t.lider_id = u.id THEN 1 ELSE 0 END as is_team_leader
+        FROM users u
+        LEFT JOIN teams t ON u.team_id = t.id
+        WHERE u.id = ?
+    """, (user_id,)).fetchone()
+    
+    conn.close()
+    
+    return jsonify({
+        "success": True,
+        "message": "Perfil actualizado correctamente",
+        "user": dict(updated_u)
+    }), 200
+
 # ==================== USERS CRUD ====================
 
 @app.route('/api/users', methods=['GET'])
@@ -1588,6 +1669,11 @@ def restaurar_actividad(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
         
+    data = request.get_json(silent=True) or {}
+    target_bitacora_id = data.get('target_bitacora_id')
+    target_fecha = data.get('target_fecha')
+    target_user_id = data.get('target_user_id')
+        
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
@@ -1597,30 +1683,65 @@ def restaurar_actividad(act_id):
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
         
+    old_bitacora_id = act['bitacora_id']
+    new_bitacora_id = old_bitacora_id
+
+    # Si se especificó una bitácora destino puntual
+    if target_bitacora_id and target_bitacora_id != old_bitacora_id:
+        target_b = cursor.execute("SELECT id FROM bitacoras WHERE id = ?", (target_bitacora_id,)).fetchone()
+        if target_b:
+            new_bitacora_id = target_bitacora_id
+    # O si se especificó una fecha destino (ej. hoy) para un usuario
+    elif target_fecha and target_user_id:
+        existing_b = cursor.execute("SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ?", (target_user_id, target_fecha)).fetchone()
+        if existing_b:
+            new_bitacora_id = existing_b['id']
+
     # Restaurar actividad
     cursor.execute('''
         UPDATE actividades 
-        SET is_deleted = 0, deleted_at = NULL, updated_at = ? 
+        SET is_deleted = 0, deleted_at = NULL, bitacora_id = ?, updated_at = ? 
         WHERE id = ?
-    ''', (now_peru, act_id))
+    ''', (new_bitacora_id, now_peru, act_id))
     
-    # Recalcular tiempo total de la bitácora
+    # Recalcular tiempo total de la bitácora antigua
     cursor.execute('''
         UPDATE bitacoras SET tiempo_total_min = (
             SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
             WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
         ), updated_at = ? WHERE id = ?
-    ''', (act['bitacora_id'], now_peru, act['bitacora_id']))
+    ''', (old_bitacora_id, now_peru, old_bitacora_id))
 
+    # Si cambió de bitácora, recalcular también la nueva
+    if new_bitacora_id != old_bitacora_id:
+        cursor.execute('''
+            UPDATE bitacoras SET tiempo_total_min = (
+                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
+                WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+            ), updated_at = ? WHERE id = ?
+        ''', (new_bitacora_id, now_peru, new_bitacora_id))
     
     conn.commit()
+
+    restored_row = cursor.execute('''
+        SELECT a.*, b.fecha as bitacora_fecha, b.colaborador as bitacora_colaborador
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.id = ?
+    ''', (act_id,)).fetchone()
+    
+    users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
+    formatted_act = format_actividad_dict(restored_row, users_map) if restored_row else dict(act)
+
     conn.close()
     
     return jsonify({
         "success": True, 
         "message": "Actividad restaurada exitosamente", 
         "id": act_id,
-        "bitacora_id": act['bitacora_id']
+        "actividad": formatted_act,
+        "bitacora_id": new_bitacora_id,
+        "bitacora_fecha": restored_row['bitacora_fecha'] if restored_row else None
     })
 
 @app.route('/api/papelera/eliminar/<int:act_id>', methods=['DELETE', 'OPTIONS'])

@@ -133,6 +133,26 @@ export const api = {
     return await res.json();
   },
 
+  async updateProfile(data: {
+    user_id: number;
+    full_name: string;
+    email?: string;
+    phone?: string;
+    current_password?: string;
+    new_password?: string;
+  }): Promise<{ success: boolean; message: string; user: User }> {
+    const res = await fetch(`${API_BASE}/auth/profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar perfil' }));
+      throw new Error(err.error || 'Error al actualizar perfil');
+    }
+    return await res.json();
+  },
+
   // ================= TEAMS =================
   async getTeams(): Promise<Team[]> {
     const res = await fetch(`${API_BASE}/admin/teams`);
@@ -384,10 +404,14 @@ export const api = {
     return await res.json();
   },
 
-  async restaurarActividad(actId: number | string): Promise<{ success: boolean; message: string; bitacora_id: number }> {
+  async restaurarActividad(
+    actId: number | string,
+    targetData?: { target_bitacora_id?: number; target_fecha?: string; target_user_id?: number }
+  ): Promise<{ success: boolean; message: string; actividad: Actividad; bitacora_id: number; bitacora_fecha?: string }> {
     const res = await fetch(`${API_BASE}/papelera/restaurar/${actId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(targetData || {}),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Error al restaurar actividad' }));

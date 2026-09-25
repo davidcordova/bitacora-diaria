@@ -6,9 +6,7 @@ interface TopHeaderProps {
   currentUser: User | null;
   onOpenHelp?: () => void;
   onSearch?: (query: string) => void;
-  onOpenChangePassword?: () => void;
-  onOpenPapelera?: () => void;
-  papeleraCount?: number;
+  onOpenProfile?: () => void;
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onForceSyncCloud?: () => void;
   onOpenNotifications?: () => void;
@@ -20,9 +18,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   currentUser,
   onOpenHelp,
   onSearch,
-  onOpenChangePassword,
-  onOpenPapelera,
-  papeleraCount = 0,
+  onOpenProfile,
   autoSaveStatus = 'idle',
   onForceSyncCloud,
   onOpenNotifications,
@@ -119,59 +115,39 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           )}
         </button>
 
-        {/* Papelera de Reciclaje */}
-        {onOpenPapelera && (
-          <button
-            type="button"
-            onClick={onOpenPapelera}
-            title="Papelera de reciclaje (15 días de retención)"
-            className="relative min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-full transition-colors cursor-pointer flex items-center justify-center"
-          >
-            <Trash2 className="w-4 h-4" />
-            {papeleraCount > 0 && (
-              <span className="absolute top-1 right-1 px-1.5 py-0.2 min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-xs">
-                {papeleraCount}
-              </span>
-            )}
-          </button>
-        )}
-
-        {/* Cambiar contraseña (Desktop / Tablet) */}
-        {onOpenChangePassword && (
-          <button
-            type="button"
-            onClick={onOpenChangePassword}
-            title="Cambiar mi contraseña"
-            className="hidden sm:flex min-w-[40px] min-h-[40px] p-2 text-slate-500 hover:text-[#00F0FF] dark:text-slate-400 dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer items-center justify-center"
-          >
-            <KeyRound className="w-4 h-4" />
-          </button>
-        )}
-
         {/* Help Circle (Desktop / Tablet) */}
         {onOpenHelp && (
           <button
             type="button"
             onClick={onOpenHelp}
             title="Guía rápida y ayuda"
-            className="hidden sm:flex min-w-[40px] min-h-[40px] p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer items-center justify-center"
+            className="hidden sm:flex min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer items-center justify-center"
           >
             <HelpCircle className="w-4 h-4" />
           </button>
         )}
 
-        {/* User Avatar Circle */}
-        <div 
-          onClick={onOpenChangePassword}
-          title={currentUser ? `${currentUser.full_name} (@${currentUser.username}) - Clic para cambiar clave` : undefined}
-          className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#00F0FF]/15 border border-[#00F0FF]/40 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-xs font-extrabold cursor-pointer shrink-0 hover:scale-105 active:scale-95 transition-transform"
-        >
-          {currentUser?.full_name ? (
-            currentUser.full_name.charAt(0).toUpperCase()
-          ) : (
-            <UserIcon className="w-4 h-4" />
-          )}
-        </div>
+        {/* User Profile Pill Button (Consolidated "Mi Perfil") */}
+        {currentUser && (
+          <button
+            type="button"
+            onClick={onOpenProfile}
+            title={`Conectado como ${currentUser.full_name} (@${currentUser.username}) - Clic para ver y editar mi perfil`}
+            className="flex items-center gap-2 pl-1.5 sm:pl-2 pr-2.5 sm:pr-3 py-1 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200/80 dark:border-[#252636] hover:border-[#00F0FF]/40 rounded-full transition-all cursor-pointer group text-left min-h-[38px] sm:min-h-[40px]"
+          >
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform shrink-0 font-heading">
+              {currentUser.full_name ? currentUser.full_name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
+            </div>
+            <div className="hidden md:block max-w-[140px]">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-[#00A3BF] dark:group-hover:text-[#00F0FF] transition-colors truncate">
+                {currentUser.full_name || 'Mi Perfil'}
+              </div>
+              <div className="text-[10px] text-slate-400 capitalize truncate">
+                {currentUser.role || 'analista'}
+              </div>
+            </div>
+          </button>
+        )}
       </div>
     </header>
   );
