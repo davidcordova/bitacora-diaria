@@ -47,11 +47,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       >
         <div className="relative">
           <Kanban className="w-5 h-5" />
-          {activitiesCount > 0 && (
-            <span className="absolute -top-1 -right-2 bg-[#00F0FF] text-slate-950 text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
-              {activitiesCount}
-            </span>
-          )}
         </div>
         <span className="text-[10px] mt-0.5">Tareas</span>
       </button>

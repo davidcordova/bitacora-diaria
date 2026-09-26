@@ -74,14 +74,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Mi Bitácora',
       icon: LayoutList,
       show: true,
-      badge: activitiesCount > 0 ? activitiesCount : null,
+      badge: null,
     },
     {
       id: 'kanban' as ViewMode,
       label: 'Actividades',
       icon: Kanban,
       show: true,
-      badge: activitiesCount > 0 ? activitiesCount : null,
+      badge: null,
     },
     {
       id: 'historial' as ViewMode,
@@ -341,28 +341,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onOpenMobileSummary();
             if (onCloseMobile) onCloseMobile();
           }}
-          title={isCollapsed && !isOpenMobile ? `Ver Resumen Diario (${activitiesCount} actividades)` : undefined}
+          title={isCollapsed && !isOpenMobile ? 'Ver Resumen Diario' : undefined}
           className={`w-full flex items-center bg-slate-900 hover:bg-slate-800 dark:bg-[#161724] dark:hover:bg-[#1E1F30] border border-slate-800 dark:border-white/10 text-white text-xs font-bold py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer min-h-[44px] ${
             isCollapsed && !isOpenMobile ? 'justify-center px-0 relative' : 'gap-2 px-3.5'
           }`}
         >
           <div className="relative flex items-center justify-center">
             <FileText className="w-4 h-4 text-[#00F0FF] shrink-0" />
-            {isCollapsed && !isOpenMobile && activitiesCount > 0 && (
-              <span className="absolute -top-2 -right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold bg-[#00F0FF] text-slate-950 flex items-center justify-center border border-slate-900 shadow-2xs">
-                {activitiesCount}
-              </span>
-            )}
           </div>
           {(!isCollapsed || isOpenMobile) && (
-            <>
-              <span className="flex-1 text-left">Resumen Diario</span>
-              {activitiesCount > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-white/15 text-white shrink-0">
-                  {activitiesCount}
-                </span>
-              )}
-            </>
+            <span className="flex-1 text-left">Resumen Diario</span>
           )}
         </button>
 
