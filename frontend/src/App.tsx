@@ -78,15 +78,26 @@ const getBitacoraSignature = (b?: Partial<Bitacora> | null, defaultColab?: strin
 };
 
 // Busca el borrador local más completo (evita que datos incompletos del servidor pisen el trabajo local)
+// Aislamiento estricto por usuario: NUNCA mezclar o retornar borradores pertenecientes a otro usuario
 const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string): Bitacora | null => {
   const candidates: Bitacora[] = [];
   
+  const isValidCandidate = (b: any): b is Bitacora => {
+    if (!b || b.fecha !== dateStr || !Array.isArray(b.actividades)) return false;
+    // Si se especificó userId, el borrador debe pertenecer a este usuario
+    if (userId) {
+      if (b.user_id && b.user_id !== userId) return false;
+      if (userName && b.colaborador && b.colaborador.toLowerCase() !== userName.toLowerCase() && b.user_id !== userId) return false;
+    }
+    return true;
+  };
+
   if (userId) {
     try {
       const str = localStorage.getItem(getDraftKey(userId, dateStr));
       if (str) {
         const parsed = JSON.parse(str);
-        if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
+        if (isValidCandidate(parsed)) {
           candidates.push(parsed);
         }
       }
@@ -94,23 +105,11 @@ const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string)
   }
 
   try {
-    const str = localStorage.getItem(getDraftKey(undefined, dateStr));
-    if (str) {
-      const parsed = JSON.parse(str);
-      if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
-        candidates.push(parsed);
-      }
-    }
-  } catch (e) {}
-
-  try {
     const str = localStorage.getItem('active_bitacora');
     if (str) {
       const parsed = JSON.parse(str);
-      if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
-        if (!userId || parsed.user_id === userId || (userName && parsed.colaborador?.toLowerCase() === userName.toLowerCase())) {
-          candidates.push(parsed);
-        }
+      if (isValidCandidate(parsed)) {
+        candidates.push(parsed);
       }
     }
   } catch (e) {}
@@ -120,8 +119,8 @@ const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string)
     if (str) {
       const list: Bitacora[] = JSON.parse(str);
       if (Array.isArray(list)) {
-        const match = list.find(b => b.fecha === dateStr && (!userId || b.user_id === userId || (userName && b.colaborador?.toLowerCase() === userName.toLowerCase())));
-        if (match && Array.isArray(match.actividades)) {
+        const match = list.find(b => isValidCandidate(b));
+        if (match) {
           candidates.push(match);
         }
       }
@@ -134,10 +133,8 @@ const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string)
       if (key && key.startsWith('bitacora_recovery_backup_')) {
         try {
           const parsed = JSON.parse(localStorage.getItem(key) || '');
-          if (parsed && parsed.fecha === dateStr && Array.isArray(parsed.actividades)) {
-            if (!userId || parsed.user_id === userId || (userName && parsed.colaborador?.toLowerCase() === userName.toLowerCase())) {
-              candidates.push(parsed);
-            }
+          if (isValidCandidate(parsed)) {
+            candidates.push(parsed);
           }
         } catch (e) {}
       }
@@ -376,9 +373,18 @@ export function App() {
   useEffect(() => {
     if (isSwitchingDateRef.current || !bitacora.fecha) return;
 
-    const uid = bitacora.user_id || currentUser?.id;
-    const colab = bitacora.colaborador || currentUser?.full_name;
-    if (!colab || !uid) {
+    // Solo auto-guardar si hay un usuario activamente logueado
+    if (!currentUser || !currentUser.id) return;
+
+    const uid = currentUser.id;
+    const colab = currentUser.full_name;
+
+    // SEGURO CRÍTICO CONTRA CONTAMINACIÓN DE SESIONES:
+    // Si la bitácora en memoria pertenece a otro usuario, jamás guardarla ni sobrescribir
+    if (bitacora.user_id && bitacora.user_id !== uid) {
+      return;
+    }
+    if (bitacora.colaborador && colab && bitacora.colaborador.toLowerCase() !== colab.toLowerCase() && bitacora.user_id !== uid) {
       return;
     }
 
@@ -441,14 +447,19 @@ export function App() {
     return () => clearTimeout(timer);
   }, [bitacora, currentUser]);
 
-  // Carga inicial de datos
-  const loadInitialData = async () => {
+  // Carga inicial de datos con aislamiento estricto de usuario
+  const loadInitialData = async (userOverride?: User | null) => {
     try {
-      const activeUser = currentUser || (localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null);
+      const activeUser = userOverride !== undefined
+        ? userOverride
+        : (currentUser || (localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null));
+
+      if (!activeUser || !activeUser.id) return;
+
       const [uList, tList, hList, sysSettings] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
-        api.getBitacoras(undefined, undefined, undefined, activeUser?.id, activeUser?.id),
+        api.getBitacoras(undefined, undefined, undefined, activeUser.id, activeUser.id),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
       ]);
       setUsers(uList);
@@ -504,7 +515,7 @@ export function App() {
             b.fecha === todayStr
         );
 
-        // Obtener el mejor borrador local para hoy
+        // Obtener el mejor borrador local para hoy del usuario activo
         const localDraft = getBestLocalDraft(activeUser.id, todayStr, activeUser.full_name);
         const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
         const serverActsCount = (todayMatch?.actividades || []).filter((a) => !a.is_deleted).length;
@@ -570,20 +581,18 @@ export function App() {
             setLastSavedTime(new Date());
           }).catch(console.warn);
         } else {
-          setBitacora((prev) => {
-            if (prev.fecha !== todayStr || !prev.colaborador) {
-              return {
-                ...defaultBitacora,
-                fecha: todayStr,
-                hora_inicio: defaultStart,
-                colaborador: activeUser.full_name,
-                user_id: activeUser.id,
-                area: activeUser.team_name || prev.area || 'Sistemas',
-                actividades: prev.fecha === todayStr ? prev.actividades : [],
-              };
-            }
-            return prev;
+          // Inicializar bitácora limpia para el usuario activo sin residuos de sesiones anteriores
+          setBitacora({
+            ...defaultBitacora,
+            fecha: todayStr,
+            hora_inicio: defaultStart,
+            colaborador: activeUser.full_name,
+            user_id: activeUser.id,
+            area: activeUser.team_name || 'Sistemas',
+            actividades: [],
           });
+          setIsGenerated(false);
+          lastSavedSignature.current = '';
         }
       }
     } catch (e) {
@@ -592,8 +601,10 @@ export function App() {
   };
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    if (currentUser?.id) {
+      loadInitialData(currentUser);
+    }
+  }, [currentUser?.id]);
 
   // Forzar sincronización completa con la nube a demanda
   const handleForceSyncCloud = async () => {
@@ -1010,7 +1021,27 @@ export function App() {
   };
 
   const handleLoginSuccess = (user: User) => {
+    // 1. Resetear firma y establecer usuario
+    lastSavedSignature.current = '';
+    
+    // 2. Inicializar de inmediato la bitácora con los datos limpios del nuevo usuario
+    const todayStr = getTodayLocalDateStr();
+    setBitacora({
+      ...defaultBitacora,
+      fecha: todayStr,
+      hora_inicio: systemSettings?.hora_inicio_default || '08:30',
+      colaborador: user.full_name,
+      user_id: user.id,
+      area: user.team_name || 'Sistemas',
+      actividades: [],
+      estado: 'borrador',
+    });
+    setHistorial([]);
+    
+    // 3. Establecer usuario y cargar datos frescos desde el servidor
     setCurrentUser(user);
+    loadInitialData(user);
+    
     if (user.role === 'admin' || user.role === 'lider' || user.is_leader) {
       setViewMode('equipo');
     } else {
@@ -1019,8 +1050,33 @@ export function App() {
   };
 
   const handleLogout = () => {
+    // 1. Limpiar usuario autenticado
     setCurrentUser(null);
     localStorage.removeItem('auth_user');
+    
+    // 2. Limpiar borradores globales para evitar sangrado o residuos hacia el siguiente usuario
+    localStorage.removeItem('active_bitacora');
+    localStorage.removeItem('bitacoras_history');
+    
+    // 3. Resetear memoria y estado completamente limpio
+    setBitacora({
+      ...defaultBitacora,
+      fecha: getTodayLocalDateStr(),
+      actividades: [],
+      id: undefined,
+      colaborador: '',
+      user_id: undefined,
+      pendientes: '',
+      necesita_apoyo: 'No',
+      apoyo_detalle: '',
+      prioridad_siguiente: '',
+      tiempo_total_min: 0,
+      estado: 'borrador',
+    });
+    setHistorial([]);
+    lastSavedSignature.current = '';
+    setAutoSaveStatus('saved');
+    setIsGenerated(false);
     setViewMode('lista');
   };
 

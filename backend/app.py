@@ -955,6 +955,106 @@ def admin_team_detail(team_id):
 
 # ==================== BITACORAS CRUD & TEAM SUPERVISION ====================
 
+def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
+    """
+    Arrastra tareas abiertas de días previos de un usuario hacia la fecha actual.
+    Idempotente: no duplica si ya fue transferida a hoy o continuada en una fecha posterior.
+    """
+    open_tasks = cursor.execute('''
+        SELECT a.*, b.fecha, b.area
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE (b.user_id = ? OR b.colaborador = ?)
+          AND b.fecha < ?
+          AND a.estado != 'completada'
+          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND NOT EXISTS (
+            SELECT 1 FROM actividades a_child
+            JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
+            WHERE a_child.parent_task_id = a.id
+              AND (a_child.is_deleted IS NULL OR a_child.is_deleted = 0)
+              AND b_child.fecha > b.fecha
+          )
+        ORDER BY a.id ASC
+    ''', (u_id, u_name, today_str)).fetchall()
+    
+    if not open_tasks:
+        return 0
+        
+    # Buscar si ya existe bitácora de hoy para este colaborador
+    today_b = cursor.execute('''
+        SELECT id FROM bitacoras
+        WHERE (user_id = ? OR colaborador = ?) AND fecha = ?
+    ''', (u_id, u_name, today_str)).fetchone()
+    
+    today_b_id = None
+    if today_b:
+        today_b_id = today_b['id']
+    else:
+        last_b = cursor.execute('''
+            SELECT area FROM bitacoras
+            WHERE (user_id = ? OR colaborador = ?)
+            ORDER BY fecha DESC, id DESC LIMIT 1
+        ''', (u_id, u_name)).fetchone()
+        area_val = last_b['area'] if last_b else 'Sistemas'
+        
+        cursor.execute('''
+            INSERT INTO bitacoras (
+                user_id, fecha, hora_inicio, colaborador, area,
+                pendientes, necesita_apoyo, prioridad_siguiente,
+                tiempo_total_min, estado, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
+        ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val, now_peru, now_peru))
+        today_b_id = cursor.lastrowid
+
+    # IDs de tareas que ya fueron arrastradas o vinculadas a hoy
+    existing_parent_ids = set(
+        r[0] for r in cursor.execute(
+            "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)",
+            (today_b_id,)
+        ).fetchall()
+    )
+    
+    current_order = cursor.execute(
+        "SELECT COALESCE(MAX(orden), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+        (today_b_id,)
+    ).fetchone()[0] + 1
+    
+    rolled_count = 0
+    for task in open_tasks:
+        if task['id'] not in existing_parent_ids:
+            orig_created = task['created_at'] or get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
+            orig_updated = task['updated_at'] or orig_created
+            ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
+            sw_val = task['shared_with'] if ('shared_with' in task.keys() and task['shared_with']) else '[]'
+            sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
+            cursor.execute('''
+                INSERT INTO actividades (
+                    bitacora_id, orden, hora_inicio, duracion_min,
+                    tipo_trabajo, descripcion, para_cliente, estado,
+                    parent_task_id, tipo_vinculo, created_at, updated_at, evidencias,
+                    shared_with, shared_uuid, is_deleted
+                ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0)
+            ''', (
+                today_b_id,
+                current_order,
+                task['tipo_trabajo'],
+                task['descripcion'],
+                task['para_cliente'],
+                task['estado'],
+                task['id'],
+                orig_created,
+                orig_updated,
+                ev_val,
+                sw_val,
+                sw_uuid
+            ))
+            existing_parent_ids.add(task['id'])
+            current_order += 1
+            rolled_count += 1
+            
+    return rolled_count
+
 @app.route('/api/bitacoras', methods=['GET'])
 def get_bitacoras():
     conn = get_db()
@@ -965,6 +1065,23 @@ def get_bitacoras():
     team_id = request.args.get('team_id')
     user_id = request.args.get('user_id')
     requesting_user_id = request.args.get('requesting_user_id')
+    
+    today_str = get_peru_today_str()
+    # Si la petición incluye la fecha de hoy o no especifica fecha, asegurar rollover catch-up para el usuario activo
+    if not fecha or fecha == today_str:
+        target_uid = user_id or requesting_user_id
+        if target_uid:
+            target_user = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
+            if target_user:
+                rolled = rollover_user_open_tasks(cursor, target_user['id'], target_user['full_name'], today_str, get_peru_now_str())
+                if rolled > 0:
+                    conn.commit()
+        elif colaborador:
+            target_user = cursor.execute("SELECT id, full_name FROM users WHERE LOWER(full_name) = LOWER(?) OR LOWER(username) = LOWER(?)", (colaborador, colaborador)).fetchone()
+            if target_user:
+                rolled = rollover_user_open_tasks(cursor, target_user['id'], target_user['full_name'], today_str, get_peru_now_str())
+                if rolled > 0:
+                    conn.commit()
     
     query = '''
         SELECT b.*, u.team_id, t.nombre as team_name
@@ -2177,101 +2294,8 @@ def execute_daily_rollover(today_str=None):
 
         # 2. Arrastre de actividades abiertas hacia el día de hoy
         active_users = cursor.execute("SELECT id, full_name FROM users WHERE is_active = 1").fetchall()
-        
         for u in active_users:
-            u_id = u['id']
-            u_name = u['full_name']
-            
-            # Buscar tareas de días previos que no se completaron, no estén eliminadas y no hayan sido transferidas
-            open_tasks = cursor.execute('''
-                SELECT a.*, b.fecha, b.area
-                FROM actividades a
-                JOIN bitacoras b ON a.bitacora_id = b.id
-                WHERE (b.user_id = ? OR b.colaborador = ?)
-                  AND b.fecha < ?
-                  AND a.estado != 'completada'
-                  AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-                  AND a.id NOT IN (
-                    SELECT parent_task_id FROM actividades 
-                    WHERE parent_task_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)
-                  )
-                ORDER BY a.id ASC
-            ''', (u_id, u_name, today_str)).fetchall()
-            
-            if not open_tasks:
-                continue
-                
-            # Buscar si ya existe bitácora de hoy para este colaborador
-            today_b = cursor.execute('''
-                SELECT id FROM bitacoras
-                WHERE (user_id = ? OR colaborador = ?) AND fecha = ?
-            ''', (u_id, u_name, today_str)).fetchone()
-            
-            today_b_id = None
-            if today_b:
-                today_b_id = today_b['id']
-            else:
-                last_b = cursor.execute('''
-                    SELECT area FROM bitacoras
-                    WHERE (user_id = ? OR colaborador = ?)
-                    ORDER BY fecha DESC, id DESC LIMIT 1
-                ''', (u_id, u_name)).fetchone()
-                area_val = last_b['area'] if last_b else 'Sistemas'
-                
-                cursor.execute('''
-                    INSERT INTO bitacoras (
-                        user_id, fecha, hora_inicio, colaborador, area,
-                        pendientes, necesita_apoyo, prioridad_siguiente,
-                        tiempo_total_min, estado, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
-                ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val, now_peru, now_peru))
-                today_b_id = cursor.lastrowid
-
-                
-            # IDs de tareas que ya fueron arrastradas a hoy
-            existing_parent_ids = [
-                r[0] for r in cursor.execute(
-                    "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)",
-                    (today_b_id,)
-                ).fetchall()
-            ]
-            
-            current_order = cursor.execute(
-                "SELECT COALESCE(MAX(orden), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
-                (today_b_id,)
-            ).fetchone()[0] + 1
-            
-            for task in open_tasks:
-                if task['id'] not in existing_parent_ids:
-                    # Preservar fecha original de creación y última actualización para trazabilidad de antigüedad
-                    orig_created = task['created_at'] or get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
-                    orig_updated = task['updated_at'] or orig_created
-                    ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
-                    sw_val = task['shared_with'] if ('shared_with' in task.keys() and task['shared_with']) else '[]'
-                    sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
-                    cursor.execute('''
-                        INSERT INTO actividades (
-                            bitacora_id, orden, hora_inicio, duracion_min,
-                            tipo_trabajo, descripcion, para_cliente, estado,
-                            parent_task_id, created_at, updated_at, evidencias,
-                            shared_with, shared_uuid, is_deleted
-                        ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
-                    ''', (
-                        today_b_id,
-                        current_order,
-                        task['tipo_trabajo'],
-                        task['descripcion'],
-                        task['para_cliente'],
-                        task['estado'],
-                        task['id'],
-                        orig_created,
-                        orig_updated,
-                        ev_val,
-                        sw_val,
-                        sw_uuid
-                    ))
-                    current_order += 1
-                    rolled_count += 1
+            rolled_count += rollover_user_open_tasks(cursor, u['id'], u['full_name'], today_str, now_peru)
                     
         conn.commit()
     except Exception as e:
@@ -2328,6 +2352,13 @@ def importar_actividades_pendientes():
           AND b.fecha < ?
           AND a.estado != 'completada'
           AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND NOT EXISTS (
+            SELECT 1 FROM actividades a_child
+            JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
+            WHERE a_child.parent_task_id = a.id
+              AND (a_child.is_deleted IS NULL OR a_child.is_deleted = 0)
+              AND b_child.fecha > b.fecha
+          )
         ORDER BY a.id ASC
     '''
     tasks = cursor.execute(query, (user_id, colaborador, target_fecha)).fetchall()
