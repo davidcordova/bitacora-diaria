@@ -1281,6 +1281,8 @@ def save_bitacora():
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
 
+            target_act_id = matched_target_ids.get(idx)
+
             if target_act_id:
                 cursor.execute('''
                     UPDATE actividades SET
