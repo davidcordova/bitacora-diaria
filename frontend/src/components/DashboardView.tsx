@@ -19,6 +19,7 @@ import {
   Calendar,
   ShieldCheck,
   Building,
+  UserCheck,
 } from 'lucide-react';
 import { DashboardStats, Team, User } from '../types';
 import { formatDuration, formatHoursClean, formatDateDisplay } from '../utils/formatters';
@@ -37,6 +38,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   const isLiderOrAdmin = isAdmin || isLider;
   const isOperador = !isLiderOrAdmin;
 
+  // Ámbito de visualización: para operadores siempre es 'personal'; para admin/líder pueden alternar
+  const [viewScope, setViewScope] = useState<'global' | 'personal'>(isOperador ? 'personal' : 'global');
+  const isPersonalScope = isOperador || viewScope === 'personal';
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<number | ''>(
     currentUser?.role === 'lider' && currentUser.team_id ? currentUser.team_id : ''
@@ -47,16 +52,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   const [splineMetric, setSplineMetric] = useState<'actividades' | 'minutos'>('actividades');
   const [donutCategory, setDonutCategory] = useState<'tipo' | 'estado' | 'cliente'>('tipo');
   const [barMetricType, setBarMetricType] = useState<'colaboradores' | 'horarios' | 'clientes'>(
-    isOperador ? 'horarios' : 'colaboradores'
+    isPersonalScope ? 'horarios' : 'colaboradores'
   );
 
   const fetchStats = async () => {
     setLoading(true);
     try {
       const data = await api.getDashboardStats(
-        isLiderOrAdmin && selectedTeamId ? Number(selectedTeamId) : undefined,
+        !isPersonalScope && selectedTeamId ? Number(selectedTeamId) : undefined,
         undefined,
-        currentUser?.id
+        currentUser?.id,
+        isPersonalScope ? currentUser?.id : undefined
       );
       setStats(data);
     } catch (e) {
@@ -68,7 +74,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   useEffect(() => {
     fetchStats();
-  }, [selectedTeamId]);
+  }, [selectedTeamId, viewScope]);
 
   const totalMinutos = stats?.resumen?.total_minutos || 0;
   const totalBitacoras = stats?.resumen?.total_bitacoras || 0;
@@ -148,7 +154,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   }));
 
   const getBarData = () => {
-    if (barMetricType === 'colaboradores' && isLiderOrAdmin) return barColabData;
+    if (barMetricType === 'colaboradores' && !isPersonalScope) return barColabData;
     if (barMetricType === 'clientes') return barClientesData;
     return barHorariosData;
   };
@@ -170,15 +176,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
-                {isOperador ? 'Mi Rendimiento & Telemetría' : 'Centro de Telemetría & Rendimiento'}
+                {isPersonalScope ? 'Mi Rendimiento & Telemetría' : 'Centro de Telemetría & Rendimiento'}
               </h2>
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
                 <span className="w-2 h-2 rounded-full bg-[#00F0FF] beacon-pulse" />
-                <span>{isOperador ? 'Personal' : 'En vivo'}</span>
+                <span>{isPersonalScope ? 'Personal' : 'En vivo'}</span>
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {isOperador
+              {isPersonalScope
                 ? `Análisis individual de jornadas, horas y efectividad • ${currentUser?.team_name || 'Operaciones'}`
                 : currentUser?.role === 'admin'
                 ? 'Consola global de operaciones, horas y distribución de proyectos'
@@ -187,19 +193,53 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto self-end sm:self-center">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto self-end sm:self-center flex-wrap sm:flex-nowrap">
+          {/* Selector de Ámbito: Global vs Personal (Solo para Líderes y Admin) */}
+          {isLiderOrAdmin && (
+            <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewScope('global');
+                  setBarMetricType('colaboradores');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  viewScope === 'global'
+                    ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Global Equipo
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewScope('personal');
+                  setBarMetricType('horarios');
+                }}
+                className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  viewScope === 'personal'
+                    ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Mi Rendimiento
+              </button>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={fetchStats}
             title="Actualizar telemetría"
-            className="p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer"
+            className="p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer shrink-0"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
           </button>
 
-          {/* Filtro por equipo si es admin */}
-          {currentUser?.role === 'admin' && (
-            <div className="flex items-center gap-2">
+          {/* Filtro por equipo si es admin y está en vista global */}
+          {currentUser?.role === 'admin' && !isPersonalScope && (
+            <div className="flex items-center gap-2 shrink-0">
               <Filter className="w-4 h-4 text-slate-400" />
               <select
                 value={selectedTeamId}
@@ -221,14 +261,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       {!loading && totalBitacoras === 0 ? (
         <EmptyState
           icon={BarChart3}
-          title={isOperador ? "Sin estadísticas registradas aún" : "Sin estadísticas de equipo aún"}
+          title={isPersonalScope ? "Sin estadísticas registradas aún" : "Sin estadísticas de equipo aún"}
           description={
-            isOperador
+            isPersonalScope
               ? "Aún no has registrado jornadas o actividades en tu bitácora. Completa tu jornada diaria para ver tus métricas personales aquí."
               : "Aún no se han guardado bitácoras o actividades para el equipo o periodo seleccionado. Una vez que los colaboradores completen sus jornadas, verás métricas en tiempo real aquí."
           }
-          actionText={selectedTeamId ? 'Ver Todos los Equipos' : undefined}
-          onAction={selectedTeamId ? () => setSelectedTeamId('') : undefined}
+          actionText={selectedTeamId && !isPersonalScope ? 'Ver Todos los Equipos' : undefined}
+          onAction={selectedTeamId && !isPersonalScope ? () => setSelectedTeamId('') : undefined}
         />
       ) : (
         <>
@@ -241,7 +281,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   <Clock className="w-5 h-5 text-[#00F0FF]" />
                 </div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
-                  {isOperador ? 'MI VOLUMEN' : 'VOLUMEN'}
+                  {isPersonalScope ? 'MI VOLUMEN' : 'VOLUMEN'}
                 </span>
               </div>
               <div>
@@ -263,18 +303,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
               <div className="flex items-center justify-between relative z-10">
                 <div className="w-10 h-10 rounded-2xl bg-black/20 text-[#0B0C13] flex items-center justify-center backdrop-blur-xs">
-                  {isOperador ? <Calendar className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                  {isPersonalScope ? <Calendar className="w-5 h-5" /> : <Users className="w-5 h-5" />}
                 </div>
                 <span className="text-[11px] font-extrabold text-[#0B0C13]/90 uppercase tracking-widest bg-black/15 px-3 py-0.5 rounded-full font-mono">
-                  {isOperador ? 'JORNADAS' : 'EQUIPO ACTIVO'}
+                  {isPersonalScope ? 'JORNADAS' : 'EQUIPO ACTIVO'}
                 </span>
               </div>
               <div className="relative z-10">
                 <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-[#0B0C13] tracking-tight font-heading truncate">
-                  {isOperador ? `${totalBitacoras} registradas` : totalColaboradores}
+                  {isPersonalScope ? `${totalBitacoras} registradas` : totalColaboradores}
                 </div>
                 <div className="text-xs text-[#0B0C13]/85 font-bold mt-1 truncate">
-                  {isOperador
+                  {isPersonalScope
                     ? 'Días con bitácora guardada en el sistema'
                     : 'Colaboradores supervisados con actividad'}
                 </div>
@@ -316,7 +356,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   {porcentajeCompletadas}%
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
-                  {isOperador ? 'Tu efectividad sobre tareas asignadas' : 'Tasa de entrega satisfactoria'}
+                  {isPersonalScope ? 'Tu efectividad sobre tareas asignadas' : 'Tasa de entrega satisfactoria'}
                 </div>
               </div>
             </div>
@@ -365,23 +405,23 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {isOperador ? 'Ritmo Diario' : 'Carga por Persona'}
+                    {isPersonalScope ? 'Ritmo Diario' : 'Carga por Persona'}
                   </span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
-                    {isOperador
+                    {isPersonalScope
                       ? (totalBitacoras > 0 ? (totalActividades / totalBitacoras).toFixed(1) : '0')
                       : (totalColaboradores > 0 ? (totalActividades / totalColaboradores).toFixed(1) : '0')}
                   </span>
                 </div>
               </div>
               <span className="text-[11px] text-slate-400 font-mono">
-                {isOperador ? 'tareas / día' : 'tareas / pers.'}
+                {isPersonalScope ? 'tareas / día' : 'tareas / pers.'}
               </span>
             </div>
           </div>
 
           {/* ================= ALERTA DE APOYO / BLOQUEOS ================= */}
-          {isOperador ? (
+          {isPersonalScope ? (
             stats?.alertas_apoyo && stats.alertas_apoyo.length > 0 ? (
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 shadow-xs space-y-2">
                 <div className="flex items-center gap-2 text-amber-600 dark:text-amber-300 font-bold text-xs sm:text-sm">
@@ -466,11 +506,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <LineChart className="w-4 h-4 text-[#00F0FF]" />
                   <span>
-                    {isOperador ? 'Mi Tendencia de Producción & Horas' : 'Tendencia Diaria de Producción & Tiempo'}
+                    {isPersonalScope ? 'Mi Tendencia de Producción & Horas' : 'Tendencia Diaria de Producción & Tiempo'}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  {isOperador
+                  {isPersonalScope
                     ? 'Curva de telemetría de tus actividades y horas trabajadas por jornada'
                     : 'Curva spline de telemetría de actividades y horas registradas por jornada'}
                 </p>
@@ -587,7 +627,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
                   {/* Toggle Metric Types */}
                   <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
-                    {isLiderOrAdmin && (
+                    {!isPersonalScope && (
                       <button
                         type="button"
                         onClick={() => setBarMetricType('colaboradores')}
@@ -637,8 +677,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           </div>
 
           {/* ================= SECCIÓN 3: TABLA DE RENDIMIENTO SEGÚN ROL ================= */}
-          {isOperador ? (
-            /* Vista Operador: Historial de sus jornadas */
+          {isPersonalScope ? (
+            /* Vista Operador / Personal: Historial de sus jornadas */
             <div className="saas-card p-6">
               <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">

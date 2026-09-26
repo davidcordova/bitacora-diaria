@@ -330,11 +330,12 @@ export const api = {
   },
 
   // ================= DASHBOARD =================
-  async getDashboardStats(teamId?: number, fecha?: string, requestingUserId?: number): Promise<DashboardStats> {
+  async getDashboardStats(teamId?: number, fecha?: string, requestingUserId?: number, userId?: number): Promise<DashboardStats> {
     const params = new URLSearchParams();
     if (teamId) params.append('team_id', String(teamId));
     if (fecha) params.append('fecha', fecha);
     if (requestingUserId) params.append('requesting_user_id', String(requestingUserId));
+    if (userId) params.append('user_id', String(userId));
     const res = await fetch(`${API_BASE}/dashboard/stats?${params.toString()}`);
     if (!res.ok) throw new Error('Error al cargar estadísticas del dashboard');
     return await res.json();
