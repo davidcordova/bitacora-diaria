@@ -29,6 +29,54 @@ import { getTodayLocalDateStr } from './utils/formatters';
 
 const getDraftKey = (userId?: number, dateStr?: string) => `bitacora_draft_${userId || 'user'}_${dateStr || 'today'}`;
 
+// Firma canónica normalizada de la bitácora:
+// Compara únicamente los datos editados por el usuario, omitiendo timestamps (updated_at, created_at)
+// y metadatos volátiles para evitar bucles infinitos de auto-guardado continuo.
+const getBitacoraSignature = (b?: Partial<Bitacora> | null, defaultColab?: string, defaultUid?: number): string => {
+  if (!b) return '';
+  const uid = b.user_id || defaultUid || 0;
+  const colab = (b.colaborador || defaultColab || '').trim().toLowerCase();
+  const fecha = (b.fecha || '').trim();
+  const hora_inicio = (b.hora_inicio || '').trim();
+  const pendientes = (b.pendientes || '').trim();
+  const necesita_apoyo = (b.necesita_apoyo || 'No').trim();
+  const apoyo_detalle = (b.apoyo_detalle || '').trim();
+  const prioridad_siguiente = (b.prioridad_siguiente || '').trim();
+  const estado = (b.estado || 'generada').trim();
+
+  const acts = (b.actividades || [])
+    .filter((a) => !a.is_deleted)
+    .map((a, idx) => ({
+      id: a.id || null,
+      orden: typeof a.orden === 'number' ? a.orden : idx,
+      hora_inicio: (a.hora_inicio || '').trim(),
+      duracion_min: Number(a.duracion_min || 0),
+      tipo_trabajo: (a.tipo_trabajo || '').trim(),
+      descripcion: (a.descripcion || '').trim(),
+      para_cliente: (a.para_cliente || '').trim(),
+      estado: (a.estado || 'en_proceso').trim(),
+      comentarios: (a.comentarios || '').trim(),
+      parent_task_id: a.parent_task_id ? Number(a.parent_task_id) : null,
+      tipo_vinculo: (a.tipo_vinculo || 'continuacion').trim(),
+      shared_uuid: (a.shared_uuid || '').trim(),
+      shared_with: Array.isArray(a.shared_with) ? [...a.shared_with].sort() : [],
+      evidencias_count: Array.isArray(a.evidencias) ? a.evidencias.length : 0,
+    }));
+
+  return JSON.stringify({
+    uid,
+    colab,
+    fecha,
+    hora_inicio,
+    pendientes,
+    necesita_apoyo,
+    apoyo_detalle,
+    prioridad_siguiente,
+    estado,
+    acts,
+  });
+};
+
 // Busca el borrador local más completo (evita que datos incompletos del servidor pisen el trabajo local)
 const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string): Bitacora | null => {
   const candidates: Bitacora[] = [];
@@ -326,49 +374,37 @@ export function App() {
 
   // Auto-guardado local y sincronización debounced con el backend
   useEffect(() => {
-    if (isSwitchingDateRef.current) return;
+    if (isSwitchingDateRef.current || !bitacora.fecha) return;
 
     const uid = bitacora.user_id || currentUser?.id;
-    if (bitacora.fecha) {
-      localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(bitacora));
-      localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
-    }
-
     const colab = bitacora.colaborador || currentUser?.full_name;
-    if (!colab || !bitacora.fecha) {
+    if (!colab || !uid) {
       return;
     }
 
-    const currentSignature = JSON.stringify({
-      fecha: bitacora.fecha,
-      colaborador: colab,
-      user_id: uid,
-      actividades: bitacora.actividades,
-      pendientes: bitacora.pendientes,
-      necesita_apoyo: bitacora.necesita_apoyo,
-      apoyo_detalle: bitacora.apoyo_detalle,
-      prioridad_siguiente: bitacora.prioridad_siguiente,
-      hora_inicio: bitacora.hora_inicio,
-    });
+    // Persistir siempre el borrador en localStorage de manera síncrona e instantánea (0ms de latencia)
+    localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(bitacora));
+    localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
+
+    const currentSignature = getBitacoraSignature(bitacora, colab, uid);
 
     if (currentSignature === lastSavedSignature.current) {
       return;
     }
 
-    setAutoSaveStatus('saving');
+    // Debounce de 600ms antes de llamar al servidor
     const timer = setTimeout(async () => {
       try {
+        setAutoSaveStatus('saving');
         const payload: Bitacora = {
           ...bitacora,
           colaborador: colab,
           user_id: uid,
         };
         const result = await api.saveBitacora(payload);
-        lastSavedSignature.current = currentSignature;
-        setAutoSaveStatus('saved');
-        setLastSavedTime(new Date());
-
+        
         if (result.bitacora) {
+          lastSavedSignature.current = getBitacoraSignature(result.bitacora, colab, uid);
           setBitacora((prev) => ({
             ...prev,
             id: result.bitacora.id,
@@ -377,23 +413,14 @@ export function App() {
               : prev.actividades,
           }));
 
-          if (uid && bitacora.fecha) {
-            localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(result.bitacora));
-            localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
-          }
-
-          lastSavedSignature.current = JSON.stringify({
-            fecha: result.bitacora.fecha,
-            colaborador: result.bitacora.colaborador,
-            user_id: result.bitacora.user_id,
-            actividades: result.bitacora.actividades,
-            pendientes: result.bitacora.pendientes,
-            necesita_apoyo: result.bitacora.necesita_apoyo,
-            apoyo_detalle: result.bitacora.apoyo_detalle,
-            prioridad_siguiente: result.bitacora.prioridad_siguiente,
-            hora_inicio: result.bitacora.hora_inicio,
-          });
+          localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(result.bitacora));
+          localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
+        } else {
+          lastSavedSignature.current = currentSignature;
         }
+
+        setAutoSaveStatus('saved');
+        setLastSavedTime(new Date());
 
         // Actualizar historial local silenciosamente
         setHistorial((prev) => {
@@ -409,7 +436,7 @@ export function App() {
         console.warn('Auto-save error:', err);
         setAutoSaveStatus('error');
       }
-    }, 1200);
+    }, 600);
 
     return () => clearTimeout(timer);
   }, [bitacora, currentUser]);
@@ -531,17 +558,7 @@ export function App() {
 
           setBitacora(todayMatch);
           setIsGenerated(todayMatch.estado === 'generada' || todayMatch.estado === 'cerrada' || todayMatch.estado === 'cerrada_sistema');
-          lastSavedSignature.current = JSON.stringify({
-            fecha: todayMatch.fecha,
-            colaborador: todayMatch.colaborador,
-            user_id: todayMatch.user_id,
-            actividades: todayMatch.actividades,
-            pendientes: todayMatch.pendientes,
-            necesita_apoyo: todayMatch.necesita_apoyo,
-            apoyo_detalle: todayMatch.apoyo_detalle,
-            prioridad_siguiente: todayMatch.prioridad_siguiente,
-            hora_inicio: todayMatch.hora_inicio,
-          });
+          lastSavedSignature.current = getBitacoraSignature(todayMatch, activeUser.full_name, activeUser.id);
           // Mantener borrador local sincronizado con el servidor
           localStorage.setItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(todayMatch));
         } else if (localDraft) {
@@ -592,6 +609,7 @@ export function App() {
         user_id: currentUser?.id || bitacora.user_id,
       };
       const res = await api.saveBitacora(payload);
+      lastSavedSignature.current = getBitacoraSignature(res.bitacora || payload, payload.colaborador, payload.user_id);
       setAutoSaveStatus('saved');
       setLastSavedTime(new Date());
       if (res.bitacora) {
@@ -711,17 +729,7 @@ export function App() {
 
         setBitacora(serverMatch);
         setIsGenerated(serverMatch.estado === 'generada' || serverMatch.estado === 'cerrada' || serverMatch.estado === 'cerrada_sistema');
-        lastSavedSignature.current = JSON.stringify({
-          fecha: serverMatch.fecha,
-          colaborador: serverMatch.colaborador,
-          user_id: serverMatch.user_id,
-          actividades: serverMatch.actividades,
-          pendientes: serverMatch.pendientes,
-          necesita_apoyo: serverMatch.necesita_apoyo,
-          apoyo_detalle: serverMatch.apoyo_detalle,
-          prioridad_siguiente: serverMatch.prioridad_siguiente,
-          hora_inicio: serverMatch.hora_inicio,
-        });
+        lastSavedSignature.current = getBitacoraSignature(serverMatch, activeName, activeUid);
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
         return;
@@ -731,17 +739,7 @@ export function App() {
       if (localDraft) {
         setBitacora(localDraft);
         setIsGenerated(false);
-        lastSavedSignature.current = JSON.stringify({
-          fecha: localDraft.fecha,
-          colaborador: localDraft.colaborador,
-          user_id: localDraft.user_id,
-          actividades: localDraft.actividades,
-          pendientes: localDraft.pendientes,
-          necesita_apoyo: localDraft.necesita_apoyo,
-          apoyo_detalle: localDraft.apoyo_detalle,
-          prioridad_siguiente: localDraft.prioridad_siguiente,
-          hora_inicio: localDraft.hora_inicio,
-        });
+        lastSavedSignature.current = getBitacoraSignature(localDraft, activeName, activeUid);
         return;
       }
 
@@ -762,17 +760,7 @@ export function App() {
       };
       setBitacora(cleanBitacora);
       setIsGenerated(false);
-      lastSavedSignature.current = JSON.stringify({
-        fecha: cleanBitacora.fecha,
-        colaborador: cleanBitacora.colaborador,
-        user_id: cleanBitacora.user_id,
-        actividades: cleanBitacora.actividades,
-        pendientes: cleanBitacora.pendientes,
-        necesita_apoyo: cleanBitacora.necesita_apoyo,
-        apoyo_detalle: cleanBitacora.apoyo_detalle,
-        prioridad_siguiente: cleanBitacora.prioridad_siguiente,
-        hora_inicio: cleanBitacora.hora_inicio,
-      });
+      lastSavedSignature.current = getBitacoraSignature(cleanBitacora, cleanBitacora.colaborador, cleanBitacora.user_id);
       setAutoSaveStatus('idle');
     } catch (e) {
       console.warn('Error fetching bitacora for date:', newDate, e);
@@ -975,17 +963,7 @@ export function App() {
       setIsGenerated(true);
       setAutoSaveStatus('saved');
       setLastSavedTime(new Date());
-      lastSavedSignature.current = JSON.stringify({
-        fecha: payload.fecha,
-        colaborador: payload.colaborador,
-        user_id: payload.user_id,
-        actividades: payload.actividades,
-        pendientes: payload.pendientes,
-        necesita_apoyo: payload.necesita_apoyo,
-        apoyo_detalle: payload.apoyo_detalle,
-        prioridad_siguiente: payload.prioridad_siguiente,
-        hora_inicio: payload.hora_inicio,
-      });
+      lastSavedSignature.current = getBitacoraSignature(result.bitacora || payload, payload.colaborador, payload.user_id);
 
       try {
         confetti({
@@ -1019,17 +997,7 @@ export function App() {
     setViewMode('lista');
     setIsGenerated(true);
     setAutoSaveStatus('saved');
-    lastSavedSignature.current = JSON.stringify({
-      fecha: selected.fecha,
-      colaborador: selected.colaborador,
-      user_id: selected.user_id,
-      actividades: selected.actividades,
-      pendientes: selected.pendientes,
-      necesita_apoyo: selected.necesita_apoyo,
-      apoyo_detalle: selected.apoyo_detalle,
-      prioridad_siguiente: selected.prioridad_siguiente,
-      hora_inicio: selected.hora_inicio,
-    });
+    lastSavedSignature.current = getBitacoraSignature(selected, selected.colaborador, selected.user_id);
     showToast('info', `Cargada bitácora del ${selected.fecha}`);
   };
 

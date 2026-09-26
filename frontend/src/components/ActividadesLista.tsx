@@ -235,41 +235,33 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               <span>EN JORNADA</span>
             </span>
 
-            {/* Auto-save Status Indicator */}
-            {autoSaveStatus === 'saving' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800/50">
-                <RefreshCw className="w-3 h-3 animate-spin text-amber-500" />
-                <span>Guardando en la nube...</span>
+            {/* Unified Cloud Sync & Status Badge */}
+            {autoSaveStatus === 'saving' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                <span>Guardando cambios...</span>
               </span>
-            )}
-            {autoSaveStatus === 'saved' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50">
-                <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                <span>En la nube {lastSavedTime ? `${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')}` : 'al día'}</span>
-              </span>
-            )}
-            {autoSaveStatus === 'error' && (
+            ) : autoSaveStatus === 'error' ? (
               <button
                 type="button"
                 onClick={onForceSyncCloud}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/50 hover:bg-rose-100 dark:hover:bg-rose-900/60 cursor-pointer transition-colors"
-                title="Hubo un problema de conexión al guardar en la nube. Clic para reintentar ahora"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer shadow-xs"
+                title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
               >
-                <CloudOff className="w-3 h-3 text-rose-500 animate-bounce" />
-                <span>No sincronizado (Clic para reintentar)</span>
+                <CloudOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                <span>Sin conexión (Reintentar)</span>
               </button>
-            )}
-
-            {/* Botón manual para forzar sincronización con el servidor */}
-            {onForceSyncCloud && (
+            ) : (
               <button
                 type="button"
                 onClick={onForceSyncCloud}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-50 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] hover:border-[#00F0FF]/50 hover:text-[#00F0FF] transition-all cursor-pointer shadow-2xs"
-                title="Forzar guardado inmediato en la nube para que el equipo lo vea"
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer shadow-xs"
+                title="Toda tu información está guardada y segura en la nube. Clic si deseas sincronizar manualmente"
               >
-                <RefreshCw className={`w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF] ${autoSaveStatus === 'saving' ? 'animate-spin' : ''}`} />
-                <span className="hidden md:inline">Sincronizar</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>
+                  Al día en la nube{lastSavedTime ? ` (${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')})` : ''}
+                </span>
               </button>
             )}
 
