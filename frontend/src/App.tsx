@@ -436,6 +436,39 @@ export function App() {
       const defaultStart = sysSettings?.hora_inicio_default || '08:30';
 
       if (activeUser) {
+        // Sincronización proactiva en segundo plano de borradores pendientes de fechas anteriores
+        // (Garantiza que bitácoras que fallaron por caída de red o servidor el día anterior se guarden automáticamente sin perder nada)
+        try {
+          const draftPrefix = `bitacora_draft_${activeUser.id}_`;
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith(draftPrefix)) {
+              const dStr = k.replace(draftPrefix, '');
+              if (dStr && dStr !== todayStr) {
+                const pastDraft = getBestLocalDraft(activeUser.id, dStr, activeUser.full_name);
+                if (pastDraft && Array.isArray(pastDraft.actividades) && pastDraft.actividades.length > 0) {
+                  const pastServer = hList.find(
+                    (b) =>
+                      (b.user_id === activeUser.id ||
+                        b.colaborador.toLowerCase() === activeUser.full_name.toLowerCase()) &&
+                      b.fecha === dStr
+                  );
+                  const pLocalCount = pastDraft.actividades.filter((a) => !a.is_deleted).length;
+                  const pServerCount = (pastServer?.actividades || []).filter((a) => !a.is_deleted).length;
+                  if (pLocalCount > pServerCount) {
+                    console.log(`[SmartSync] Sincronizando automáticamente borrador pendiente de ${dStr} (${pLocalCount} actividades vs ${pServerCount} en servidor)`);
+                    api.saveBitacora(pastDraft).then(() => {
+                      showToast('info', `¡Sincronizada automáticamente tu bitácora del ${dStr} (${pLocalCount} actividades)!`);
+                    }).catch(console.warn);
+                  }
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[SmartSync] Error verificando borradores previos:', e);
+        }
+
         const todayMatch = hList.find(
           (b) =>
             (b.user_id === activeUser.id ||
