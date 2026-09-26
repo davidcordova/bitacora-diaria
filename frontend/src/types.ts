@@ -134,6 +134,20 @@ export interface DashboardStats {
     cantidad: number;
     minutos: number;
   }[];
+  por_cliente?: {
+    cliente: string;
+    cantidad: number;
+    minutos: number;
+  }[];
+  jornadas_recientes?: {
+    id: number;
+    fecha: string;
+    tiempo_total_min: number;
+    necesita_apoyo?: string;
+    apoyo_detalle?: string;
+    total_actividades: number;
+    actividades_completadas: number;
+  }[];
   por_colaborador: {
     colaborador: string;
     user_id?: number;

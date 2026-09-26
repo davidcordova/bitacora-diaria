@@ -16,9 +16,12 @@ import {
   Compass,
   RefreshCw,
   Zap,
+  Calendar,
+  ShieldCheck,
+  Building,
 } from 'lucide-react';
 import { DashboardStats, Team, User } from '../types';
-import { formatDuration } from '../utils/formatters';
+import { formatDuration, formatHoursClean, formatDateDisplay } from '../utils/formatters';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 import { SplineAreaChart, GradientBarChart, CyberDonutChart } from './CyberCharts';
@@ -29,6 +32,11 @@ interface DashboardViewProps {
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams }) => {
+  const isLider = currentUser?.role === 'lider' || currentUser?.is_leader;
+  const isAdmin = currentUser?.role === 'admin';
+  const isLiderOrAdmin = isAdmin || isLider;
+  const isOperador = !isLiderOrAdmin;
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<number | ''>(
     currentUser?.role === 'lider' && currentUser.team_id ? currentUser.team_id : ''
@@ -37,14 +45,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   // Controles de gráficos interactivos
   const [splineMetric, setSplineMetric] = useState<'actividades' | 'minutos'>('actividades');
-  const [donutCategory, setDonutCategory] = useState<'tipo' | 'estado'>('tipo');
-  const [barMetricType, setBarMetricType] = useState<'colaboradores' | 'horarios'>('colaboradores');
+  const [donutCategory, setDonutCategory] = useState<'tipo' | 'estado' | 'cliente'>('tipo');
+  const [barMetricType, setBarMetricType] = useState<'colaboradores' | 'horarios' | 'clientes'>(
+    isOperador ? 'horarios' : 'colaboradores'
+  );
 
   const fetchStats = async () => {
     setLoading(true);
     try {
       const data = await api.getDashboardStats(
-        selectedTeamId ? Number(selectedTeamId) : undefined,
+        isLiderOrAdmin && selectedTeamId ? Number(selectedTeamId) : undefined,
         undefined,
         currentUser?.id
       );
@@ -71,14 +81,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
     totalActividades > 0 ? Math.round((completadas / totalActividades) * 100) : 0;
 
   // KPIs Adicionales
-  const promedioJornada = stats?.kpis_adicionales?.promedio_minutos_jornada || (totalBitacoras > 0 ? Math.round(totalMinutos / totalBitacoras) : 0);
+  const promedioJornada =
+    stats?.kpis_adicionales?.promedio_minutos_jornada ||
+    (totalBitacoras > 0 ? Math.round(totalMinutos / totalBitacoras) : 0);
   const ratioPlanificado = stats?.kpis_adicionales?.ratio_planificado ?? 0;
 
   // Datos para Gráfico Donut / Pastel
   const donutTipoData = (stats?.por_tipo || []).map((t) => ({
     label: t.tipo,
     value: t.cantidad,
-    sublabel: formatDuration(t.minutos),
+    sublabel: formatHoursClean(t.minutos),
   }));
 
   const donutEstadoData = (stats?.por_estado || []).map((e) => {
@@ -98,16 +110,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       label: labels[e.estado] || e.estado,
       value: e.cantidad,
       color: colors[e.estado],
-      sublabel: formatDuration(e.minutos),
+      sublabel: formatHoursClean(e.minutos),
     };
   });
 
+  const donutClienteData = (stats?.por_cliente || []).map((c) => ({
+    label: c.cliente,
+    value: c.cantidad,
+    sublabel: formatHoursClean(c.minutos),
+  }));
+
   // Datos para Gráfico de Barras
   const barColabData = (stats?.por_colaborador || []).map((c) => {
-    const rate = c.total_actividades > 0 ? Math.round((c.actividades_completadas / c.total_actividades) * 100) : 0;
+    const rate =
+      c.total_actividades > 0
+        ? Math.round((c.actividades_completadas / c.total_actividades) * 100)
+        : 0;
     return {
-      label: c.colaborador.split(' ')[0] + (c.colaborador.split(' ')[1] ? ` ${c.colaborador.split(' ')[1][0]}.` : ''),
-      value: Math.round(c.total_minutos / 60 * 10) / 10,
+      label:
+        c.colaborador.split(' ')[0] +
+        (c.colaborador.split(' ')[1] ? ` ${c.colaborador.split(' ')[1][0]}.` : ''),
+      value: Math.round((c.total_minutos / 60) * 10) / 10,
       sublabel: `${rate}% completado`,
     };
   });
@@ -115,8 +138,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   const barHorariosData = (stats?.distribucion_horaria || []).map((h) => ({
     label: h.franja,
     value: h.cantidad,
-    sublabel: formatDuration(h.minutos),
+    sublabel: formatHoursClean(h.minutos),
   }));
+
+  const barClientesData = (stats?.por_cliente || []).map((c) => ({
+    label: c.cliente.length > 13 ? `${c.cliente.slice(0, 11)}..` : c.cliente,
+    value: Math.round((c.minutos / 60) * 10) / 10,
+    sublabel: `${c.cantidad} tareas`,
+  }));
+
+  const getBarData = () => {
+    if (barMetricType === 'colaboradores' && isLiderOrAdmin) return barColabData;
+    if (barMetricType === 'clientes') return barClientesData;
+    return barHorariosData;
+  };
+
+  const getDonutData = () => {
+    if (donutCategory === 'estado') return donutEstadoData;
+    if (donutCategory === 'cliente') return donutClienteData;
+    return donutTipoData;
+  };
 
   return (
     <div className="space-y-6 max-w-[1700px] mx-auto pb-10">
@@ -129,15 +170,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
-                Centro de Telemetría & Rendimiento
+                {isOperador ? 'Mi Rendimiento & Telemetría' : 'Centro de Telemetría & Rendimiento'}
               </h2>
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
                 <span className="w-2 h-2 rounded-full bg-[#00F0FF] beacon-pulse" />
-                <span>En vivo</span>
+                <span>{isOperador ? 'Personal' : 'En vivo'}</span>
               </div>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {currentUser?.role === 'admin'
+              {isOperador
+                ? `Análisis individual de jornadas, horas y efectividad • ${currentUser?.team_name || 'Operaciones'}`
+                : currentUser?.role === 'admin'
                 ? 'Consola global de operaciones, horas y distribución de proyectos'
                 : `Supervisión de escuadrón: ${currentUser?.team_name || 'Mi Equipo'}`}
             </p>
@@ -178,60 +221,68 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       {!loading && totalBitacoras === 0 ? (
         <EmptyState
           icon={BarChart3}
-          title="Sin estadísticas registradas aún"
-          description="Aún no se han guardado bitácoras o actividades para el equipo o periodo seleccionado. Una vez que los colaboradores completen sus jornadas, verás métricas en tiempo real aquí."
+          title={isOperador ? "Sin estadísticas registradas aún" : "Sin estadísticas de equipo aún"}
+          description={
+            isOperador
+              ? "Aún no has registrado jornadas o actividades en tu bitácora. Completa tu jornada diaria para ver tus métricas personales aquí."
+              : "Aún no se han guardado bitácoras o actividades para el equipo o periodo seleccionado. Una vez que los colaboradores completen sus jornadas, verás métricas en tiempo real aquí."
+          }
           actionText={selectedTeamId ? 'Ver Todos los Equipos' : undefined}
           onAction={selectedTeamId ? () => setSelectedTeamId('') : undefined}
         />
       ) : (
         <>
-          {/* ================= 4 METRIC CARDS DE ALTO IMPACTO ================= */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* ================= 4 METRIC CARDS DE ALTO IMPACTO (ASPECT RATIO OPTIMIZADO) ================= */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {/* Card 1: Horas Totales */}
-            <div className="saas-card p-6 flex flex-col justify-between h-44 hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/10">
                   <Clock className="w-5 h-5 text-[#00F0FF]" />
                 </div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
-                  VOLUMEN
+                  {isOperador ? 'MI VOLUMEN' : 'VOLUMEN'}
                 </span>
               </div>
               <div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
-                  {formatDuration(totalMinutos)}
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
+                  {formatHoursClean(totalMinutos)}
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF]" />
-                  <span>En {totalBitacoras} {totalBitacoras === 1 ? 'jornada' : 'jornadas'} registradas</span>
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 flex items-center gap-1.5 truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
+                  <span>
+                    {totalMinutos.toLocaleString('es-PE')} min en {totalBitacoras} {totalBitacoras === 1 ? 'jornada' : 'jornadas'}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Card 2: SPOTLIGHT CARD HERO (CIAN A ÍNDIGO) */}
-            <div className="saas-card-accent p-6 flex flex-col justify-between h-44 relative overflow-hidden group transition-all duration-300">
+            <div className="saas-card-accent p-5 sm:p-6 flex flex-col justify-between min-h-[148px] relative overflow-hidden group transition-all duration-300">
               <div className="absolute -right-6 -bottom-6 w-36 h-36 bg-white/20 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform" />
-              
+
               <div className="flex items-center justify-between relative z-10">
                 <div className="w-10 h-10 rounded-2xl bg-black/20 text-[#0B0C13] flex items-center justify-center backdrop-blur-xs">
-                  <Users className="w-5 h-5" />
+                  {isOperador ? <Calendar className="w-5 h-5" /> : <Users className="w-5 h-5" />}
                 </div>
                 <span className="text-[11px] font-extrabold text-[#0B0C13]/90 uppercase tracking-widest bg-black/15 px-3 py-0.5 rounded-full font-mono">
-                  EQUIPO ACTIVO
+                  {isOperador ? 'JORNADAS' : 'EQUIPO ACTIVO'}
                 </span>
               </div>
               <div className="relative z-10">
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#0B0C13] tracking-tight font-heading">
-                  {totalColaboradores}
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-[#0B0C13] tracking-tight font-heading truncate">
+                  {isOperador ? `${totalBitacoras} registradas` : totalColaboradores}
                 </div>
-                <div className="text-xs text-[#0B0C13]/85 font-bold mt-1">
-                  Colaboradores supervisados con actividad
+                <div className="text-xs text-[#0B0C13]/85 font-bold mt-1 truncate">
+                  {isOperador
+                    ? 'Días con bitácora guardada en el sistema'
+                    : 'Colaboradores supervisados con actividad'}
                 </div>
               </div>
             </div>
 
             {/* Card 3: Total Actividades */}
-            <div className="saas-card p-6 flex flex-col justify-between h-44 hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/10">
                   <Layers className="w-5 h-5 text-[#8B5CF6]" />
@@ -241,17 +292,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </span>
               </div>
               <div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
                   {totalActividades}
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
                   {completadas} completadas de {totalActividades}
                 </div>
               </div>
             </div>
 
             {/* Card 4: Tasa de Completitud & Eficiencia */}
-            <div className="saas-card p-6 flex flex-col justify-between h-44 hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-2xl bg-[#00F0FF]/15 text-[#00F0FF] flex items-center justify-center border border-[#00F0FF]/30">
                   <CheckCircle2 className="w-5 h-5" />
@@ -261,11 +312,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </span>
               </div>
               <div>
-                <div className="text-3xl sm:text-4xl font-extrabold text-[#00A3BF] dark:text-[#00F0FF] tracking-tight font-heading">
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-[#00A3BF] dark:text-[#00F0FF] tracking-tight font-heading truncate">
                   {porcentajeCompletadas}%
                 </div>
-                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-                  Tasa de entrega satisfactoria
+                <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
+                  {isOperador ? 'Tu efectividad sobre tareas asignadas' : 'Tasa de entrega satisfactoria'}
                 </div>
               </div>
             </div>
@@ -283,7 +334,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     Promedio por Jornada
                   </span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
-                    {formatDuration(promedioJornada)}
+                    {formatHoursClean(promedioJornada)}
                   </span>
                 </div>
               </div>
@@ -314,48 +365,98 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Carga por Persona
+                    {isOperador ? 'Ritmo Diario' : 'Carga por Persona'}
                   </span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
-                    {totalColaboradores > 0 ? (totalActividades / totalColaboradores).toFixed(1) : 0}
+                    {isOperador
+                      ? (totalBitacoras > 0 ? (totalActividades / totalBitacoras).toFixed(1) : '0')
+                      : (totalColaboradores > 0 ? (totalActividades / totalColaboradores).toFixed(1) : '0')}
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">tareas / pers.</span>
+              <span className="text-[11px] text-slate-400 font-mono">
+                {isOperador ? 'tareas / día' : 'tareas / pers.'}
+              </span>
             </div>
           </div>
 
           {/* ================= ALERTA DE APOYO / BLOQUEOS ================= */}
-          {stats?.alertas_apoyo && stats.alertas_apoyo.length > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 shadow-xs space-y-3">
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-300 font-bold text-sm">
-                <AlertTriangle className="w-4 h-4 text-amber-500" />
-                <span>Atención Inmediata: Solicitudes de apoyo o bloqueos activos</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {stats.alertas_apoyo.map((alerta) => (
-                  <div
-                    key={alerta.id}
-                    className="bg-white dark:bg-[#13141F] rounded-2xl p-4 border border-amber-500/30 text-xs shadow-2xs space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-slate-900 dark:text-white">{alerta.colaborador}</span>
-                      <span className="text-slate-400 text-[11px] font-mono">{alerta.fecha}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-amber-500">Bloqueo: </span>
-                      <span className="text-slate-700 dark:text-slate-300">{alerta.apoyo_detalle || 'Sin detalle especificado'}</span>
-                    </div>
-                    {alerta.pendientes && (
-                      <div className="text-slate-500 dark:text-slate-400 text-[11px] truncate">
-                        Pendientes: {alerta.pendientes}
+          {isOperador ? (
+            stats?.alertas_apoyo && stats.alertas_apoyo.length > 0 ? (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 shadow-xs space-y-2">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-300 font-bold text-xs sm:text-sm">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span>Tienes solicitudes de apoyo o bloqueos activos registrados</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {stats.alertas_apoyo.map((alerta) => (
+                    <div
+                      key={alerta.id}
+                      className="bg-white dark:bg-[#13141F] rounded-xl p-3 border border-amber-500/30 text-xs shadow-2xs space-y-1"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white">{alerta.fecha}</span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-bold">
+                          Pendiente
+                        </span>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <p className="text-slate-700 dark:text-slate-300">
+                        {alerta.apoyo_detalle || 'Sin detalle especificado'}
+                      </p>
+                      {alerta.pendientes && (
+                        <p className="text-slate-400 text-[11px] truncate">
+                          Tareas pendientes: {alerta.pendientes}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3.5 flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>
+                    Sin bloqueos activos registrados • Tus tareas y jornadas fluyen con normalidad.
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-bold hidden sm:inline">
+                  ÓPTIMO
+                </span>
+              </div>
+            )
+          ) : (
+            stats?.alertas_apoyo && stats.alertas_apoyo.length > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-3xl p-5 shadow-xs space-y-3">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-300 font-bold text-sm">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <span>Atención Inmediata: Solicitudes de apoyo o bloqueos activos del equipo</span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {stats.alertas_apoyo.map((alerta) => (
+                    <div
+                      key={alerta.id}
+                      className="bg-white dark:bg-[#13141F] rounded-2xl p-4 border border-amber-500/30 text-xs shadow-2xs space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-white">{alerta.colaborador}</span>
+                        <span className="text-slate-400 text-[11px] font-mono">{alerta.fecha}</span>
+                      </div>
+                      <div>
+                        <span className="font-semibold text-amber-500">Bloqueo: </span>
+                        <span className="text-slate-700 dark:text-slate-300">{alerta.apoyo_detalle || 'Sin detalle especificado'}</span>
+                      </div>
+                      {alerta.pendientes && (
+                        <div className="text-slate-500 dark:text-slate-400 text-[11px] truncate">
+                          Pendientes: {alerta.pendientes}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           )}
 
           {/* ================= SECCIÓN 1: GRÁFICO DE LÍNEAS / SPLINE ÁREA (TENDENCIA) ================= */}
@@ -364,10 +465,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <LineChart className="w-4 h-4 text-[#00F0FF]" />
-                  <span>Tendencia Diaria de Producción & Tiempo</span>
+                  <span>
+                    {isOperador ? 'Mi Tendencia de Producción & Horas' : 'Tendencia Diaria de Producción & Tiempo'}
+                  </span>
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Curva spline de telemetría de actividades y horas registradas por jornada
+                  {isOperador
+                    ? 'Curva de telemetría de tus actividades y horas trabajadas por jornada'
+                    : 'Curva spline de telemetría de actividades y horas registradas por jornada'}
                 </p>
               </div>
 
@@ -401,7 +506,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             <SplineAreaChart
               data={stats?.tendencia_diaria || []}
               metric={splineMetric}
-              height={260}
+              height={220}
             />
           </div>
 
@@ -410,14 +515,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             {/* Columna Izquierda: Gráfico Pastel / Donut (6 cols) */}
             <div className="lg:col-span-6 saas-card p-6 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <PieChart className="w-4 h-4 text-[#EC4899]" />
-                    <span>Desglose {donutCategory === 'tipo' ? 'por Tipo de Trabajo' : 'por Estado'}</span>
+                    <span>
+                      Desglose {donutCategory === 'tipo' ? 'por Tipo de Trabajo' : donutCategory === 'cliente' ? 'por Cliente / Proyecto' : 'por Estado'}
+                    </span>
                   </h3>
 
-                  {/* Toggle Tipo vs Estado */}
-                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10">
+                  {/* Toggle Tipo vs Estado vs Cliente */}
+                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setDonutCategory('tipo')}
@@ -428,6 +535,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                       }`}
                     >
                       Tipo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDonutCategory('cliente')}
+                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                        donutCategory === 'cliente'
+                          ? 'bg-[#EC4899] text-white shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Cliente
                     </button>
                     <button
                       type="button"
@@ -444,7 +562,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </div>
 
                 <CyberDonutChart
-                  data={donutCategory === 'tipo' ? donutTipoData : donutEstadoData}
+                  data={getDonutData()}
                   centerTitle={String(totalActividades)}
                   centerSubtitle="Actividades"
                   valueFormatter={(v) => `${v} tareas`}
@@ -455,25 +573,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             {/* Columna Derecha: Gráfico de Barras con Gradiente (6 cols) */}
             <div className="lg:col-span-6 saas-card p-6 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-[#00F0FF]" />
-                    <span>Distribución de Carga ({barMetricType === 'colaboradores' ? 'Horas / Analista' : 'Tareas / Franja'})</span>
+                    <span>
+                      {barMetricType === 'colaboradores'
+                        ? 'Horas / Analista'
+                        : barMetricType === 'clientes'
+                        ? 'Horas / Cliente'
+                        : 'Tareas / Franja Horaria'}
+                    </span>
                   </h3>
 
-                  {/* Toggle Colaboradores vs Horarios */}
-                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10">
-                    <button
-                      type="button"
-                      onClick={() => setBarMetricType('colaboradores')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
-                        barMetricType === 'colaboradores'
-                          ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
-                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Analistas
-                    </button>
+                  {/* Toggle Metric Types */}
+                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
+                    {isLiderOrAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => setBarMetricType('colaboradores')}
+                        className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                          barMetricType === 'colaboradores'
+                            ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                        }`}
+                      >
+                        Analistas
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setBarMetricType('horarios')}
@@ -483,92 +609,201 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      Horas
+                      Horas Día
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBarMetricType('clientes')}
+                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                        barMetricType === 'clientes'
+                          ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      Clientes
                     </button>
                   </div>
                 </div>
 
                 <GradientBarChart
-                  data={barMetricType === 'colaboradores' ? barColabData : barHorariosData}
-                  valueFormatter={(val) => (barMetricType === 'colaboradores' ? `${val}h` : `${val} acts`)}
-                  height={240}
+                  data={getBarData()}
+                  valueFormatter={(val) =>
+                    barMetricType === 'colaboradores' || barMetricType === 'clientes' ? `${val}h` : `${val} acts`
+                  }
+                  height={220}
                 />
               </div>
             </div>
           </div>
 
-          {/* ================= SECCIÓN 3: TABLA DE PRODUCTIVIDAD ================= */}
-          <div className="saas-card p-6">
-            <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-[#00F0FF]" />
-                <span>Productividad y Tasa de Éxito por Colaborador</span>
-              </h3>
-              <span className="text-xs text-slate-400 font-mono">Supervisión en tiempo real</span>
-            </div>
+          {/* ================= SECCIÓN 3: TABLA DE RENDIMIENTO SEGÚN ROL ================= */}
+          {isOperador ? (
+            /* Vista Operador: Historial de sus jornadas */
+            <div className="saas-card p-6">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-[#00F0FF]" />
+                  <span>Historial de Mis Jornadas y Rendimiento</span>
+                </h3>
+                <span className="text-xs text-slate-400 font-mono">
+                  {stats?.jornadas_recientes?.length || 0} jornadas registradas
+                </span>
+              </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/5 pb-2">
-                    <th className="pb-3">Colaborador</th>
-                    <th className="pb-3">Equipo</th>
-                    <th className="pb-3">Jornadas</th>
-                    <th className="pb-3">Tiempo Total</th>
-                    <th className="pb-3">Actividades</th>
-                    <th className="pb-3">Completadas</th>
-                    <th className="pb-3 text-right">Rendimiento</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                  {stats?.por_colaborador && stats.por_colaborador.length > 0 ? (
-                    stats.por_colaborador.map((c, i) => {
-                      const rate =
-                        c.total_actividades > 0
-                          ? Math.round((c.actividades_completadas / c.total_actividades) * 100)
-                          : 0;
-                      return (
-                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors">
-                          <td className="py-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-[10px] font-extrabold border border-[#00F0FF]/30">
-                              {c.colaborador.charAt(0)}
-                            </span>
-                            <span>{c.colaborador}</span>
-                          </td>
-                          <td className="py-3.5 text-slate-500 dark:text-slate-400">{c.team_name || 'General'}</td>
-                          <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.bitacoras_count}</td>
-                          <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">{formatDuration(c.total_minutos)}</td>
-                          <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.total_actividades}</td>
-                          <td className="py-3.5 text-[#00A3BF] dark:text-[#00F0FF] font-bold font-mono">
-                            {c.actividades_completadas}
-                          </td>
-                          <td className="py-3.5 text-right">
-                            <span
-                              className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
-                                rate >= 80
-                                  ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
-                                  : rate >= 50
-                                  ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
-                                  : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
-                              }`}
-                            >
-                              {rate}%
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400">
-                        No hay registros de colaboradores en este periodo.
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/5 pb-2">
+                      <th className="pb-3">Fecha</th>
+                      <th className="pb-3">Horas Registradas</th>
+                      <th className="pb-3">Tareas Totales</th>
+                      <th className="pb-3">Completadas</th>
+                      <th className="pb-3">Bloqueos Reportados</th>
+                      <th className="pb-3 text-right">Efectividad</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {stats?.jornadas_recientes && stats.jornadas_recientes.length > 0 ? (
+                      stats.jornadas_recientes.map((j, i) => {
+                        const rate =
+                          j.total_actividades > 0
+                            ? Math.round((j.actividades_completadas / j.total_actividades) * 100)
+                            : 0;
+                        return (
+                          <tr key={j.id || i} className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors">
+                            <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
+                              <Calendar className="w-3.5 h-3.5 text-[#00F0FF]" />
+                              <span>{formatDateDisplay(j.fecha)}</span>
+                            </td>
+                            <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">
+                              {formatHoursClean(j.tiempo_total_min)}
+                            </td>
+                            <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">
+                              {j.total_actividades}
+                            </td>
+                            <td className="py-3.5 text-[#00A3BF] dark:text-[#00F0FF] font-bold font-mono">
+                              {j.actividades_completadas}
+                            </td>
+                            <td className="py-3.5 text-slate-600 dark:text-slate-300">
+                              {j.necesita_apoyo === 'Si' ? (
+                                <span className="inline-flex items-center gap-1 text-amber-500 font-semibold">
+                                  <AlertTriangle className="w-3.5 h-3.5" />
+                                  <span>
+                                    {j.apoyo_detalle
+                                      ? j.apoyo_detalle.length > 30
+                                        ? `${j.apoyo_detalle.slice(0, 30)}...`
+                                        : j.apoyo_detalle
+                                      : 'Reportado'}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-emerald-500 font-medium flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Sin bloqueos</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 text-right">
+                              <span
+                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                  rate >= 80
+                                    ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                                    : rate >= 50
+                                    ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+                                    : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
+                                }`}
+                              >
+                                {rate}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-slate-400">
+                          No tienes jornadas registradas en este periodo aún.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Vista Admin / Líder: Tabla de colaboradores */
+            <div className="saas-card p-6">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-[#00F0FF]" />
+                  <span>Productividad y Tasa de Éxito por Colaborador</span>
+                </h3>
+                <span className="text-xs text-slate-400 font-mono">Supervisión en tiempo real</span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/5 pb-2">
+                      <th className="pb-3">Colaborador</th>
+                      <th className="pb-3">Equipo</th>
+                      <th className="pb-3">Jornadas</th>
+                      <th className="pb-3">Tiempo Total</th>
+                      <th className="pb-3">Actividades</th>
+                      <th className="pb-3">Completadas</th>
+                      <th className="pb-3 text-right">Rendimiento</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {stats?.por_colaborador && stats.por_colaborador.length > 0 ? (
+                      stats.por_colaborador.map((c, i) => {
+                        const rate =
+                          c.total_actividades > 0
+                            ? Math.round((c.actividades_completadas / c.total_actividades) * 100)
+                            : 0;
+                        return (
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors">
+                            <td className="py-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                              <span className="w-6 h-6 rounded-full bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-[10px] font-extrabold border border-[#00F0FF]/30">
+                                {c.colaborador.charAt(0)}
+                              </span>
+                              <span>{c.colaborador}</span>
+                            </td>
+                            <td className="py-3.5 text-slate-500 dark:text-slate-400">{c.team_name || 'General'}</td>
+                            <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.bitacoras_count}</td>
+                            <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">{formatHoursClean(c.total_minutos)}</td>
+                            <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.total_actividades}</td>
+                            <td className="py-3.5 text-[#00A3BF] dark:text-[#00F0FF] font-bold font-mono">
+                              {c.actividades_completadas}
+                            </td>
+                            <td className="py-3.5 text-right">
+                              <span
+                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                  rate >= 80
+                                    ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                                    : rate >= 50
+                                    ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
+                                    : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
+                                }`}
+                              >
+                                {rate}%
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400">
+                          No hay registros de colaboradores en este periodo.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>

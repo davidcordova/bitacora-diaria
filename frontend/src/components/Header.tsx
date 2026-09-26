@@ -143,21 +143,19 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
-          {/* 5. Dashboard (Métricas y Analítica) - Only Líderes & Admin */}
-          {isLider && (
-            <button
-              type="button"
-              onClick={() => onViewChange('dashboard')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                currentView === 'dashboard'
-                  ? 'bg-[#00C9A7] text-white shadow-xs font-bold'
-                  : 'text-slate-600 hover:text-[#00A88B] hover:bg-mint-50'
-              }`}
-            >
-              <BarChart3 className="w-3.5 h-3.5" />
-              <span>Dashboard</span>
-            </button>
-          )}
+          {/* 5. Dashboard (Métricas y Analítica) */}
+          <button
+            type="button"
+            onClick={() => onViewChange('dashboard')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+              currentView === 'dashboard'
+                ? 'bg-[#00C9A7] text-white shadow-xs font-bold'
+                : 'text-slate-600 hover:text-[#00A88B] hover:bg-mint-50'
+            }`}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            <span>{isLider ? 'Dashboard' : 'Mi Rendimiento'}</span>
+          </button>
 
           {/* 6. Gestión Usuarios y Equipos - Only Admin */}
           {isAdmin && (

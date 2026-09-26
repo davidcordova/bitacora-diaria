@@ -32,8 +32,8 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
     );
   }
 
-  const padding = { top: 25, right: 30, bottom: 40, left: 45 };
-  const width = 650;
+  const padding = { top: 20, right: 25, bottom: 35, left: 45 };
+  const width = 860;
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
@@ -103,10 +103,11 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
   const activePoint = hoveredIdx !== null ? points[hoveredIdx] : null;
 
   return (
-    <div className="relative w-full select-none">
+    <div className="relative w-full select-none h-[210px] sm:h-[240px] md:h-[260px] flex items-center justify-center">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-auto overflow-visible"
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-full overflow-visible"
         onMouseLeave={() => setHoveredIdx(null)}
       >
         <defs>
@@ -340,10 +341,11 @@ export const GradientBarChart: React.FC<GradientBarChartProps> = ({
   const barWidth = Math.min(48, Math.max(22, step * 0.55));
 
   return (
-    <div className="relative w-full select-none">
+    <div className="relative w-full select-none h-[210px] sm:h-[240px] flex items-center justify-center">
       <svg
         viewBox={`0 0 ${width} ${height}`}
-        className="w-full h-auto overflow-visible"
+        preserveAspectRatio="xMidYMid meet"
+        className="w-full h-full overflow-visible"
         onMouseLeave={() => setHoveredIdx(null)}
       >
         <defs>
@@ -504,8 +506,8 @@ export const CyberDonutChart: React.FC<CyberDonutChartProps> = ({
     );
   }
 
-  const size = 220;
-  const strokeWidth = 26;
+  const size = 190;
+  const strokeWidth = 22;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 

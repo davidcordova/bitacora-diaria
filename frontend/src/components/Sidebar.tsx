@@ -99,9 +99,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'dashboard' as ViewMode,
-      label: 'Dashboard',
+      label: isLider ? 'Dashboard' : 'Mi Rendimiento',
       icon: BarChart3,
-      show: isLider,
+      show: true,
       badge: null,
     },
     {

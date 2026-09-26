@@ -1119,8 +1119,8 @@ export function App() {
             <TeamSupervisionView currentUser={currentUser} teams={teams} users={users} />
           )}
 
-          {/* VIEW 4: DASHBOARD DE ANALÍTICA Y KPIS (Líderes y Admin) */}
-          {viewMode === 'dashboard' && isLider && (
+          {/* VIEW 4: DASHBOARD DE ANALÍTICA Y KPIS */}
+          {viewMode === 'dashboard' && (
             <DashboardView currentUser={currentUser} teams={teams} />
           )}
 

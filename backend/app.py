@@ -1929,6 +1929,7 @@ def get_dashboard_stats():
         if req_u:
             if req_u['role'] in ('analista', 'operador'):
                 user_id = req_u['id']
+                team_id = None
             elif req_u['role'] == 'lider':
                 if req_u['team_id'] and not team_id:
                     team_id = req_u['team_id']
@@ -1981,6 +1982,21 @@ def get_dashboard_stats():
         ORDER BY minutos DESC
     '''
     tipo_stats = cursor.execute(tipo_query, params).fetchall()
+
+    # 3.1 Desglose por cliente / proyecto
+    cliente_query = f'''
+        SELECT COALESCE(NULLIF(a.para_cliente, ''), 'General / Interno') as cliente,
+               COUNT(a.id) as cantidad,
+               COALESCE(SUM(a.duracion_min), 0) as minutos
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+        GROUP BY cliente
+        ORDER BY minutos DESC
+        LIMIT 10
+    '''
+    cliente_stats = cursor.execute(cliente_query, params).fetchall()
     
     # 4. Desglose por colaborador (calcula duración real desde actividades y evita inflación cartesiana)
     colab_query = f'''
@@ -2063,6 +2079,23 @@ def get_dashboard_stats():
 
     planificadas_min = sum(r['minutos'] for r in tipo_stats if 'planificad' in (r['tipo'] or '').lower()) if tipo_stats else 0
     ratio_planificado = round((planificadas_min / tot_min) * 100) if tot_min > 0 else 0
+
+    # 9. Historial reciente de bitácoras del usuario (para tabla individual de operador)
+    jornadas_usuario = []
+    if user_id:
+        jornadas_query = f'''
+            SELECT b.id, b.fecha, b.tiempo_total_min, b.necesita_apoyo, b.apoyo_detalle,
+                   COUNT(a.id) as total_actividades,
+                   SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
+            FROM bitacoras b
+            LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+            LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+            {base_filter}
+            GROUP BY b.id
+            ORDER BY b.fecha DESC
+            LIMIT 15
+        '''
+        jornadas_usuario = cursor.execute(jornadas_query, params).fetchall()
     
     conn.close()
     
@@ -2070,10 +2103,12 @@ def get_dashboard_stats():
         "resumen": dict(totales) if totales else {},
         "por_estado": [dict(r) for r in act_stats],
         "por_tipo": [dict(r) for r in tipo_stats],
+        "por_cliente": [dict(r) for r in cliente_stats],
         "por_colaborador": [dict(r) for r in colab_stats],
         "alertas_apoyo": [dict(r) for r in alertas_apoyo],
         "tendencia_diaria": [dict(r) for r in tendencia_diaria],
         "distribucion_horaria": [dict(r) for r in distribucion_horaria],
+        "jornadas_recientes": [dict(r) for r in jornadas_usuario],
         "kpis_adicionales": {
             "promedio_minutos_jornada": promedio_jornada,
             "eficiencia": eficiencia,
