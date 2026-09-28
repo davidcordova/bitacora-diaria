@@ -5,12 +5,21 @@ import sqlite3
 import threading
 import time
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
 
 app = Flask(__name__)
+
+@app.teardown_appcontext
+def close_open_connections(exception=None):
+    conns = getattr(g, '_open_conns', [])
+    for conn in conns:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -1007,12 +1016,18 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
         ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val, now_peru, now_peru))
         today_b_id = cursor.lastrowid
 
-    # IDs de tareas que ya fueron arrastradas o vinculadas a hoy
+    # IDs y descripciones de tareas que ya existen hoy
     existing_parent_ids = set(
         r[0] for r in cursor.execute(
             "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)",
             (today_b_id,)
         ).fetchall()
+    )
+    existing_descriptions = set(
+        r[0].strip().lower() for r in cursor.execute(
+            "SELECT descripcion FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+            (today_b_id,)
+        ).fetchall() if r[0]
     )
     
     current_order = cursor.execute(
@@ -1021,37 +1036,48 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
     ).fetchone()[0] + 1
     
     rolled_count = 0
+    seen_in_batch = set()
     for task in open_tasks:
-        if task['id'] not in existing_parent_ids:
-            orig_created = task['created_at'] or get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
-            orig_updated = task['updated_at'] or orig_created
-            ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
-            sw_val = task['shared_with'] if ('shared_with' in task.keys() and task['shared_with']) else '[]'
-            sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
-            cursor.execute('''
-                INSERT INTO actividades (
-                    bitacora_id, orden, hora_inicio, duracion_min,
-                    tipo_trabajo, descripcion, para_cliente, estado,
-                    parent_task_id, tipo_vinculo, created_at, updated_at, evidencias,
-                    shared_with, shared_uuid, is_deleted
-                ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0)
-            ''', (
-                today_b_id,
-                current_order,
-                task['tipo_trabajo'],
-                task['descripcion'],
-                task['para_cliente'],
-                task['estado'],
-                task['id'],
-                orig_created,
-                orig_updated,
-                ev_val,
-                sw_val,
-                sw_uuid
-            ))
-            existing_parent_ids.add(task['id'])
-            current_order += 1
-            rolled_count += 1
+        desc_clean = (task['descripcion'] or '').strip().lower()
+        if not desc_clean:
+            continue
+        if task['id'] in existing_parent_ids:
+            continue
+        if desc_clean in existing_descriptions or desc_clean in seen_in_batch:
+            continue
+
+        seen_in_batch.add(desc_clean)
+        existing_descriptions.add(desc_clean)
+        
+        orig_created = task['created_at'] or get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
+        orig_updated = task['updated_at'] or orig_created
+        ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
+        sw_val = task['shared_with'] if ('shared_with' in task.keys() and task['shared_with']) else '[]'
+        sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
+        cursor.execute('''
+            INSERT INTO actividades (
+                bitacora_id, orden, hora_inicio, duracion_min,
+                tipo_trabajo, descripcion, para_cliente, estado,
+                parent_task_id, tipo_vinculo, created_at, updated_at, evidencias,
+                shared_with, shared_uuid, is_deleted
+            ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0)
+        ''', (
+            today_b_id,
+            current_order,
+            task['tipo_trabajo'],
+            task['descripcion'],
+            task['para_cliente'],
+            task['estado'],
+            task['id'],
+            orig_created,
+            orig_updated,
+            ev_val,
+            sw_val,
+            sw_uuid
+        ))
+        existing_parent_ids.add(task['id'])
+        current_order += 1
+        rolled_count += 1
             
     return rolled_count
 
@@ -1745,86 +1771,68 @@ def get_papelera():
         return jsonify({}), 200
     
     conn = get_db()
-    cursor = conn.cursor()
-    
-    # Auto-purga de actividades con más de 15 días en papelera
-    cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < datetime('now', '-15 days')")
-    
-    # Auto-purga de duplicados en papelera generados accidentalmente por ediciones previas
-    cursor.execute('''
-        DELETE FROM actividades 
-        WHERE is_deleted = 1 
-          AND id IN (
-              SELECT a_del.id
-              FROM actividades a_del
-              JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
-                  AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
-                  AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
-              WHERE a_del.is_deleted = 1
-          )
-    ''')
-    conn.commit()
-    
-    user_id = request.args.get('user_id')
-    requesting_user_id = request.args.get('requesting_user_id')
-    
-    query = '''
-        SELECT a.*, b.fecha as bitacora_fecha, b.colaborador as bitacora_colaborador, b.user_id as bitacora_user_id,
-               u.team_id, t.nombre as team_name
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
-        LEFT JOIN teams t ON u.team_id = t.id
-        WHERE a.is_deleted = 1
-    '''
-    params = []
-    
-    if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
-        if req_u:
-            if req_u['role'] in ('analista', 'operador'):
-                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
-                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-            # Admin y líderes pueden supervisar la papelera del equipo
-    elif user_id:
-        query += " AND (b.user_id = ? OR u.id = ?)"
-        params.extend([user_id, user_id])
+    try:
+        cursor = conn.cursor()
+        user_id = request.args.get('user_id')
+        requesting_user_id = request.args.get('requesting_user_id')
         
-    query += " ORDER BY a.deleted_at DESC, a.id DESC"
-    deleted_rows = cursor.execute(query, params).fetchall()
-    users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    
-    items = []
-    now_utc = datetime.utcnow()
+        query = '''
+            SELECT a.*, b.fecha as bitacora_fecha, b.colaborador as bitacora_colaborador, b.user_id as bitacora_user_id,
+                   u.team_id, t.nombre as team_name
+            FROM actividades a
+            JOIN bitacoras b ON a.bitacora_id = b.id
+            LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+            LEFT JOIN teams t ON u.team_id = t.id
+            WHERE a.is_deleted = 1
+        '''
+        params = []
+        
+        if requesting_user_id:
+            req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+            if req_u:
+                if req_u['role'] in ('analista', 'operador'):
+                    query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                    params.extend([req_u['id'], req_u['full_name'], req_u['username']])
+                # Admin y líderes pueden supervisar la papelera del equipo
+        elif user_id:
+            query += " AND (b.user_id = ? OR u.id = ?)"
+            params.extend([user_id, user_id])
+            
+        query += " ORDER BY a.deleted_at DESC, a.id DESC"
+        deleted_rows = cursor.execute(query, params).fetchall()
+        users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
+        
+        items = []
 
-    for row in deleted_rows:
-        item = format_actividad_dict(row, users_map)
-        deleted_at_str = item.get('deleted_at')
-        dias_restantes = 15
-        expira_en = None
-        
-        if deleted_at_str:
-            try:
-                del_dt = datetime.strptime(deleted_at_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
-                now_p = get_peru_now()
-                now_naive = datetime(now_p.year, now_p.month, now_p.day, now_p.hour, now_p.minute, now_p.second)
-                dias_transcurridos = max(0, (now_naive - del_dt).days)
-                dias_restantes = max(0, min(15, 15 - dias_transcurridos))
-                expira_dt = del_dt + timedelta(days=15)
-                expira_en = expira_dt.strftime('%Y-%m-%d')
-            except Exception:
-                dias_restantes = 15
-                
-        item['dias_restantes'] = dias_restantes
-        item['expira_en'] = expira_en
-        items.append(item)
-        
-    conn.close()
-    return jsonify({
-        "success": True,
-        "items": items,
-        "total": len(items)
-    })
+        for row in deleted_rows:
+            item = format_actividad_dict(row, users_map)
+            deleted_at_str = item.get('deleted_at')
+            dias_restantes = 15
+            expira_en = None
+            
+            if deleted_at_str:
+                try:
+                    del_dt = datetime.strptime(deleted_at_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
+                    now_p = get_peru_now()
+                    now_naive = datetime(now_p.year, now_p.month, now_p.day, now_p.hour, now_p.minute, now_p.second)
+                    dias_transcurridos = max(0, (now_naive - del_dt).days)
+                    dias_restantes = max(0, min(15, 15 - dias_transcurridos))
+                    expira_dt = del_dt + timedelta(days=15)
+                    expira_en = expira_dt.strftime('%Y-%m-%d')
+                except Exception:
+                    dias_restantes = 15
+                    
+            item['dias_restantes'] = dias_restantes
+            item['expira_en'] = expira_en
+            items.append(item)
+            
+        return jsonify({
+            "success": True,
+            "items": items,
+            "total": len(items)
+        })
+    finally:
+        conn.close()
 
 @app.route('/api/papelera/restaurar/<int:act_id>', methods=['POST', 'OPTIONS'])
 def restaurar_actividad(act_id):
@@ -1933,8 +1941,18 @@ def vaciar_papelera():
     cursor = conn.cursor()
     
     if role == 'admin' and not user_id:
+        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1)")
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
     elif user_id:
+        cursor.execute('''
+            UPDATE actividades SET parent_task_id = NULL 
+            WHERE parent_task_id IN (
+                SELECT id FROM actividades 
+                WHERE is_deleted = 1 AND bitacora_id IN (
+                    SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
+                )
+            )
+        ''', (user_id, user_id))
         cursor.execute('''
             DELETE FROM actividades 
             WHERE is_deleted = 1 AND bitacora_id IN (
@@ -1942,6 +1960,7 @@ def vaciar_papelera():
             )
         ''', (user_id, user_id))
     else:
+        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1)")
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
         
     conn.commit()
@@ -2257,6 +2276,7 @@ def execute_daily_rollover(today_str=None):
     try:
         # 0. Auto-purga permanente de actividades eliminadas con más de 15 días de antigüedad según horario de Perú
         purge_threshold = (get_peru_now() - timedelta(days=15)).strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1 AND deleted_at < ?)", (purge_threshold,))
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < ?", (purge_threshold,))
 
         # 1. Auto-cerrar bitácoras de días pasados (< today_str) que no estén formalmente cerradas

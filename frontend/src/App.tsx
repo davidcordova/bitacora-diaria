@@ -459,7 +459,7 @@ export function App() {
       const [uList, tList, hList, sysSettings] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
-        api.getBitacoras(undefined, undefined, undefined, activeUser.id, activeUser.id),
+        api.getBitacoras(undefined, undefined, undefined, activeUser.id),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
       ]);
       setUsers(uList);
@@ -676,21 +676,17 @@ export function App() {
     const activeUid = currentUser?.id || bitacora.user_id;
     const activeName = currentUser?.full_name || bitacora.colaborador;
 
-    // 1. Guardar la bitácora del día actual de forma segura antes de cambiar de fecha
+    // 1. Guardar la bitácora del día actual de forma segura antes de cambiar de fecha (inmediato en local, no bloquea UI)
     if (bitacora.fecha && activeName) {
       const currentDraftKey = getDraftKey(activeUid, bitacora.fecha);
       localStorage.setItem(currentDraftKey, JSON.stringify(bitacora));
 
       if (bitacora.actividades.length > 0 || bitacora.pendientes || bitacora.prioridad_siguiente) {
-        try {
-          await api.saveBitacora({
-            ...bitacora,
-            colaborador: activeName,
-            user_id: activeUid,
-          });
-        } catch (e) {
-          console.warn('Error saving before date switch', e);
-        }
+        api.saveBitacora({
+          ...bitacora,
+          colaborador: activeName,
+          user_id: activeUid,
+        }).catch((e) => console.warn('Background save before date switch:', e));
       }
     }
 
@@ -778,9 +774,30 @@ export function App() {
     } finally {
       setTimeout(() => {
         isSwitchingDateRef.current = false;
-      }, 300);
+      }, 50);
     }
   };
+
+  // Auto-detectar cambio de día al volver a la pestaña (evita registrar tareas en el día de ayer por error)
+  useEffect(() => {
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible' && currentUser?.id) {
+        const todayStr = getTodayLocalDateStr();
+        if (bitacora.fecha && bitacora.fecha < todayStr) {
+          if (bitacora.actividades.length === 0 || bitacora.estado === 'cerrada' || bitacora.estado === 'cerrada_sistema') {
+            console.log(`[SmartSync] Cambio de jornada detectado (activa: ${bitacora.fecha}, hoy: ${todayStr}). Cambiando a hoy.`);
+            handleDateChange(todayStr);
+          }
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+    window.addEventListener('focus', handleFocusOrVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      window.removeEventListener('focus', handleFocusOrVisible);
+    };
+  }, [currentUser?.id, bitacora.fecha, bitacora.actividades.length, bitacora.estado]);
 
   const reloadActiveBitacora = async () => {
     refreshPapeleraCount();

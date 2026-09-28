@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   ListChecks,
   Plus,
@@ -66,6 +66,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   lastSavedTime = null,
   onForceSyncCloud,
 }) => {
+  const dateInputRef = useRef<HTMLInputElement>(null);
   // Modal states
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -278,33 +279,51 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 </button>
 
                 <div className="relative flex items-center">
-                  <label className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-50/80 dark:bg-[#141522] hover:bg-slate-100 dark:hover:bg-[#1E2030] rounded-full cursor-pointer transition-colors">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        dateInputRef.current?.showPicker();
+                      } catch (e) {
+                        dateInputRef.current?.focus();
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-50/80 dark:bg-[#141522] hover:bg-slate-100 dark:hover:bg-[#1E2030] rounded-full cursor-pointer transition-colors"
+                    title="Haz clic para seleccionar fecha en el calendario"
+                  >
                     <Calendar className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
                     <span>{formatHeaderDate(fecha)}</span>
-                    {isToday(fecha) ? (
+                    {isToday(fecha) && (
                       <span className="text-[9px] bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] font-extrabold px-2 py-0.5 rounded-full border border-[#00F0FF]/30">
                         Hoy
                       </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          goToToday();
-                        }}
-                        className="text-[10px] font-bold text-[#00A3BF] dark:text-[#00F0FF] hover:underline ml-0.5"
-                      >
-                        Ir a Hoy
-                      </button>
                     )}
-                    <input
-                      type="date"
-                      value={fecha}
-                      onChange={(e) => onDateChange(e.target.value)}
-                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      title="Haz clic para seleccionar otra fecha en el calendario"
-                    />
-                  </label>
+                  </button>
+
+                  {!isToday(fecha) && (
+                    <button
+                      type="button"
+                      onClick={goToToday}
+                      className="text-[10px] font-bold text-[#00A3BF] dark:text-[#00F0FF] hover:underline px-2 py-0.5 cursor-pointer ml-0.5"
+                      title="Volver a la fecha de hoy"
+                    >
+                      Ir a Hoy
+                    </button>
+                  )}
+
+                  <input
+                    ref={dateInputRef}
+                    type="date"
+                    value={fecha}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        onDateChange(e.target.value);
+                      }
+                    }}
+                    className="sr-only"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                  />
                 </div>
 
                 <button
