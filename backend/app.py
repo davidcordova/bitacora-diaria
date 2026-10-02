@@ -4,10 +4,21 @@ import base64
 import sqlite3
 import threading
 import time
+import io
+import csv
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_from_directory, g
+from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
+try:
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    _HAS_OPENPYXL = True
+except ImportError:
+    openpyxl = None
+    _HAS_OPENPYXL = False
+    print("[Excel WARNING] 'openpyxl' no está instalado. Ejecute 'pip install openpyxl' para soporte nativo de hojas de cálculo .xlsx.")
+
 from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 
@@ -3531,6 +3542,760 @@ def api_it_platform_user_reset_password(user_id):
         "new_password": new_password,
         "ultimo_reseteo": now_peru,
         "share_message": share_message
+    }), 200
+
+
+# =========================================================================
+# EXCEL & IMPORTACIÓN MASIVA: CUENTAS DE USUARIOS POR PLATAFORMA
+# =========================================================================
+
+def normalize_excel_header(h):
+    if not h:
+        return ""
+    h = str(h).strip().lower()
+    for char, rep in [("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n"), ("*", ""), (" ", "_"), ("-", "_"), (".", "")]:
+        h = h.replace(char, rep)
+    return h.strip('_')
+
+
+def map_row_to_account_dict(raw_dict):
+    res = {
+        'empresa': '',
+        'marca': '',
+        'plataforma': '',
+        'colaborador_nombre': '',
+        'colaborador_cargo': '',
+        'colaborador_email': '',
+        'colaborador_telefono': '',
+        'usuario_login': '',
+        'password_actual': '',
+        'estado': 'activo',
+        'notas': '',
+    }
+    
+    for key, val in raw_dict.items():
+        k = normalize_excel_header(key)
+        v = str(val).strip() if val is not None else ""
+        if not v or v.lower() == 'none':
+            v = ""
+            
+        if k in ['empresa', 'empresa_nombre', 'company']:
+            res['empresa'] = v
+        elif k in ['marca', 'marca_nombre', 'brand']:
+            res['marca'] = v
+        elif k in ['plataforma', 'platform', 'servicio', 'sistema']:
+            res['plataforma'] = v
+        elif k in ['colaborador', 'colaborador_nombre', 'nombre', 'nombre_colaborador', 'empleado', 'usuario_nombre']:
+            res['colaborador_nombre'] = v
+        elif k in ['cargo', 'colaborador_cargo', 'puesto', 'rol', 'posicion']:
+            res['colaborador_cargo'] = v
+        elif k in ['email', 'email_colaborador', 'correo', 'correo_colaborador', 'colaborador_email', 'mail']:
+            res['colaborador_email'] = v
+        elif k in ['telefono', 'colaborador_telefono', 'celular', 'whatsapp', 'phone']:
+            res['colaborador_telefono'] = v
+        elif k in ['usuario_login', 'usuario', 'login', 'user', 'cuenta', 'username']:
+            res['usuario_login'] = v
+        elif k in ['password', 'password_actual', 'contrasena', 'clave', 'pass', 'clave_acceso']:
+            res['password_actual'] = v
+        elif k in ['estado', 'status']:
+            st = v.lower()
+            if any(x in st for x in ['crear', 'alta', 'pendiente', 'nueva']):
+                res['estado'] = 'por_crear'
+            elif any(x in st for x in ['susp', 'paus', 'inact']):
+                res['estado'] = 'suspendido'
+            elif any(x in st for x in ['baja', 'elim', 'cesad']):
+                res['estado'] = 'baja'
+            else:
+                res['estado'] = 'activo'
+        elif k in ['notas', 'nota', 'observaciones', 'observacion', 'comentarios']:
+            res['notas'] = v
+
+    return res
+
+
+def parse_accounts_from_filestorage(file_storage):
+    filename = file_storage.filename or ''
+    lower_fn = filename.lower()
+    raw_dicts = []
+    
+    if lower_fn.endswith('.csv'):
+        raw_bytes = file_storage.read()
+        decoded = None
+        for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
+            try:
+                decoded = raw_bytes.decode(enc)
+                break
+            except Exception:
+                pass
+        if decoded is None:
+            raise ValueError("No se pudo decodificar el archivo CSV.")
+        
+        sample = decoded[:2048]
+        delimiter = ';' if sample.count(';') > sample.count(',') else ','
+        reader = csv.reader(io.StringIO(decoded), delimiter=delimiter)
+        rows = list(reader)
+        if not rows:
+            return []
+            
+        header_idx = -1
+        for i, r in enumerate(rows[:20]):
+            non_empty = [c for c in r if c is not None and str(c).strip()]
+            if len(non_empty) >= 3:
+                r_str = " ".join([str(c).lower() for c in non_empty])
+                if 'empresa' in r_str and ('colaborador' in r_str or 'usuario' in r_str or 'plataforma' in r_str):
+                    header_idx = i
+                    break
+        if header_idx == -1:
+            for i, r in enumerate(rows[:20]):
+                if len([c for c in r if c is not None and str(c).strip()]) >= 3:
+                    header_idx = i
+                    break
+        if header_idx == -1:
+            header_idx = 0
+                
+        headers = [normalize_excel_header(c) for c in rows[header_idx]]
+        for r in rows[header_idx + 1:]:
+            if not any(str(c).strip() for c in r):
+                continue
+            item = {}
+            for idx, h in enumerate(headers):
+                if h and idx < len(r):
+                    item[h] = str(r[idx]).strip()
+            if item:
+                raw_dicts.append(item)
+    else:
+        if not _HAS_OPENPYXL:
+            raise ValueError("El servidor requiere 'openpyxl' para procesar archivos .xlsx. Por favor suba su archivo en formato .csv delimitado por comas o punto y coma, o ejecute 'pip install openpyxl' en el servidor.")
+        wb = openpyxl.load_workbook(file_storage, data_only=True)
+        ws = None
+        for name in ['Cuentas_Plataforma', 'Cuentas', 'Usuarios', 'Hoja1', 'Sheet1']:
+            if name in wb.sheetnames:
+                ws = wb[name]
+                break
+        if ws is None:
+            ws = wb.active
+            
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return []
+            
+        header_idx = -1
+        for i, r in enumerate(rows[:20]):
+            non_empty = [c for c in r if c is not None and str(c).strip()]
+            if len(non_empty) >= 3:
+                r_str = " ".join([str(c or '').lower() for c in non_empty])
+                if 'empresa' in r_str and ('colaborador' in r_str or 'usuario' in r_str or 'plataforma' in r_str):
+                    header_idx = i
+                    break
+        if header_idx == -1:
+            for i, r in enumerate(rows[:20]):
+                if len([c for c in r if c is not None and str(c).strip()]) >= 3:
+                    header_idx = i
+                    break
+        if header_idx == -1:
+            header_idx = 0
+                
+        headers = [normalize_excel_header(c) for c in rows[header_idx]]
+        for r in rows[header_idx + 1:]:
+            if not any(c is not None and str(c).strip() for c in r):
+                continue
+            item = {}
+            for idx, h in enumerate(headers):
+                if h and idx < len(r):
+                    val = r[idx]
+                    item[h] = str(val).strip() if val is not None else ""
+            if item:
+                raw_dicts.append(item)
+                
+    mapped = []
+    for r in raw_dicts:
+        acc = map_row_to_account_dict(r)
+        if not acc['empresa'] and not acc['plataforma'] and not acc['colaborador_nombre'] and not acc['usuario_login']:
+            continue
+        mapped.append(acc)
+    return mapped
+
+
+@app.route('/api/it-vault/platform-users/template', methods=['GET'])
+def api_it_platform_users_template():
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre FROM it_empresas ORDER BY nombre ASC")
+    db_empresas = [r[0] for r in cursor.fetchall()]
+    cursor.execute("SELECT nombre, tipo_servicio FROM it_plataformas ORDER BY nombre ASC")
+    db_plataformas = cursor.fetchall()
+    conn.close()
+
+    if not _HAS_OPENPYXL:
+        output = io.StringIO()
+        output.write('\ufeff')
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(["Empresa *", "Marca", "Plataforma *", "Colaborador *", "Cargo", "Email_Colaborador", "Telefono", "Usuario_Login *", "Password *", "Estado", "Notas"])
+        def_emp = db_empresas[0] if db_empresas else "Marketing Alterno"
+        writer.writerow([def_emp, def_emp, "Zimbra Mail", "Juan Carlos Pérez Flores", "Diseñador Gráfico", "juan.perez@alterno.pe", "+51 987654321", "jperez@alterno.pe", "Temp#Pass2026!", "activo", "Buzón de correo"])
+        writer.writerow([def_emp, def_emp, "Odoo ERP", "María Elena Gómez Silva", "Analista Contable", "mgomez@alterno.pe", "+51 912345678", "mgomez", "Odoo#Mkt2026!", "activo", "Módulos de compras"])
+        buf = io.BytesIO(output.getvalue().encode('utf-8-sig'))
+        return send_file(buf, mimetype='text/csv', as_attachment=True, download_name='Plantilla_Cuentas_Plataforma.csv')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cuentas_Plataforma"
+    ws.views.sheetView[0].showGridLines = True
+
+    # 1. Título y Banner
+    ws.merge_cells('A1:K1')
+    ws['A1'] = "SISTEMAS TI - PLANTILLA DE IMPORTACIÓN MASIVA DE CUENTAS POR PLATAFORMA"
+    ws['A1'].font = Font(name='Calibri', size=13, bold=True, color='FFFFFF')
+    ws['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 32
+
+    ws.merge_cells('A2:K2')
+    ws['A2'] = "Instrucciones: Complete los datos a partir de la fila 4. Las columnas con (*) son obligatorias. Las contraseñas serán cifradas automáticamente con AES-256."
+    ws['A2'].font = Font(name='Calibri', size=10, italic=True, color='475569')
+    ws['A2'].fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+    ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
+    ws.row_dimensions[2].height = 24
+
+    headers = [
+        ("Empresa *", 20),
+        ("Marca", 18),
+        ("Plataforma *", 24),
+        ("Colaborador *", 28),
+        ("Cargo", 24),
+        ("Email_Colaborador", 26),
+        ("Telefono", 18),
+        ("Usuario_Login *", 26),
+        ("Password *", 20),
+        ("Estado", 16),
+        ("Notas", 32)
+    ]
+
+    header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+
+    ws.row_dimensions[3].height = 28
+    for col_idx, (h_title, col_width) in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=h_title)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = thin_border
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = col_width
+
+    # Filas de Ejemplo
+    def_emp = db_empresas[0] if db_empresas else "Marketing Alterno"
+    examples = [
+        (def_emp, def_emp, "Zimbra Mail", "Juan Carlos Pérez Flores", "Diseñador Gráfico Senior", "juan.perez@alterno.pe", "+51 987654321", "jperez@alterno.pe", "Temp#Pass2026!", "activo", "Buzón de correo corporativo"),
+        (def_emp, def_emp, "Odoo ERP", "María Elena Gómez Silva", "Analista Contable", "mgomez@alterno.pe", "+51 912345678", "mgomez", "Odoo#Mkt2026!", "activo", "Acceso a módulos de compras y facturación"),
+        (def_emp, "", "Office 365", "Carlos Alberto Mendoza", "Asistente de Operaciones", "cmendoza@alterno.pe", "", "cmendoza@alterno.pe", "Init#2026M365", "por_crear", "Cuenta en proceso de alta técnica"),
+    ]
+
+    example_fill = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
+    for row_idx, row_data in enumerate(examples, start=4):
+        ws.row_dimensions[row_idx].height = 22
+        for col_idx, val in enumerate(row_data, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = Font(name='Calibri', size=10, color='1E293B')
+            cell.fill = example_fill
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal='center' if col_idx in [1, 2, 7, 10] else 'left',
+                vertical='center'
+            )
+
+    # Hoja 2: Catálogos y Guía
+    ws2 = wb.create_sheet(title="Catalogos_Y_Guia")
+    ws2.views.sheetView[0].showGridLines = True
+    ws2.column_dimensions['A'].width = 28
+    ws2.column_dimensions['B'].width = 36
+    ws2.column_dimensions['C'].width = 36
+
+    ws2['A1'] = "CATÁLOGOS ACTUALES & GUÍA DE CARGA"
+    ws2['A1'].font = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
+    ws2['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+    ws2.row_dimensions[1].height = 28
+
+    ws2['A3'] = "EMPRESAS EN BASE DE DATOS"
+    ws2['A3'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+    for idx, emp_name in enumerate(db_empresas, start=4):
+        ws2[f'A{idx}'] = emp_name
+
+    plat_start = len(db_empresas) + 5
+    ws2[f'A{plat_start}'] = "PLATAFORMAS REGISTRADAS"
+    ws2[f'B{plat_start}'] = "TIPO DE SERVICIO"
+    ws2[f'A{plat_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+    ws2[f'B{plat_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+
+    for idx, p_row in enumerate(db_plataformas, start=plat_start + 1):
+        ws2[f'A{idx}'] = p_row[0]
+        ws2[f'B{idx}'] = p_row[1]
+
+    est_start = plat_start + len(db_plataformas) + 3
+    ws2[f'A{est_start}'] = "ESTADOS VÁLIDOS"
+    ws2[f'B{est_start}'] = "DESCRIPCIÓN"
+    ws2[f'A{est_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+    ws2[f'B{est_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
+
+    valid_estados = [
+        ("activo", "Cuenta operativa y en uso activo por el colaborador."),
+        ("por_crear", "Cuenta planificada o pendiente de aprovisionamiento en la plataforma."),
+        ("suspendido", "Cuenta bloqueada o pausada por vacaciones o licencia temporal."),
+        ("baja", "Cuenta deshabilitada por cese o desvinculación definitiva.")
+    ]
+    for idx, (st_name, st_desc) in enumerate(valid_estados, start=est_start + 1):
+        ws2[f'A{idx}'] = st_name
+        ws2[f'B{idx}'] = st_desc
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='Plantilla_Cuentas_Plataforma.xlsx'
+    )
+
+
+@app.route('/api/it-vault/platform-users/export', methods=['GET'])
+def api_it_platform_users_export():
+    empresa_id = request.args.get('empresa_id', type=int)
+    marca_id = request.args.get('marca_id', type=int)
+    plataforma = request.args.get('plataforma', '').strip()
+    search = request.args.get('search', '').strip().lower()
+    estado = request.args.get('estado', '').strip()
+    include_passwords = request.args.get('include_passwords', '0') == '1'
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    query = '''
+        SELECT pu.*, 
+               e.nombre as empresa_nombre,
+               m.nombre as marca_nombre,
+               u.full_name as created_by_name
+        FROM it_platform_users pu
+        JOIN it_empresas e ON pu.empresa_id = e.id
+        LEFT JOIN it_marcas m ON pu.marca_id = m.id
+        LEFT JOIN users u ON pu.created_by = u.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if empresa_id:
+        query += " AND pu.empresa_id = ?"
+        params.append(empresa_id)
+
+    if marca_id:
+        query += " AND pu.marca_id = ?"
+        params.append(marca_id)
+
+    if plataforma and plataforma != 'todas':
+        query += " AND pu.plataforma = ?"
+        params.append(plataforma)
+
+    if estado and estado != 'todos':
+        query += " AND pu.estado = ?"
+        params.append(estado)
+
+    if search:
+        query += " AND (LOWER(pu.colaborador_nombre) LIKE ? OR LOWER(pu.usuario_login) LIKE ? OR LOWER(COALESCE(pu.colaborador_email, '')) LIKE ? OR LOWER(COALESCE(pu.colaborador_cargo, '')) LIKE ?)"
+        s_param = f"%{search}%"
+        params.extend([s_param, s_param, s_param, s_param])
+
+    query += " ORDER BY e.nombre ASC, pu.plataforma ASC, pu.colaborador_nombre ASC"
+    cursor.execute(query, params)
+    raw_users = cursor.fetchall()
+    conn.close()
+
+    if not _HAS_OPENPYXL:
+        output = io.StringIO()
+        output.write('\ufeff')
+        writer = csv.writer(output, delimiter=';')
+        writer.writerow(["ID", "Empresa", "Marca", "Plataforma", "Colaborador", "Cargo", "Email", "Teléfono", "Usuario Login", "Contraseña", "Estado", "Notas"])
+        for r in raw_users:
+            pw_val = "••••••••"
+            if include_passwords and r['password_actual']:
+                try:
+                    pw_val = decrypt_vault_secret(r['password_actual'])
+                except Exception:
+                    pw_val = "••••••••"
+            writer.writerow([r['id'], r['empresa_nombre'] or '', r['marca_nombre'] or '', r['plataforma'] or '', r['colaborador_nombre'] or '', r['colaborador_cargo'] or '', r['colaborador_email'] or '', r['colaborador_telefono'] or '', r['usuario_login'] or '', pw_val, r['estado'] or 'activo', r['notas'] or ''])
+        buf = io.BytesIO(output.getvalue().encode('utf-8-sig'))
+        return send_file(buf, mimetype='text/csv', as_attachment=True, download_name='Cuentas_Plataformas_Export.csv')
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cuentas_Export"
+    ws.views.sheetView[0].showGridLines = True
+
+    # Banner
+    ws.merge_cells('A1:L1')
+    ws['A1'] = "DIRECTORIO DE CUENTAS POR PLATAFORMA - SISTEMAS / TI"
+    ws['A1'].font = Font(name='Calibri', size=13, bold=True, color='FFFFFF')
+    ws['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 32
+
+    now_str = get_peru_now_str()
+    ws.merge_cells('A2:L2')
+    ws['A2'] = f"Reporte generado el {now_str} | Total de registros exportados: {len(raw_users)}"
+    ws['A2'].font = Font(name='Calibri', size=10, italic=True, color='475569')
+    ws['A2'].fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+    ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
+    ws.row_dimensions[2].height = 24
+
+    cols = [
+        ("ID", 8),
+        ("Empresa", 20),
+        ("Marca", 16),
+        ("Plataforma", 22),
+        ("Colaborador", 28),
+        ("Cargo", 22),
+        ("Email", 26),
+        ("Teléfono", 16),
+        ("Usuario Login", 24),
+        ("Contraseña", 18),
+        ("Estado", 14),
+        ("Notas", 30)
+    ]
+
+    header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
+    thin_border = Border(
+        left=Side(style='thin', color='CBD5E1'),
+        right=Side(style='thin', color='CBD5E1'),
+        top=Side(style='thin', color='CBD5E1'),
+        bottom=Side(style='thin', color='CBD5E1')
+    )
+
+    ws.row_dimensions[3].height = 26
+    for col_idx, (col_name, col_width) in enumerate(cols, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=col_name)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = thin_border
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = col_width
+
+    for row_idx, r in enumerate(raw_users, start=4):
+        ws.row_dimensions[row_idx].height = 20
+        pw_val = "••••••••"
+        if include_passwords and r['password_actual']:
+            try:
+                pw_val = decrypt_vault_secret(r['password_actual'])
+            except Exception:
+                pw_val = "••••••••"
+
+        row_vals = [
+            r['id'],
+            r['empresa_nombre'] or '',
+            r['marca_nombre'] or '',
+            r['plataforma'] or '',
+            r['colaborador_nombre'] or '',
+            r['colaborador_cargo'] or '',
+            r['colaborador_email'] or '',
+            r['colaborador_telefono'] or '',
+            r['usuario_login'] or '',
+            pw_val,
+            r['estado'] or 'activo',
+            r['notas'] or ''
+        ]
+        for col_idx, val in enumerate(row_vals, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            cell.font = Font(name='Calibri', size=10, color='1E293B')
+            cell.border = thin_border
+            cell.alignment = Alignment(
+                horizontal='center' if col_idx in [1, 8, 10, 11] else 'left',
+                vertical='center'
+            )
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(
+        buf,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='Cuentas_Plataformas_Export.xlsx'
+    )
+
+
+@app.route('/api/it-vault/platform-users/import/preview', methods=['POST', 'OPTIONS'])
+def api_it_platform_users_import_preview():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No se envió ningún archivo para previsualización"}), 400
+
+    uploaded_file = request.files['file']
+    if not uploaded_file.filename:
+        return jsonify({"error": "Archivo no seleccionado"}), 400
+
+    try:
+        parsed_rows = parse_accounts_from_filestorage(uploaded_file)
+    except Exception as e:
+        return jsonify({"error": f"Error al procesar el archivo: {str(e)}"}), 400
+
+    if not parsed_rows:
+        return jsonify({"error": "No se encontraron filas con datos en el archivo subido"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Pre-cargar empresas y cuentas para verificación rápida
+    cursor.execute("SELECT id, LOWER(nombre) FROM it_empresas")
+    existing_empresas = {r[1]: r[0] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT empresa_id, LOWER(plataforma), LOWER(usuario_login), id, colaborador_nombre FROM it_platform_users")
+    existing_accounts = {}
+    for r in cursor.fetchall():
+        key = (r[0], r[1].strip(), r[2].strip())
+        existing_accounts[key] = {"id": r[3], "colaborador_nombre": r[4]}
+
+    conn.close()
+
+    preview_rows = []
+    ready_count = 0
+    update_count = 0
+    invalid_count = 0
+
+    for idx, r in enumerate(parsed_rows, start=1):
+        errs = []
+        if not r.get('empresa'):
+            errs.append("Empresa es obligatoria")
+        if not r.get('plataforma'):
+            errs.append("Plataforma es obligatoria")
+        if not r.get('colaborador_nombre'):
+            errs.append("Colaborador es obligatorio")
+        if not r.get('usuario_login'):
+            errs.append("Usuario Login es obligatorio")
+
+        emp_lower = (r.get('empresa') or '').strip().lower()
+        emp_id = existing_empresas.get(emp_lower)
+
+        status = 'ready'
+        status_message = 'Listo para registrar'
+
+        if errs:
+            status = 'invalid'
+            status_message = "; ".join(errs)
+            invalid_count += 1
+        elif emp_id:
+            plat_lower = (r.get('plataforma') or '').strip().lower()
+            usr_lower = (r.get('usuario_login') or '').strip().lower()
+            acc_key = (emp_id, plat_lower, usr_lower)
+            if acc_key in existing_accounts:
+                status = 'update'
+                prev_name = existing_accounts[acc_key]['colaborador_nombre']
+                status_message = f'Cuenta existente ({prev_name}). Se actualizarán sus datos.'
+                update_count += 1
+            else:
+                ready_count += 1
+        else:
+            ready_count += 1
+            status_message = f"Empresa '{r.get('empresa')}' será creada automáticamente."
+
+        preview_rows.append({
+            'index': idx,
+            'empresa': r.get('empresa', ''),
+            'marca': r.get('marca', ''),
+            'plataforma': r.get('plataforma', ''),
+            'colaborador_nombre': r.get('colaborador_nombre', ''),
+            'colaborador_cargo': r.get('colaborador_cargo', ''),
+            'colaborador_email': r.get('colaborador_email', ''),
+            'colaborador_telefono': r.get('colaborador_telefono', ''),
+            'usuario_login': r.get('usuario_login', ''),
+            'password_actual': r.get('password_actual', ''),
+            'estado': r.get('estado', 'activo'),
+            'notas': r.get('notas', ''),
+            'status': status,
+            'status_message': status_message,
+        })
+
+    return jsonify({
+        "success": True,
+        "filename": uploaded_file.filename,
+        "total_filas": len(preview_rows),
+        "ready_count": ready_count,
+        "update_count": update_count,
+        "invalid_count": invalid_count,
+        "rows": preview_rows
+    }), 200
+
+
+@app.route('/api/it-vault/platform-users/import', methods=['POST', 'OPTIONS'])
+def api_it_platform_users_import():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    modo = request.form.get('modo', 'crear_o_actualizar')
+    created_by = request.form.get('created_by', type=int) or 1
+
+    # También soporta recibir JSON directamente si el frontend confirmó el preview
+    payload_rows = []
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        payload_rows = data.get('rows', [])
+        modo = data.get('modo', modo)
+        created_by = data.get('created_by', created_by)
+    elif 'file' in request.files:
+        uploaded_file = request.files['file']
+        if not uploaded_file.filename:
+            return jsonify({"error": "Archivo no seleccionado"}), 400
+        try:
+            payload_rows = parse_accounts_from_filestorage(uploaded_file)
+        except Exception as e:
+            return jsonify({"error": f"Error al leer el archivo: {str(e)}"}), 400
+
+    if not payload_rows:
+        return jsonify({"error": "No se proporcionaron filas para importar"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    now_peru = get_peru_now()
+
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    errors = []
+
+    # Cache de empresas, marcas y plataformas
+    cursor.execute("SELECT id, LOWER(nombre) FROM it_empresas")
+    empresas_map = {r[1]: r[0] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT id, empresa_id, LOWER(nombre) FROM it_marcas")
+    marcas_map = {(r[1], r[2]): r[0] for r in cursor.fetchall()}
+
+    cursor.execute("SELECT id, LOWER(nombre) FROM it_plataformas")
+    plataformas_map = {r[1]: r[0] for r in cursor.fetchall()}
+
+    for idx, r in enumerate(payload_rows, start=1):
+        try:
+            emp_name = (r.get('empresa') or '').strip()
+            plat_name = (r.get('plataforma') or '').strip()
+            colab_name = (r.get('colaborador_nombre') or '').strip()
+            usr_login = (r.get('usuario_login') or '').strip()
+
+            if not emp_name or not plat_name or not colab_name or not usr_login:
+                errors.append(f"Fila #{idx}: Faltan campos obligatorios (Empresa, Plataforma, Colaborador o Usuario).")
+                continue
+
+            # 1. Resolver o Crear Empresa
+            emp_lower = emp_name.lower()
+            if emp_lower in empresas_map:
+                empresa_id = empresas_map[emp_lower]
+            else:
+                cursor.execute("INSERT INTO it_empresas (nombre, color, created_at) VALUES (?, '#00F0FF', ?)", (emp_name, now_peru))
+                empresa_id = cursor.lastrowid
+                empresas_map[emp_lower] = empresa_id
+
+            # 2. Resolver o Crear Marca si viene
+            marca_name = (r.get('marca') or '').strip()
+            marca_id = None
+            if marca_name:
+                m_key = (empresa_id, marca_name.lower())
+                if m_key in marcas_map:
+                    marca_id = marcas_map[m_key]
+                else:
+                    cursor.execute("INSERT INTO it_marcas (empresa_id, nombre, created_at) VALUES (?, ?, ?)", (empresa_id, marca_name, now_peru))
+                    marca_id = cursor.lastrowid
+                    marcas_map[m_key] = marca_id
+
+            # 3. Registrar plataforma en catálogo si no existe
+            plat_lower = plat_name.lower()
+            if plat_lower not in plataformas_map:
+                cursor.execute("INSERT INTO it_plataformas (nombre, tipo_servicio, color, created_at) VALUES (?, 'General', '#3B82F6', ?)", (plat_name, now_peru))
+                plataformas_map[plat_lower] = cursor.lastrowid
+
+            # 4. Resolver contraseña
+            raw_password = (r.get('password_actual') or '').strip()
+            if not raw_password:
+                # Generar contraseña temporal segura si no vino en el Excel
+                import secrets
+                import string
+                chars = string.ascii_letters + string.digits + "!@#$"
+                raw_password = "Temp#" + "".join(secrets.choice(chars) for _ in range(8))
+
+            encrypted_pass = encrypt_vault_secret(raw_password)
+
+            cargo = (r.get('colaborador_cargo') or '').strip()
+            email = (r.get('colaborador_email') or '').strip()
+            telefono = (r.get('colaborador_telefono') or '').strip()
+            estado = r.get('estado') or 'activo'
+            if estado not in ['activo', 'por_crear', 'suspendido', 'baja']:
+                estado = 'activo'
+            notas = (r.get('notas') or '').strip()
+
+            # 5. Verificar existencia por (empresa_id, plataforma, usuario_login)
+            cursor.execute('''
+                SELECT id, password_actual FROM it_platform_users 
+                WHERE empresa_id = ? AND LOWER(plataforma) = LOWER(?) AND LOWER(usuario_login) = LOWER(?)
+            ''', (empresa_id, plat_name, usr_login))
+            existing = cursor.fetchone()
+
+            if existing:
+                existing_id = existing[0]
+                old_pass = existing[1]
+                if modo == 'crear_o_actualizar':
+                    cursor.execute('''
+                        UPDATE it_platform_users SET
+                            marca_id = COALESCE(?, marca_id),
+                            colaborador_nombre = ?,
+                            colaborador_cargo = ?,
+                            colaborador_email = ?,
+                            colaborador_telefono = ?,
+                            password_anterior = CASE WHEN ? != '' THEN password_actual ELSE password_anterior END,
+                            password_actual = CASE WHEN ? != '' THEN ? ELSE password_actual END,
+                            estado = ?,
+                            notas = ?,
+                            updated_by = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                    ''', (marca_id, colab_name, cargo, email, telefono,
+                          raw_password, raw_password, encrypted_pass,
+                          estado, notas, created_by, now_peru, existing_id))
+                    updated_count += 1
+                else:
+                    skipped_count += 1
+            else:
+                cursor.execute('''
+                    INSERT INTO it_platform_users (
+                        empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
+                        colaborador_email, colaborador_telefono, usuario_login, password_actual,
+                        estado, ultimo_reseteo, notas, created_by, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (empresa_id, marca_id, plat_name, colab_name, cargo,
+                      email, telefono, usr_login, encrypted_pass,
+                      estado, now_peru, notas, created_by, now_peru, now_peru))
+                created_count += 1
+
+        except Exception as ex:
+            errors.append(f"Fila #{idx}: {str(ex)}")
+
+    conn.commit()
+    conn.close()
+
+    total_procesados = created_count + updated_count + skipped_count
+
+    return jsonify({
+        "success": True,
+        "total_procesados": total_procesados,
+        "creados": created_count,
+        "actualizados": updated_count,
+        "omitidos": skipped_count,
+        "errores": errors,
+        "mensaje": f"Proceso finalizado: {created_count} creados, {updated_count} actualizados, {skipped_count} omitidos."
     }), 200
 
 

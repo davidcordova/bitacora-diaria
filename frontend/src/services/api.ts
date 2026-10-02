@@ -833,6 +833,108 @@ export const api = {
     return true;
   },
 
+  async downloadItPlatformUsersTemplate(): Promise<void> {
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/template`);
+    if (!res.ok) throw new Error('Error al descargar plantilla de cuentas');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Plantilla_Cuentas_Plataforma.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  async exportItPlatformUsers(params?: { empresa_id?: number; marca_id?: number; plataforma?: string; search?: string; estado?: string; include_passwords?: boolean }): Promise<void> {
+    const q = new URLSearchParams();
+    if (params?.empresa_id) q.set('empresa_id', String(params.empresa_id));
+    if (params?.marca_id) q.set('marca_id', String(params.marca_id));
+    if (params?.plataforma) q.set('plataforma', params.plataforma);
+    if (params?.search) q.set('search', params.search);
+    if (params?.estado) q.set('estado', params.estado);
+    if (params?.include_passwords) q.set('include_passwords', '1');
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/export?${q.toString()}`);
+    if (!res.ok) throw new Error('Error al exportar cuentas de usuarios');
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Cuentas_Plataformas_Export.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  async previewItPlatformUsersImport(file: File): Promise<{
+    success: boolean;
+    filename: string;
+    total_filas: number;
+    ready_count: number;
+    update_count: number;
+    invalid_count: number;
+    rows: any[];
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/import/preview`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al previsualizar archivo' }));
+      throw new Error(err.error || 'Error al previsualizar archivo');
+    }
+    return res.json();
+  },
+
+  async importItPlatformUsers(options: {
+    file?: File;
+    rows?: any[];
+    modo?: 'crear_o_actualizar' | 'solo_nuevos';
+    created_by?: number;
+  }): Promise<{
+    success: boolean;
+    total_procesados: number;
+    creados: number;
+    actualizados: number;
+    omitidos: number;
+    errores: string[];
+    mensaje: string;
+  }> {
+    let res: Response;
+    if (options.rows && options.rows.length > 0) {
+      res = await fetch(`${API_BASE}/it-vault/platform-users/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rows: options.rows,
+          modo: options.modo || 'crear_o_actualizar',
+          created_by: options.created_by,
+        }),
+      });
+    } else if (options.file) {
+      const formData = new FormData();
+      formData.append('file', options.file);
+      formData.append('modo', options.modo || 'crear_o_actualizar');
+      if (options.created_by) formData.append('created_by', String(options.created_by));
+      res = await fetch(`${API_BASE}/it-vault/platform-users/import`, {
+        method: 'POST',
+        body: formData,
+      });
+    } else {
+      throw new Error('Debe proporcionar un archivo o filas para importar');
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al importar cuentas' }));
+      throw new Error(err.error || 'Error al importar cuentas');
+    }
+    return res.json();
+  },
+
   // ================= GESTIÓN DE CATÁLOGOS TI =================
   async getItPlataformas(): Promise<ItPlataforma[]> {
     const res = await fetch(`${API_BASE}/it-vault/plataformas`);

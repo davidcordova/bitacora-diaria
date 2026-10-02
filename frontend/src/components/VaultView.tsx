@@ -43,7 +43,13 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Zap
+  Zap,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  FileUp,
+  FileDown,
+  AlertTriangle
 } from 'lucide-react';
 import {
   QuickLink,
@@ -124,6 +130,25 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   const [resetGeneratedPass, setResetGeneratedPass] = useState<string>('');
   const [resetShareMessage, setResetShareMessage] = useState<string>('');
   const [isResetting, setIsResetting] = useState<boolean>(false);
+
+  // ================= IMPORTACIÓN & EXPORTACIÓN EXCEL =================
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [selectedFileForImport, setSelectedFileForImport] = useState<File | null>(null);
+  const [importPreviewData, setImportPreviewData] = useState<{
+    success: boolean;
+    filename: string;
+    total_filas: number;
+    ready_count: number;
+    update_count: number;
+    invalid_count: number;
+    rows: any[];
+  } | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [importMode, setImportMode] = useState<'crear_o_actualizar' | 'solo_nuevos'>('crear_o_actualizar');
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState<boolean>(false);
+  const [isExportingAccounts, setIsExportingAccounts] = useState<boolean>(false);
+  const [filterPreviewStatus, setFilterPreviewStatus] = useState<'todos' | 'ready' | 'update' | 'invalid'>('todos');
 
   // Formulario de Usuario en Plataforma
   const [userFormData, setUserFormData] = useState({
@@ -775,6 +800,96 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     const cleanPhone = phone.replace(/\D/g, '');
     const encoded = encodeURIComponent(text || '');
     window.open(`https://wa.me/${cleanPhone}?text=${encoded}`, '_blank');
+  };
+
+  // ================= OPERACIONES DE EXCEL (PLANTILLA, EXPORTACIÓN, IMPORTACIÓN) =================
+  const handleDownloadTemplate = async () => {
+    try {
+      setIsDownloadingTemplate(true);
+      await api.downloadItPlatformUsersTemplate();
+      if (onShowToast) onShowToast('Plantilla oficial de Excel descargada exitosamente', 'success');
+    } catch (err: any) {
+      if (onShowToast) onShowToast(err.message || 'Error al descargar plantilla', 'error');
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
+  };
+
+  const handleExportAccounts = async () => {
+    try {
+      setIsExportingAccounts(true);
+      await api.exportItPlatformUsers({
+        empresa_id: selectedUserEmpresaId === 'todas' ? undefined : selectedUserEmpresaId,
+        plataforma: selectedUserPlataforma === 'todas' ? undefined : selectedUserPlataforma,
+        estado: selectedUserEstado === 'todos' ? undefined : selectedUserEstado,
+        search: userSearch,
+        include_passwords: true,
+      });
+      if (onShowToast) onShowToast('Archivo Excel de cuentas generado exitosamente', 'success');
+    } catch (err: any) {
+      if (onShowToast) onShowToast(err.message || 'Error al exportar cuentas', 'error');
+    } finally {
+      setIsExportingAccounts(false);
+    }
+  };
+
+  const processImportFile = async (file: File) => {
+    const validExtensions = ['.xlsx', '.xls', '.csv'];
+    const hasValidExt = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    if (!hasValidExt) {
+      if (onShowToast) onShowToast('Por favor selecciona un archivo Excel (.xlsx, .xls) o CSV (.csv)', 'error');
+      return;
+    }
+
+    setSelectedFileForImport(file);
+    setIsLoadingPreview(true);
+    setImportPreviewData(null);
+    try {
+      const preview = await api.previewItPlatformUsersImport(file);
+      setImportPreviewData(preview);
+      if (onShowToast) {
+        onShowToast(`Archivo analizado: ${preview.total_filas} filas detectadas (${preview.ready_count} nuevas, ${preview.update_count} a actualizar)`, 'info');
+      }
+    } catch (err: any) {
+      if (onShowToast) onShowToast(err.message || 'Error al analizar archivo', 'error');
+      setSelectedFileForImport(null);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await processImportFile(file);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importPreviewData || !importPreviewData.rows?.length) return;
+    const validRows = importPreviewData.rows.filter(r => r.status !== 'invalid');
+    if (validRows.length === 0) {
+      if (onShowToast) onShowToast('No hay filas válidas para importar en este archivo', 'error');
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      const res = await api.importItPlatformUsers({
+        rows: validRows,
+        modo: importMode,
+        created_by: currentUser?.id,
+      });
+      if (onShowToast) onShowToast(res.mensaje || 'Importación procesada con éxito', 'success');
+      setIsImportModalOpen(false);
+      setSelectedFileForImport(null);
+      setImportPreviewData(null);
+      fetchPlatformUsers();
+    } catch (err: any) {
+      if (onShowToast) onShowToast(err.message || 'Error al importar datos', 'error');
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   // ================= OPERACIONES DE CREDENCIALES MAESTRAS IT =================
@@ -1471,14 +1586,59 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 </select>
               </div>
 
-              {/* Botón Nueva Cuenta */}
-              <button
-                onClick={() => handleOpenUserModal()}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs sm:text-sm font-semibold shadow-md shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                <span>+ Registrar Nueva Cuenta</span>
-              </button>
+              {/* Botonera de Acciones Excel & Registro */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Descargar Plantilla */}
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  disabled={isDownloadingTemplate}
+                  title="Descargar plantilla oficial de Excel con ejemplos para rellenar"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="hidden sm:inline">{isDownloadingTemplate ? 'Descargando...' : 'Descargar Plantilla'}</span>
+                  <span className="sm:hidden">Plantilla</span>
+                </button>
+
+                {/* Exportar Cuentas */}
+                <button
+                  type="button"
+                  onClick={handleExportAccounts}
+                  disabled={isExportingAccounts || platformUsers.length === 0}
+                  title="Exportar todas las cuentas mostradas a Excel (.xlsx)"
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700/60 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="hidden sm:inline">{isExportingAccounts ? 'Exportando...' : 'Exportar (.xlsx)'}</span>
+                  <span className="sm:hidden">Exportar</span>
+                </button>
+
+                {/* Importar Excel */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFileForImport(null);
+                    setImportPreviewData(null);
+                    setIsImportModalOpen(true);
+                  }}
+                  title="Carga masiva de cuentas desde un archivo Excel o CSV"
+                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-all cursor-pointer shadow-xs"
+                >
+                  <Upload className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Importar Excel</span>
+                </button>
+
+                {/* Botón Nueva Cuenta */}
+                <button
+                  type="button"
+                  onClick={() => handleOpenUserModal()}
+                  className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Registrar Cuenta</span>
+                </button>
+              </div>
             </div>
 
             {/* Chips de Plataforma con conteo automático */}
@@ -3028,6 +3188,353 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold shadow-md shadow-amber-500/20 cursor-pointer disabled:opacity-50"
                 >
                   {isResetting ? 'Guardando...' : 'Aplicar Reseteo'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: IMPORTACIÓN MASIVA DE CUENTAS POR PLATAFORMA (EXCEL / CSV)          */}
+      {/* ========================================================================= */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
+            {/* Header del Modal */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                    Importación Masiva de Cuentas por Plataforma
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Carga múltiples cuentas de colaboradores mediante archivo Excel (.xlsx) o delimitado (.csv)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsImportModalOpen(false);
+                  setSelectedFileForImport(null);
+                  setImportPreviewData(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Contenido Scrolleable */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+              {/* Tarjeta de Recomendación / Descargar Plantilla */}
+              <div className="bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500">
+                    <HelpCircle className="w-5 h-5" />
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-semibold text-slate-800 dark:text-slate-200">
+                      ¿Aún no tienes el formato estructurado?
+                    </p>
+                    <p className="text-slate-500 dark:text-slate-400">
+                      Descarga nuestra plantilla oficial con columnas obligatorias, catálogos y filas de ejemplo.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  disabled={isDownloadingTemplate}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{isDownloadingTemplate ? 'Descargando...' : 'Descargar Plantilla (.xlsx)'}</span>
+                </button>
+              </div>
+
+              {/* Zona de Carga (Dropzone) */}
+              <div className="relative">
+                <input
+                  type="file"
+                  id="excel-file-upload-input"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+
+                {!selectedFileForImport ? (
+                  <label
+                    htmlFor="excel-file-upload-input"
+                    className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-emerald-500 dark:hover:border-emerald-500 rounded-2xl bg-slate-50/50 dark:bg-slate-800/20 hover:bg-emerald-500/5 transition-all cursor-pointer text-center group"
+                  >
+                    <div className="p-3.5 rounded-2xl bg-emerald-500/10 text-emerald-500 group-hover:scale-110 transition-transform mb-3">
+                      <Upload className="w-7 h-7" />
+                    </div>
+                    <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+                      Haz clic para seleccionar o arrastra aquí tu archivo Excel
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      Formatos compatibles: Microsoft Excel (.xlsx, .xls) o archivo CSV (.csv)
+                    </p>
+                  </label>
+                ) : (
+                  <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 rounded-xl bg-emerald-500 text-white shadow-xs">
+                        <FileSpreadsheet className="w-5 h-5" />
+                      </div>
+                      <div className="text-xs">
+                        <span className="font-semibold text-slate-900 dark:text-white block text-sm">
+                          {selectedFileForImport.name}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400">
+                          {(selectedFileForImport.size / 1024).toFixed(1)} KB • Archivo cargado
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="excel-file-upload-input"
+                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer transition-all"
+                      >
+                        Cambiar archivo
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFileForImport(null);
+                          setImportPreviewData(null);
+                        }}
+                        className="text-slate-400 hover:text-red-500 p-1.5 rounded-xl transition-all cursor-pointer"
+                        title="Quitar archivo"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Indicador de Carga del Preview */}
+              {isLoadingPreview && (
+                <div className="py-8 flex flex-col items-center justify-center gap-3 text-slate-400">
+                  <RefreshCw className="w-7 h-7 text-emerald-500 animate-spin" />
+                  <p className="text-xs font-medium animate-pulse">
+                    Analizando filas y cotejando cuentas con la base de datos...
+                  </p>
+                </div>
+              )}
+
+              {/* Resultados de la Previsualización */}
+              {importPreviewData && !isLoadingPreview && (
+                <div className="space-y-4">
+                  {/* Tarjetas de Métricas del Preview */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    <div className="p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60">
+                      <span className="text-slate-400 text-[11px] block">Total detectadas</span>
+                      <span className="text-lg font-bold text-slate-800 dark:text-slate-200">
+                        {importPreviewData.total_filas}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+                      <span className="text-emerald-600 dark:text-emerald-400/80 text-[11px] block">Nuevas (Crear)</span>
+                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-300">
+                        {importPreviewData.ready_count}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400">
+                      <span className="text-amber-600 dark:text-amber-400/80 text-[11px] block">Existentes (Actualizar)</span>
+                      <span className="text-lg font-bold text-amber-600 dark:text-amber-300">
+                        {importPreviewData.update_count}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400">
+                      <span className="text-red-600 dark:text-red-400/80 text-[11px] block">Incompletas / Error</span>
+                      <span className="text-lg font-bold text-red-600 dark:text-red-300">
+                        {importPreviewData.invalid_count}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Selector de Modo de Sincronización */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-2 text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block">
+                      Política de Sincronización para Cuentas Existentes:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        importMode === 'crear_o_actualizar'
+                          ? 'bg-white dark:bg-slate-800 border-cyan-500 text-slate-900 dark:text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800/40'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="crear_o_actualizar"
+                          checked={importMode === 'crear_o_actualizar'}
+                          onChange={() => setImportMode('crear_o_actualizar')}
+                          className="mt-0.5 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        <div>
+                          <span className="font-semibold block">Actualizar datos existentes (Recomendado)</span>
+                          <span className="text-[11px] text-slate-400">
+                            Actualiza cargo, correo, teléfono y contraseña si coincide en Empresa, Plataforma y Usuario.
+                          </span>
+                        </div>
+                      </label>
+
+                      <label className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        importMode === 'solo_nuevos'
+                          ? 'bg-white dark:bg-slate-800 border-cyan-500 text-slate-900 dark:text-white shadow-xs'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800/40'
+                      }`}>
+                        <input
+                          type="radio"
+                          name="importMode"
+                          value="solo_nuevos"
+                          checked={importMode === 'solo_nuevos'}
+                          onChange={() => setImportMode('solo_nuevos')}
+                          className="mt-0.5 text-cyan-500 focus:ring-cyan-500"
+                        />
+                        <div>
+                          <span className="font-semibold block">Solo registrar cuentas nuevas</span>
+                          <span className="text-[11px] text-slate-400">
+                            Ignora los usuarios que ya existan en la plataforma sin modificar sus registros actuales.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Filtro de la Tabla Preview */}
+                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      Vista previa de datos a procesar:
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {(['todos', 'ready', 'update', 'invalid'] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setFilterPreviewStatus(st)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all cursor-pointer ${
+                            filterPreviewStatus === st
+                              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {st === 'todos' && `Todas (${importPreviewData.total_filas})`}
+                          {st === 'ready' && `Nuevas (${importPreviewData.ready_count})`}
+                          {st === 'update' && `Actualizar (${importPreviewData.update_count})`}
+                          {st === 'invalid' && `Errores (${importPreviewData.invalid_count})`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tabla con scroll de las filas leídas */}
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead className="bg-slate-100 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 font-semibold sticky top-0 z-10">
+                        <tr>
+                          <th className="p-2.5">#</th>
+                          <th className="p-2.5">Estado</th>
+                          <th className="p-2.5">Empresa</th>
+                          <th className="p-2.5">Plataforma</th>
+                          <th className="p-2.5">Colaborador</th>
+                          <th className="p-2.5">Usuario Login</th>
+                          <th className="p-2.5">Contraseña</th>
+                          <th className="p-2.5">Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                        {importPreviewData.rows
+                          .filter(r => filterPreviewStatus === 'todos' || r.status === filterPreviewStatus)
+                          .map((row, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                              <td className="p-2.5 font-mono text-[11px] text-slate-400">{row.index}</td>
+                              <td className="p-2.5 whitespace-nowrap">
+                                {row.status === 'ready' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <Check className="w-3 h-3" /> Nueva
+                                  </span>
+                                )}
+                                {row.status === 'update' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    <RotateCcw className="w-3 h-3" /> Existente
+                                  </span>
+                                )}
+                                {row.status === 'invalid' && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
+                                    <AlertTriangle className="w-3 h-3" /> Error
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2.5 font-medium whitespace-nowrap">{row.empresa || '-'}</td>
+                              <td className="p-2.5 font-semibold text-cyan-600 dark:text-cyan-400 whitespace-nowrap">{row.plataforma || '-'}</td>
+                              <td className="p-2.5 whitespace-nowrap">{row.colaborador_nombre || '-'}</td>
+                              <td className="p-2.5 font-mono text-[11px] whitespace-nowrap">{row.usuario_login || '-'}</td>
+                              <td className="p-2.5 font-mono text-[11px] whitespace-nowrap">
+                                {row.password_actual ? '••••••••' : <span className="text-slate-400 italic">(Autogenerar)</span>}
+                              </td>
+                              <td className="p-2.5 text-[11px] text-slate-500 dark:text-slate-400 max-w-xs truncate" title={row.status_message}>
+                                {row.status_message}
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer de Acciones del Modal */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                <span>Cifrado militar automático AES-256 en todas las contraseñas cargadas.</span>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsImportModalOpen(false);
+                    setSelectedFileForImport(null);
+                    setImportPreviewData(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={!importPreviewData || isImporting || (importPreviewData.ready_count === 0 && importPreviewData.update_count === 0)}
+                  onClick={handleConfirmImport}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {isImporting ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Importando datos...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>
+                        Confirmar e Importar {importPreviewData ? (importPreviewData.ready_count + (importMode === 'crear_o_actualizar' ? importPreviewData.update_count : 0)) : 0} Cuentas
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
