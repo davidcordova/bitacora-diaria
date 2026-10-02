@@ -504,7 +504,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                     setShowLinkSelector(true);
                     loadReferencias();
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-cyan-600 dark:text-[#00F0FF] bg-cyan-500/10 hover:bg-cyan-500/20 border border-[#00F0FF]/30 rounded-xl transition-all cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 hover:bg-cyan-200 dark:bg-[#00F0FF]/15 dark:hover:bg-[#00F0FF]/25 border border-cyan-300 dark:border-[#00F0FF]/30 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Vincular con otra</span>
@@ -513,7 +513,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowLinkSelector(false)}
-                  className="text-xs text-slate-400 hover:text-slate-200 p-1 cursor-pointer"
+                  className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -522,9 +522,9 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
             {/* Si ya está vinculada, mostrar badge con info */}
             {parentTaskId ? (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800/40">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-500 text-slate-950 shrink-0">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-cyan-600 text-white dark:bg-cyan-500 dark:text-slate-950 shrink-0">
                     {tipoVinculo === 'continuacion'
                       ? 'Continuación de'
                       : tipoVinculo === 'subtarea'
@@ -533,7 +533,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                       ? 'Bloqueado por'
                       : 'Relacionada con'}
                   </span>
-                  <span className="text-xs font-medium text-slate-800 dark:text-cyan-200 truncate">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-cyan-200 truncate">
                     Ref #{parentTaskId}: {parentTaskDesc || 'Actividad previa vinculada'}
                   </span>
                 </div>
@@ -601,20 +601,20 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                           className="w-full text-left p-2 rounded-xl bg-white dark:bg-[#181926] hover:bg-cyan-50 dark:hover:bg-cyan-950/30 border border-slate-200/60 dark:border-white/5 hover:border-[#00F0FF]/40 transition-colors flex items-center justify-between gap-2 cursor-pointer"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-                              <span className="text-cyan-600 dark:text-[#00F0FF]">#{ref.id}</span>
-                              <span className="text-slate-400">({ref.bitacora_fecha || 'Reciente'})</span>
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-800 dark:text-slate-200">
+                              <span className="text-cyan-800 dark:text-[#00F0FF] font-bold">#{ref.id}</span>
+                              <span className="text-slate-500 dark:text-slate-400">({ref.bitacora_fecha || 'Reciente'})</span>
                               {ref.para_cliente && (
-                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300">
+                                <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 font-medium">
                                   {ref.para_cliente}
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            <p className="text-xs text-slate-600 dark:text-slate-400 truncate mt-0.5">
                               {cleanDesc || 'Sin descripción'}
                             </p>
                           </div>
-                          <span className="text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF] shrink-0">
+                          <span className="text-[10px] font-extrabold text-cyan-800 dark:text-[#00F0FF] shrink-0">
                             Vincular →
                           </span>
                         </button>

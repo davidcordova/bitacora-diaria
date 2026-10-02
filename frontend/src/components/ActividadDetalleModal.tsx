@@ -33,6 +33,7 @@ interface ActividadDetalleModalProps {
   index: number | null;
   onEdit: (actividad: Actividad, index: number) => void;
   onUpdateEstado?: (index: number, nuevoEstado: EstadoActividad) => void;
+  onNavigateToRef?: (targetRefId: number | string, tipoVinculo?: string) => void;
 }
 
 export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
@@ -42,6 +43,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   index,
   onEdit,
   onUpdateEstado,
+  onNavigateToRef,
 }) => {
   const [copied, setCopied] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -64,26 +66,26 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
     switch (estado) {
       case 'completada':
         return {
-          bg: 'bg-[#E6F9F5] text-[#00A88B] border-[#00C9A7]/30',
+          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800/60',
           label: 'Completada',
           icon: CheckCircle2,
         };
       case 'en_proceso':
         return {
-          bg: 'bg-amber-50 text-amber-700 border-amber-200',
+          bg: 'bg-cyan-50 dark:bg-[#00F0FF]/15 text-cyan-900 dark:text-[#00F0FF] border-cyan-300/80 dark:border-[#00F0FF]/40',
           label: 'En proceso',
           icon: Timer,
         };
       case 'en_revision':
         return {
-          bg: 'bg-purple-50 text-purple-700 border-purple-200',
+          bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-300/80 dark:border-purple-800/60',
           label: 'En revisión',
           icon: Eye,
         };
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-50 text-slate-700 border-slate-200',
+          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border-slate-300 dark:border-[#252636]',
           label: 'Por iniciar',
           icon: ListTodo,
         };
@@ -101,12 +103,12 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="relative w-full max-w-2xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden my-8 max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="relative w-full max-w-2xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden max-h-[92dvh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-100 dark:border-[#252636] shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+              <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/80 dark:border-[#00F0FF]/30">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
@@ -209,20 +211,37 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
               )}
 
               {actividad.parent_task_id && (
-                <div className="w-full flex items-center gap-2 p-2.5 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30">
-                  <Link2 className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
-                  <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
-                    {actividad.tipo_vinculo === 'subtarea'
-                      ? 'Subtarea de'
-                      : actividad.tipo_vinculo === 'bloqueado_por'
-                      ? 'Bloqueado por'
-                      : actividad.tipo_vinculo === 'relacionada'
-                      ? 'Relacionada con'
-                      : 'Continuación de'}:
-                  </span>
-                  <span className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate">
-                    Ref #{actividad.parent_task_id} {actividad.parent_task_desc ? `— ${actividad.parent_task_desc}` : ''}
-                  </span>
+                <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-cyan-50/80 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800/40">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="p-1.5 rounded-lg bg-cyan-100 dark:bg-cyan-900/50 text-cyan-800 dark:text-[#00F0FF] shrink-0">
+                      <Link2 className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-cyan-900 dark:text-cyan-300 block">
+                        {actividad.tipo_vinculo === 'subtarea'
+                          ? 'Subtarea de'
+                          : actividad.tipo_vinculo === 'bloqueado_por'
+                          ? 'Bloqueada por'
+                          : actividad.tipo_vinculo === 'relacionada'
+                          ? 'Relacionada con'
+                          : 'Continuación de'}:
+                      </span>
+                      <span className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate block">
+                        Ref #{actividad.parent_task_id} {actividad.parent_task_desc ? `— ${actividad.parent_task_desc}` : ''}
+                      </span>
+                    </div>
+                  </div>
+                  {onNavigateToRef && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigateToRef(actividad.parent_task_id!, actividad.tipo_vinculo)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white dark:bg-[#00F0FF]/20 dark:hover:bg-[#00F0FF]/30 dark:text-[#00F0FF] text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs self-start sm:self-auto"
+                      title="Inspeccionar o navegar a la actividad referenciada"
+                    >
+                      <span>Ir a Referencia</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
               )}
 

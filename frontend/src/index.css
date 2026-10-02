@@ -251,3 +251,50 @@
   animation: toastProgress 3.2s linear forwards;
 }
 
+/* Activity highlight pulse when jumped via link/reference */
+@keyframes act-jump-pulse {
+  0% {
+    background-color: rgba(0, 240, 255, 0.28);
+    outline: 2px solid #00f0ff;
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.45);
+    transform: scale(1.006);
+  }
+  35% {
+    background-color: rgba(0, 240, 255, 0.16);
+    outline: 2px solid #00f0ff;
+    box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+    transform: scale(1);
+  }
+  100% {
+    background-color: transparent;
+    outline: 2px solid transparent;
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+.act-highlighted {
+  animation: act-jump-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  z-index: 10;
+  position: relative;
+}
+
+/* Executive high-contrast brand tokens */
+.text-cyan-brand {
+  color: #0e7490; /* cyan-700 in light mode: WCAG 4.8:1 on white */
+}
+.dark .text-cyan-brand {
+  color: #00f0ff; /* luminous cyan in dark mode: WCAG 13:1 on dark */
+}
+
+.badge-cyan-brand {
+  background-color: #ecfeff;
+  color: #0e7490;
+  border: 1px solid #a5f3fc;
+}
+.dark .badge-cyan-brand {
+  background-color: rgba(0, 240, 255, 0.12);
+  color: #00f0ff;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+}
+
+

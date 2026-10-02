@@ -33,6 +33,8 @@ backend/uploads/*
 .env
 .env.*
 !.env.example
+.vault_key
+*.key
 
 # IDE / Editor
 .vscode/

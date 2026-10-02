@@ -112,6 +112,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: null,
     },
     {
+      id: 'vault' as ViewMode,
+      label: 'Accesos & Bóveda',
+      icon: KeyRound,
+      show: true,
+      badge: null,
+    },
+    {
       id: 'gestion' as ViewMode,
       label: 'Gestión',
       icon: Shield,
@@ -208,15 +215,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   title={!showText ? item.label : undefined}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all group cursor-pointer relative min-h-[44px] ${
                     isActive
-                      ? 'border border-[#00F0FF]/50 bg-[#00F0FF]/10 text-slate-900 dark:text-white font-bold shadow-xs'
-                      : 'border border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-white/5'
+                      ? 'border border-cyan-400/60 dark:border-[#00F0FF]/50 bg-cyan-100/70 dark:bg-[#00F0FF]/10 text-cyan-950 dark:text-white font-bold shadow-xs'
+                      : 'border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/5'
                   } ${!showText ? 'justify-center px-0' : ''}`}
                 >
                   <Icon
                     className={`w-4 h-4 shrink-0 transition-transform ${
                       isActive
-                        ? 'text-[#00A3BF] dark:text-[#00F0FF]'
-                        : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'
+                        ? 'text-cyan-700 dark:text-[#00F0FF]'
+                        : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
                     }`}
                   />
 
@@ -226,7 +233,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   {/* Dot on active item if no badge */}
                   {isActive && item.badge === null && showText && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 dark:bg-[#00F0FF] shrink-0" />
                   )}
 
                   {/* Badges in Pink/Magenta exactly as in Images 1, 2, 3 */}

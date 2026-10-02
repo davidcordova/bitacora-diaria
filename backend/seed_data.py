@@ -1,7 +1,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
-from database import get_db
+from database import get_db, get_peru_now, get_peru_today_str
 
 def seed_team_and_activities():
     conn = get_db()
@@ -41,10 +41,11 @@ def seed_team_and_activities():
     # 3. Vincular colaboradores al Equipo 1
     cursor.execute("UPDATE users SET team_id = 1 WHERE id IN (3, 4, 5, 6)")
         
-    today_str = datetime.now().strftime('%Y-%m-%d')
-    yesterday_str = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-    stalled_time = (datetime.now() - timedelta(hours=28)).strftime('%Y-%m-%d %H:%M:%S')
-    recent_time = (datetime.now() - timedelta(minutes=45)).strftime('%Y-%m-%d %H:%M:%S')
+    peru_now = get_peru_now()
+    today_str = get_peru_today_str()
+    yesterday_str = (peru_now - timedelta(days=1)).strftime('%Y-%m-%d')
+    stalled_time = (peru_now - timedelta(hours=28)).strftime('%Y-%m-%d %H:%M:%S')
+    recent_time = (peru_now - timedelta(minutes=45)).strftime('%Y-%m-%d %H:%M:%S')
     
     # 3. Limpiar bitácoras y actividades previas de prueba de hoy para evitar duplicados
     cursor.execute("DELETE FROM actividades WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE fecha = ?)", (today_str,))

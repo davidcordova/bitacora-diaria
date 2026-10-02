@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   ListChecks,
   Plus,
@@ -23,11 +23,14 @@ import {
   CloudOff,
   Link2,
   MessageSquare,
+  GitBranch,
+  ArrowUpRight,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration } from '../utils/formatters';
 import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
+import { ActividadReferenciaModal } from './ActividadReferenciaModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 
 
@@ -76,6 +79,79 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedDetailActividad, setSelectedDetailActividad] = useState<Actividad | null>(null);
   const [selectedDetailIndex, setSelectedDetailIndex] = useState<number | null>(null);
+
+  // Reference navigation & highlight states
+  const [highlightedActId, setHighlightedActId] = useState<number | string | null>(null);
+  const [refModalOpen, setRefModalOpen] = useState(false);
+  const [selectedRefId, setSelectedRefId] = useState<number | string | null>(null);
+  const [selectedRefVinculo, setSelectedRefVinculo] = useState<string | undefined>('continuacion');
+
+  // Compute tasks that reference other tasks in the current day (reverse linkages)
+  const childTasksMap = useMemo(() => {
+    const map = new Map<number, Actividad[]>();
+    actividades.forEach((act) => {
+      if (act.parent_task_id) {
+        const pId = Number(act.parent_task_id);
+        const list = map.get(pId) || [];
+        list.push(act);
+        map.set(pId, list);
+      }
+    });
+    return map;
+  }, [actividades]);
+
+  // Check if there is a pending auto-scroll to an activity (e.g. after date change)
+  useEffect(() => {
+    const pending = sessionStorage.getItem('pending_highlight_act_id');
+    if (pending) {
+      const actId = Number(pending);
+      if (actividades.some((a) => Number(a.id) === actId)) {
+        sessionStorage.removeItem('pending_highlight_act_id');
+        setTimeout(() => {
+          const rowEl = document.getElementById(`act-row-${actId}`) || document.getElementById(`act-m-${actId}`);
+          if (rowEl) {
+            rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlightedActId(actId);
+            setTimeout(() => setHighlightedActId(null), 2800);
+          }
+        }, 350);
+      }
+    }
+  }, [actividades, fecha]);
+
+  const handleNavigateToRef = (targetId: number | string, tipoVinculo = 'continuacion', e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+
+    const numId = Number(targetId);
+    // 1. If target activity is in the current list, scroll directly to it and highlight
+    const localAct = actividades.find((a) => Number(a.id) === numId);
+    if (localAct) {
+      const rowEl = document.getElementById(`act-row-${numId}`) || document.getElementById(`act-m-${numId}`);
+      if (rowEl) {
+        rowEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      setHighlightedActId(numId);
+      setTimeout(() => {
+        setHighlightedActId((prev) => (prev === numId ? null : prev));
+      }, 2800);
+      return;
+    }
+
+    // 2. If target activity belongs to another date, open the reference inspector modal
+    setSelectedRefId(numId);
+    setSelectedRefVinculo(tipoVinculo);
+    setRefModalOpen(true);
+  };
+
+  const handleNavigateToDateAndHighlight = (targetDate: string, targetActId: number | string) => {
+    if (onDateChange) {
+      sessionStorage.setItem('pending_highlight_act_id', targetActId.toString());
+      onDateChange(targetDate);
+    }
+  };
 
   const totalMinutos = actividades.reduce(
     (sum, act) => sum + (Number(act.duracion_min) || 0),
@@ -164,26 +240,26 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     }
   };
 
-  // Helper for status badge style
+  // Helper for status badge style (high-contrast WCAG AA compliant)
   const getStatusBadge = (estado: EstadoActividad) => {
     switch (estado) {
       case 'completada':
         return {
-          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-800/60',
+          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800/60',
           dot: 'bg-emerald-500',
           label: 'Completada',
           icon: CheckCircle2,
         };
       case 'en_proceso':
         return {
-          bg: 'bg-[#00F0FF]/10 dark:bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/30 dark:border-[#00F0FF]/40',
-          dot: 'bg-[#00F0FF]',
+          bg: 'bg-cyan-50 dark:bg-[#00F0FF]/15 text-cyan-900 dark:text-[#00F0FF] border-cyan-300/80 dark:border-[#00F0FF]/40',
+          dot: 'bg-cyan-600 dark:bg-[#00F0FF]',
           label: 'En proceso',
           icon: Timer,
         };
       case 'en_revision':
         return {
-          bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border-purple-200/80 dark:border-purple-800/60',
+          bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-300/80 dark:border-purple-800/60',
           dot: 'bg-purple-500',
           label: 'En revisión',
           icon: Eye,
@@ -191,8 +267,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]',
-          dot: 'bg-slate-400',
+          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border-slate-300 dark:border-[#252636]',
+          dot: 'bg-slate-500',
           label: 'Por iniciar',
           icon: ListTodo,
         };
@@ -204,12 +280,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       case 'completada':
         return 'border-l-emerald-500';
       case 'en_proceso':
-        return 'border-l-[#00F0FF]';
+        return 'border-l-cyan-600 dark:border-l-[#00F0FF]';
       case 'en_revision':
         return 'border-l-purple-500';
       case 'pendiente':
       default:
-        return 'border-l-slate-300 dark:border-l-slate-700';
+        return 'border-l-slate-400 dark:border-l-slate-600';
     }
   };
 
@@ -222,7 +298,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             {/* Title */}
             <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] shrink-0">
+              <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/60 dark:border-[#00F0FF]/30 shrink-0">
                 <ListChecks className="w-4 h-4" />
               </div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
@@ -231,8 +307,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             </div>
 
             {/* En Jornada Badge */}
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30">
-              <span className="w-2 h-2 rounded-full bg-[#00F0FF] animate-pulse" />
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-900 dark:text-[#00F0FF] border border-cyan-300 dark:border-[#00F0FF]/30">
+              <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-[#00F0FF] animate-pulse" />
               <span>EN JORNADA</span>
             </span>
 
@@ -408,16 +484,16 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200/90 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-3 w-12 text-center">#</th>
-                  <th className="py-3 px-3 w-32 whitespace-nowrap">Horario / Tiempo</th>
-                  <th className="py-3 px-3 min-w-[220px]">Actividad (Descripción)</th>
-                  <th className="py-3 px-3 w-28 whitespace-nowrap">Tipo</th>
-                  <th className="py-3 px-3 w-28 whitespace-nowrap">Para / Cliente</th>
-                  <th className="py-3 px-3 w-36 whitespace-nowrap">Trabajo en Paralelo</th>
-                  <th className="py-3 px-2 w-20 text-center whitespace-nowrap">Adjuntos</th>
-                  <th className="py-3 px-3 w-32 whitespace-nowrap">Estado</th>
-                  <th className="py-3 px-3 w-24 text-right whitespace-nowrap">Acciones</th>
+                <tr className="border-b border-slate-200/90 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-2.5 w-10 text-center">#</th>
+                  <th className="py-3 px-2.5 w-28 whitespace-nowrap">Horario / Tiempo</th>
+                  <th className="py-3 px-3 min-w-[200px]">Actividad (Descripción)</th>
+                  <th className="py-3 px-2.5 w-24 whitespace-nowrap">Tipo</th>
+                  <th className="py-3 px-2.5 w-28 whitespace-nowrap">Para / Cliente</th>
+                  <th className="py-3 px-2.5 w-32 whitespace-nowrap">Trabajo en Paralelo</th>
+                  <th className="py-3 px-2 w-16 text-center whitespace-nowrap">Adjuntos</th>
+                  <th className="py-3 px-2.5 w-28 whitespace-nowrap">Estado</th>
+                  <th className="py-3 px-2.5 w-20 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-[#252636]/60 text-xs text-slate-700 dark:text-slate-300">
@@ -430,28 +506,29 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   return (
                     <tr
                       key={act.id || `act-${index}`}
+                      id={act.id ? `act-row-${act.id}` : undefined}
                       onClick={() => handleOpenDetailModal(act, index)}
-                      className={`group hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors cursor-pointer border-l-4 ${getBorderColor(
+                      className={`group hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-all cursor-pointer border-l-4 ${getBorderColor(
                         act.estado
-                      )}`}
+                      )} ${highlightedActId === act.id ? 'act-highlighted ring-2 ring-cyan-500' : ''}`}
                     >
                       {/* # Orden */}
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-xs font-bold text-slate-500 dark:text-slate-400">
+                      <td className="py-3.5 px-2.5 text-center">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
                           {index + 1}
                         </span>
                       </td>
 
                       {/* Horario / Tiempo */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
                           <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                           <span>{act.hora_inicio || '--:--'}</span>
                           <span className="text-slate-300 dark:text-slate-700 mx-0.5">•</span>
-                          <span className="text-[#00A3BF] dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
+                          <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
                         </div>
                         {(act.parent_task_id || act.is_rollover) && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800/40 mt-1">
+                          <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800/40 mt-1">
                             <RefreshCw className="w-2.5 h-2.5" />
                             <span>Continuada</span>
                           </span>
@@ -459,21 +536,41 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Actividad / Descripción */}
-                      <td className="py-3.5 px-4">
+                      <td className="py-3.5 px-3">
                         <div className="flex flex-col gap-1 max-w-xl">
                           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                             {act.parent_task_id && (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 px-2 py-0.5 rounded-md border border-[#00F0FF]/30 shrink-0"
-                                title={act.parent_task_desc ? `Vinculada: ${act.parent_task_desc}` : `Vinculada con actividad #${act.parent_task_id}`}
+                              <button
+                                type="button"
+                                onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 hover:bg-cyan-200 dark:bg-[#00F0FF]/15 dark:hover:bg-[#00F0FF]/25 px-2 py-0.5 rounded-md border border-cyan-300 dark:border-[#00F0FF]/40 shrink-0 cursor-pointer transition-all shadow-2xs group/ref"
+                                title={act.parent_task_desc ? `Vinculada con: ${act.parent_task_desc} (Clic para ir a la tarea)` : `Clic para ir a la actividad referenciada #${act.parent_task_id}`}
                               >
-                                <Link2 className="w-2.5 h-2.5" />
+                                <Link2 className="w-2.5 h-2.5 text-cyan-700 dark:text-[#00F0FF] group-hover/ref:rotate-45 transition-transform" />
                                 <span>Ref #{act.parent_task_id}</span>
-                              </span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover/ref:opacity-100" />
+                              </button>
                             )}
+
+                            {act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id)) && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const firstChild = childTasksMap.get(Number(act.id))![0];
+                                  if (firstChild.id) handleNavigateToRef(firstChild.id, firstChild.tipo_vinculo, e);
+                                }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/40 shrink-0 cursor-pointer transition-all"
+                                title={`Esta actividad tiene ${childTasksMap.get(Number(act.id))!.length} continuación(es) hoy. Clic para ir.`}
+                              >
+                                <GitBranch className="w-2.5 h-2.5" />
+                                <span>↳ {childTasksMap.get(Number(act.id))!.length} vinc.</span>
+                              </button>
+                            )}
+
                             {act.comentarios && (
                               <span
-                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30 shrink-0"
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30 shrink-0"
                                 title={`Comentario: ${act.comentarios}`}
                               >
                                 <MessageSquare className="w-2.5 h-2.5 text-amber-500" />
@@ -490,10 +587,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Tipo de Trabajo */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-2.5 whitespace-nowrap">
                         {act.tipo_trabajo ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#252636]">
-                            <Briefcase className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF]" />
+                            <Briefcase className="w-3 h-3 text-cyan-700 dark:text-[#00F0FF]" />
                             <span>{act.tipo_trabajo}</span>
                           </span>
                         ) : (
@@ -502,10 +599,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Para / Cliente */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-2.5 whitespace-nowrap">
                         {act.para_cliente ? (
                           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
-                            <span className="w-2 h-2 rounded-full bg-[#00F0FF] shrink-0" />
+                            <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-[#00F0FF] shrink-0" />
                             <span className="truncate">{act.para_cliente}</span>
                           </span>
                         ) : (
@@ -514,7 +611,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Trabajo en Paralelo */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
+                      <td className="py-3.5 px-2.5 whitespace-nowrap">
                         {hasShared ? (
                           <span
                             className="inline-flex items-center gap-1 text-[11px] font-bold text-[#EC4899] bg-[#EC4899]/10 border border-[#EC4899]/30 px-2.5 py-0.5 rounded-full truncate max-w-[130px]"
@@ -526,15 +623,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                             </span>
                           </span>
                         ) : (
-                          <span className="text-slate-400 dark:text-slate-500 text-[11px]">Individual</span>
+                          <span className="text-slate-500 dark:text-slate-400 text-[11px]">Individual</span>
                         )}
                       </td>
 
                       {/* Adjuntos */}
-                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                      <td className="py-3.5 px-2 text-center whitespace-nowrap">
                         {evidenceCount > 0 ? (
                           <span
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00A3BF] dark:text-[#00F0FF] bg-[#00F0FF]/10 dark:bg-[#00F0FF]/15 border border-[#00F0FF]/30 px-2.5 py-0.5 rounded-full"
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 border border-cyan-300/80 dark:border-[#00F0FF]/30 px-2 py-0.5 rounded-full"
                             title={`${evidenceCount} archivo(s) adjunto(s)`}
                           >
                             <Paperclip className="w-3 h-3" />
@@ -546,7 +643,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Estado con selector rápido */}
-                      <td className="py-3.5 px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 px-2.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center">
                           <select
                             value={act.estado}
@@ -558,7 +655,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                 onUpdateActividad(index, 'estado', nuevoEstado);
                               }
                             }}
-                            className={`text-[11px] font-bold px-3 py-1 rounded-full border transition-all cursor-pointer outline-hidden shadow-2xs ${statusConfig.bg}`}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer outline-hidden shadow-2xs ${statusConfig.bg}`}
                           >
                             <option value="pendiente" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">Por iniciar</option>
                             <option value="en_proceso" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">En proceso</option>
@@ -569,12 +666,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Acciones */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-2.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
                           <button
                             type="button"
                             onClick={() => handleOpenDetailModal(act, index)}
-                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                             title="Ver detalle completo y evidencias"
                           >
                             <Eye className="w-3.5 h-3.5" />
@@ -583,7 +680,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(act, index)}
-                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                             title="Editar actividad"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -617,18 +714,19 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               return (
                 <div
                   key={act.id || `act-m-${index}`}
+                  id={act.id ? `act-m-${act.id}` : undefined}
                   onClick={() => handleOpenDetailModal(act, index)}
-                  className={`p-4 hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors cursor-pointer border-l-4 ${getBorderColor(
+                  className={`p-4 hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-all cursor-pointer border-l-4 ${getBorderColor(
                     act.estado
-                  )}`}
+                  )} ${highlightedActId === act.id ? 'act-highlighted ring-2 ring-cyan-500 shadow-md' : ''}`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-[10px] font-bold text-slate-600 dark:text-slate-400">
                         {index + 1}
                       </span>
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{act.hora_inicio || '--:--'}</span>
-                      <span className="text-xs font-extrabold text-[#00A3BF] dark:text-[#00F0FF] bg-[#00F0FF]/10 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-[#00F0FF]/30">
+                      <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
                         {act.duracion_min}m
                       </span>
                       {hasShared && (
@@ -643,7 +741,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => handleOpenDetailModal(act, index)}
-                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                         title="Ver detalle"
                       >
                         <Eye className="w-4 h-4" />
@@ -651,7 +749,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(act, index)}
-                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
                         title="Editar"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -667,6 +765,46 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     </div>
                   </div>
 
+                  {/* Badges de vinculación / continuación interactivos en móvil */}
+                  {(act.parent_task_id || (act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id))) || act.comentarios) && (
+                    <div className="flex flex-wrap items-center gap-1.5 mb-2" onClick={(e) => e.stopPropagation()}>
+                      {act.parent_task_id && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 hover:bg-cyan-200 dark:bg-[#00F0FF]/15 dark:hover:bg-[#00F0FF]/25 px-2 py-0.5 rounded-md border border-cyan-300 dark:border-[#00F0FF]/40 cursor-pointer shadow-2xs"
+                          title="Clic para ir a la actividad referenciada"
+                        >
+                          <Link2 className="w-2.5 h-2.5" />
+                          <span>Ref #{act.parent_task_id}</span>
+                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                        </button>
+                      )}
+
+                      {act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id)) && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const firstChild = childTasksMap.get(Number(act.id))![0];
+                            if (firstChild.id) handleNavigateToRef(firstChild.id, firstChild.tipo_vinculo, e);
+                          }}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/40 cursor-pointer"
+                        >
+                          <GitBranch className="w-2.5 h-2.5" />
+                          <span>↳ {childTasksMap.get(Number(act.id))!.length} vinc.</span>
+                        </button>
+                      )}
+
+                      {act.comentarios && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30">
+                          <MessageSquare className="w-2.5 h-2.5 text-amber-500" />
+                          <span>Nota</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <div className="mb-2">
                     <RichHtmlRenderer
                       content={act.descripcion}
@@ -675,18 +813,17 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     />
                   </div>
 
-
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                     <div className="flex items-center gap-2">
                       {act.tipo_trabajo && <span className="font-semibold text-slate-700 dark:text-slate-300">{act.tipo_trabajo}</span>}
                       {act.para_cliente && (
                         <span className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF]" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-[#00F0FF]" />
                           <span>Para: <strong className="text-slate-700 dark:text-slate-200">{act.para_cliente}</strong></span>
                         </span>
                       )}
                       {evidenceCount > 0 && (
-                        <span className="font-bold text-[#00A3BF] dark:text-[#00F0FF] inline-flex items-center gap-1">
+                        <span className="font-bold text-cyan-800 dark:text-[#00F0FF] inline-flex items-center gap-1">
                           <Paperclip className="w-3 h-3" />
                           <span>{evidenceCount}</span>
                         </span>
@@ -720,6 +857,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             setSelectedDetailActividad({ ...selectedDetailActividad, estado: nuevoSt });
           }
         }}
+        onNavigateToRef={(refId, tipo) => {
+          setDetailModalOpen(false);
+          handleNavigateToRef(refId, tipo);
+        }}
       />
 
       {/* MODAL 2: Creation & Edition Modal */}
@@ -732,6 +873,16 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         users={users}
         currentUser={currentUser}
       />
+
+      {/* MODAL 3: Referenced Task Deep Inspection & Navigation */}
+      <ActividadReferenciaModal
+        isOpen={refModalOpen}
+        onClose={() => setRefModalOpen(false)}
+        refId={selectedRefId}
+        tipoVinculo={selectedRefVinculo}
+        onNavigateToDate={handleNavigateToDateAndHighlight}
+      />
     </div>
   );
 };
+

@@ -12,6 +12,7 @@ import { DashboardView } from './components/DashboardView';
 import { TeamSupervisionView } from './components/TeamSupervisionView';
 import { UserManagementView } from './components/UserManagementView';
 import { BuzonView } from './components/BuzonView';
+import { VaultView } from './components/VaultView';
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
@@ -249,6 +250,10 @@ export function App() {
       localStorage.setItem('system_notifications_history', JSON.stringify(updated));
       return updated;
     });
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      api.markNotificationRead(numId).catch(console.warn);
+    }
   };
 
   const handleMarkAllNotificationsAsRead = () => {
@@ -257,11 +262,17 @@ export function App() {
       localStorage.setItem('system_notifications_history', JSON.stringify(updated));
       return updated;
     });
+    if (currentUser?.id) {
+      api.markAllNotificationsRead(currentUser.id).catch(console.warn);
+    }
   };
 
   const handleClearAllNotifications = () => {
     setNotifications([]);
     localStorage.removeItem('system_notifications_history');
+    if (currentUser?.id) {
+      api.clearNotifications(currentUser.id).catch(console.warn);
+    }
   };
 
   const handleRemoveNotification = (id: string) => {
@@ -270,6 +281,10 @@ export function App() {
       localStorage.setItem('system_notifications_history', JSON.stringify(updated));
       return updated;
     });
+    const numId = parseInt(id, 10);
+    if (!isNaN(numId)) {
+      api.markNotificationRead(numId).catch(console.warn);
+    }
   };
 
   const showToast = useCallback((type: ToastType, message: string, title?: string) => {
@@ -339,14 +354,11 @@ export function App() {
   const isLider = role === 'lider' || currentUser?.is_leader || isAdmin;
 
   useEffect(() => {
-    // If analista tries to access restricted views, redirect to lista
+    // If analista tries to access admin-only view, redirect to lista
     if (!isAdmin && viewMode === 'gestion') {
       setViewMode('lista');
     }
-    if (!isLider && viewMode === 'dashboard') {
-      setViewMode('lista');
-    }
-  }, [role, viewMode, isAdmin, isLider]);
+  }, [role, viewMode, isAdmin]);
 
   // Sync user state
   useEffect(() => {
@@ -456,17 +468,27 @@ export function App() {
 
       if (!activeUser || !activeUser.id) return;
 
-      const [uList, tList, hList, sysSettings] = await Promise.all([
+      const [uList, tList, hList, sysSettings, srvNotifs] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
         api.getBitacoras(undefined, undefined, undefined, activeUser.id),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
+        api.getNotifications(activeUser.id).catch(() => []),
       ]);
       setUsers(uList);
       setTeams(tList);
       setHistorial(hList);
       if (sysSettings) {
         setSystemSettings(sysSettings);
+      }
+      if (Array.isArray(srvNotifs) && srvNotifs.length > 0) {
+        setNotifications((prev) => {
+          const existingIds = new Set(prev.map((n) => n.id));
+          const newFromSrv = srvNotifs.filter((n) => !existingIds.has(n.id));
+          const merged = [...newFromSrv, ...prev].slice(0, 50);
+          localStorage.setItem('system_notifications_history', JSON.stringify(merged));
+          return merged;
+        });
       }
       refreshPapeleraCount();
 
@@ -912,8 +934,8 @@ export function App() {
         actividades: updated,
       };
     });
-    if (current && current.id && typeof current.id === 'number') {
-      await api.updateActividadDetalle(current.id, updatedData);
+    if (current && current.id && !String(current.id).startsWith('act-') && !isNaN(Number(current.id))) {
+      await api.updateActividadDetalle(Number(current.id), updatedData);
       showToast('success', 'Detalle de actividad guardado');
     }
   };
@@ -928,8 +950,8 @@ export function App() {
         ? 'En Revisión'
         : 'En Proceso';
     showToast('info', `Tarea marcada como "${label}"`);
-    if (act && act.id && typeof act.id === 'number') {
-      await api.updateActividadEstado(act.id, nuevoEstado);
+    if (act && act.id && !String(act.id).startsWith('act-') && !isNaN(Number(act.id))) {
+      await api.updateActividadEstado(Number(act.id), nuevoEstado);
     }
   };
 
@@ -940,9 +962,9 @@ export function App() {
       actividades: prev.actividades.filter((_, i) => i !== index),
     }));
     showToast('info', 'Actividad movida a la papelera (retención 15 días)');
-    if (act && act.id && typeof act.id === 'number') {
+    if (act && act.id && !String(act.id).startsWith('act-') && !isNaN(Number(act.id))) {
       try {
-        await api.softDeleteActividad(act.id);
+        await api.softDeleteActividad(Number(act.id));
         refreshPapeleraCount();
       } catch (e) {
         console.warn('Error soft-deleting act:', e);
@@ -1130,7 +1152,10 @@ export function App() {
       <div className="flex-1 flex flex-col min-w-0 min-h-screen overflow-x-hidden">
         {/* Top Header Bar */}
         <TopHeader
+          currentView={viewMode}
           currentUser={currentUser}
+          bitacoraFecha={bitacora.fecha}
+          activitiesCount={bitacora.actividades.length}
           onOpenHelp={() => setHelpModalOpen(true)}
           onOpenProfile={() => setUserProfileModalOpen(true)}
           autoSaveStatus={autoSaveStatus}
@@ -1221,6 +1246,14 @@ export function App() {
           {/* VIEW 6: BUZÓN DE SUGERENCIAS */}
           {viewMode === 'buzon' && (
             <BuzonView
+              currentUser={currentUser}
+              onShowToast={(msg, type) => showToast(type || 'info', msg)}
+            />
+          )}
+
+          {/* VIEW 7: ACCESOS DIRECTOS Y BÓVEDA IT */}
+          {viewMode === 'vault' && (
+            <VaultView
               currentUser={currentUser}
               onShowToast={(msg, type) => showToast(type || 'info', msg)}
             />

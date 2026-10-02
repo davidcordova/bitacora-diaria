@@ -1,11 +1,29 @@
-import React, { useState } from 'react';
-import { Search, Bell, HelpCircle, User as UserIcon, KeyRound, Trash2, Cloud, CloudOff, RefreshCw, Menu } from 'lucide-react';
-import { User } from '../types';
+import React from 'react';
+import {
+  Bell,
+  HelpCircle,
+  User as UserIcon,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Menu,
+  CalendarCheck,
+  Kanban,
+  BarChart3,
+  Users,
+  History,
+  Lightbulb,
+  KeyRound,
+  Settings,
+} from 'lucide-react';
+import { User, ViewMode } from '../types';
 
 interface TopHeaderProps {
+  currentView?: ViewMode;
   currentUser: User | null;
+  bitacoraFecha?: string;
+  activitiesCount?: number;
   onOpenHelp?: () => void;
-  onSearch?: (query: string) => void;
   onOpenProfile?: () => void;
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onForceSyncCloud?: () => void;
@@ -15,9 +33,11 @@ interface TopHeaderProps {
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
+  currentView = 'lista',
   currentUser,
+  bitacoraFecha,
+  activitiesCount = 0,
   onOpenHelp,
-  onSearch,
   onOpenProfile,
   autoSaveStatus = 'idle',
   onForceSyncCloud,
@@ -25,39 +45,129 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   unreadNotificationsCount = 0,
   onToggleMobileMenu,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const q = e.target.value;
-    setSearchQuery(q);
-    if (onSearch) onSearch(q);
+  // Helper para formatear fecha en la cabecera
+  const formatHeaderDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]}`;
+      }
+    } catch (e) {}
+    return dateStr;
   };
 
+  // Metadatos por módulo activo
+  const getViewMeta = () => {
+    switch (currentView) {
+      case 'kanban':
+        return {
+          title: 'Tablero de Actividades',
+          icon: <Kanban className="w-4 h-4 text-blue-600 dark:text-blue-400" />,
+          subtitle: 'Flujo visual de tareas por estados',
+          badge: `${activitiesCount} en tablero`,
+          badgeColor: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
+        };
+      case 'dashboard':
+        return {
+          title: 'Dashboard de Rendimiento & KPIs',
+          icon: <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
+          subtitle: 'Analítica de productividad y horas invertidas',
+          badge: 'Métricas en Vivo',
+          badgeColor: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60',
+        };
+      case 'equipo':
+        return {
+          title: 'Supervisión de Equipo',
+          icon: <Users className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />,
+          subtitle: 'Seguimiento de bitácoras y avance en tiempo real',
+          badge: 'Líder / Admin',
+          badgeColor: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#00F0FF] border-cyan-200 dark:border-cyan-800/60',
+        };
+      case 'gestion':
+        return {
+          title: 'Administración del Sistema',
+          icon: <Settings className="w-4 h-4 text-rose-600 dark:text-rose-400" />,
+          subtitle: 'Gestión centralizada de usuarios, equipos y ajustes',
+          badge: 'Panel Admin',
+          badgeColor: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60',
+        };
+      case 'historial':
+        return {
+          title: 'Historial de Bitácoras',
+          icon: <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
+          subtitle: 'Consultas de jornadas anteriores y registros',
+          badge: 'Archivo',
+          badgeColor: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60',
+        };
+      case 'buzon':
+        return {
+          title: 'Buzón de Sugerencias',
+          icon: <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />,
+          subtitle: 'Propuestas de mejora continua e innovación',
+          badge: 'Comunidad',
+          badgeColor: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
+        };
+      case 'vault':
+        return {
+          title: 'Accesos Directos & Bóveda TI',
+          icon: <KeyRound className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />,
+          subtitle: 'Directorio de cuentas, credenciales AES-256 y enlaces',
+          badge: 'Gestor IT',
+          badgeColor: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#00F0FF] border-cyan-200 dark:border-cyan-800/60',
+        };
+      case 'lista':
+      default:
+        return {
+          title: 'Mi Bitácora Diaria',
+          icon: <CalendarCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+          subtitle: `Jornada laboral • ${currentUser?.team_name || 'Marketing Alterno'}`,
+          badge: bitacoraFecha ? `📅 ${formatHeaderDate(bitacoraFecha)}` : 'Hoy',
+          badgeColor: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
+        };
+    }
+  };
+
+  const meta = getViewMeta();
+
   return (
-    <header className="w-full px-3 sm:px-6 py-2.5 sm:py-3 border-b border-slate-100 dark:border-white/5 bg-white/90 dark:bg-[#0D0E15]/90 backdrop-blur-md flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30 select-none">
-      {/* Left Area: Mobile Hamburger Menu + Search Bar */}
-      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 max-w-lg">
+    <header className="w-full px-3 sm:px-6 py-2 sm:py-2.5 border-b border-slate-200/80 dark:border-white/5 bg-white/90 dark:bg-[#0D0E15]/90 backdrop-blur-md flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30 select-none">
+      {/* Left Area: Mobile Hamburger Menu + Active Module Breadcrumb */}
+      <div className="flex items-center gap-2.5 sm:gap-3.5 flex-1 min-w-0">
         {onToggleMobileMenu && (
           <button
             type="button"
             onClick={onToggleMobileMenu}
             aria-label="Abrir menú de navegación"
-            className="md:hidden min-w-[40px] min-h-[40px] p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+            className="md:hidden min-w-[38px] min-h-[38px] p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
           >
             <Menu className="w-5 h-5" />
           </button>
         )}
 
-        {/* Search Input Bar */}
-        <div className="flex-1 relative min-w-0">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            placeholder="Buscar tarea, código, cliente..."
-            className="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-2 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 rounded-xl border border-slate-200/80 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
-          />
-          <Search className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 sm:left-3 top-2.5 sm:top-2.5 pointer-events-none" />
+        {/* Executive Module Indicator (Replaces redundant duplicate search input) */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shrink-0 shadow-2xs">
+            {meta.icon}
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                {meta.title}
+              </h1>
+              {meta.badge && (
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs hidden xs:inline-block ${meta.badgeColor}`}>
+                  {meta.badge}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden md:block">
+              {meta.subtitle}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -105,7 +215,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ? `${unreadNotificationsCount} notificación(es) nueva(s) - Clic para ver historial`
               : 'Centro de Notificaciones'
           }
-          className="relative min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 text-slate-500 hover:text-[#00F0FF] dark:text-slate-400 dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer flex items-center justify-center"
+          className="relative min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 text-slate-500 hover:text-cyan-700 dark:text-slate-400 dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer flex items-center justify-center"
         >
           <Bell className="w-4 h-4" />
           {unreadNotificationsCount > 0 && (
@@ -135,14 +245,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             title={`Conectado como ${currentUser.full_name} (@${currentUser.username}) - Clic para ver y editar mi perfil`}
             className="flex items-center gap-2 pl-1.5 sm:pl-2 pr-2.5 sm:pr-3 py-1 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200/80 dark:border-[#252636] hover:border-[#00F0FF]/40 rounded-full transition-all cursor-pointer group text-left min-h-[38px] sm:min-h-[40px]"
           >
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform shrink-0 font-heading">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00F0FF] to-cyan-600 text-slate-950 font-black flex items-center justify-center text-xs shadow-xs group-hover:scale-105 transition-transform shrink-0 font-heading">
               {currentUser.full_name ? currentUser.full_name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
             </div>
             <div className="hidden md:block max-w-[140px]">
-              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-[#00A3BF] dark:group-hover:text-[#00F0FF] transition-colors truncate">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-cyan-700 dark:group-hover:text-[#00F0FF] transition-colors truncate">
                 {currentUser.full_name || 'Mi Perfil'}
               </div>
-              <div className="text-[10px] text-slate-400 capitalize truncate">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 capitalize truncate font-medium">
                 {currentUser.role || 'analista'}
               </div>
             </div>
@@ -152,4 +262,3 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     </header>
   );
 };
-

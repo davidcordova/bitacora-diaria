@@ -131,8 +131,13 @@ export const getTimeInStatusInfo = (
     };
   }
 
-  // Parse date - handles SQLite 'YYYY-MM-DD HH:MM:SS' or ISO string
-  const normalized = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T') + 'Z';
+  // Parse date - handles SQLite 'YYYY-MM-DD HH:MM:SS' (America/Lima UTC-5) or ISO string
+  let normalized = dateStr;
+  if (!dateStr.includes('T')) {
+    normalized = dateStr.replace(' ', 'T') + '-05:00';
+  } else if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.slice(10).includes('-')) {
+    normalized = dateStr + '-05:00';
+  }
   const timestamp = new Date(normalized).getTime();
   if (isNaN(timestamp)) {
     return {

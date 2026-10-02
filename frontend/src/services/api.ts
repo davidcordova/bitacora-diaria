@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo } from '../types';
 
 const API_BASE = '/api';
 
@@ -478,6 +478,12 @@ export const api = {
     return await res.json();
   },
 
+  async getActividadById(id: number): Promise<Actividad & { bitacora_fecha?: string; colaborador?: string }> {
+    const res = await fetch(`${API_BASE}/actividades/${id}`);
+    if (!res.ok) throw new Error(`Error al obtener actividad #${id}`);
+    return await res.json();
+  },
+
   // ================= BUZÓN DE SUGERENCIAS =================
   async getSugerencias(params?: {
     categoria?: string;
@@ -562,6 +568,365 @@ export const api = {
       throw new Error(err.error || 'Error al eliminar sugerencia');
     }
     return await res.json();
+  },
+
+  // ================= NOTIFICACIONES =================
+  async getNotifications(userId: number): Promise<SystemNotification[]> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications?user_id=${userId}`);
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('API notifications fetch error', e);
+    }
+    return [];
+  },
+
+  async markNotificationRead(notifId: number | string): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/${notifId}/read`, { method: 'PATCH' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async markAllNotificationsRead(userId: number): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async clearNotifications(userId: number): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/notifications?user_id=${userId}`, { method: 'DELETE' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  // ================= ACCESOS DIRECTOS (QUICK LINKS) =================
+  async getQuickLinks(params?: { user_id?: number; categoria?: string; search?: string }): Promise<QuickLink[]> {
+    const q = new URLSearchParams();
+    if (params?.user_id) q.set('user_id', String(params.user_id));
+    if (params?.categoria) q.set('categoria', params.categoria);
+    if (params?.search) q.set('search', params.search);
+    const res = await fetch(`${API_BASE}/quick-links?${q.toString()}`);
+    if (!res.ok) throw new Error('Error al obtener accesos directos');
+    return res.json();
+  },
+
+  async createQuickLink(link: Partial<QuickLink>): Promise<QuickLink> {
+    const res = await fetch(`${API_BASE}/quick-links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(link),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al crear acceso directo' }));
+      throw new Error(err.error || 'Error al crear acceso directo');
+    }
+    return res.json();
+  },
+
+  async updateQuickLink(id: number, link: Partial<QuickLink> & { user_id?: number }): Promise<QuickLink> {
+    const res = await fetch(`${API_BASE}/quick-links/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(link),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar acceso directo' }));
+      throw new Error(err.error || 'Error al actualizar acceso directo');
+    }
+    return res.json();
+  },
+
+  async deleteQuickLink(id: number, userId?: number): Promise<boolean> {
+    const q = userId ? `?user_id=${userId}` : '';
+    const res = await fetch(`${API_BASE}/quick-links/${id}${q}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar acceso directo' }));
+      throw new Error(err.error || 'Error al eliminar acceso directo');
+    }
+    return true;
+  },
+
+  // ================= BÓVEDA IT (MULTI-EMPRESA / CREDENCIALES) =================
+  async getItEmpresas(): Promise<ItEmpresa[]> {
+    const res = await fetch(`${API_BASE}/it-vault/empresas`);
+    if (!res.ok) throw new Error('Error al obtener empresas');
+    return res.json();
+  },
+
+  async createItEmpresa(empresa: { nombre: string; color?: string }): Promise<ItEmpresa> {
+    const res = await fetch(`${API_BASE}/it-vault/empresas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(empresa),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al crear empresa' }));
+      throw new Error(err.error || 'Error al crear empresa');
+    }
+    return res.json();
+  },
+
+  async createItMarca(marca: { empresa_id: number; nombre: string }): Promise<ItMarca> {
+    const res = await fetch(`${API_BASE}/it-vault/marcas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(marca),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al crear marca' }));
+      throw new Error(err.error || 'Error al crear marca');
+    }
+    return res.json();
+  },
+
+  async getItCredentials(params?: { user_id?: number; empresa_id?: number; marca_id?: number; tipo_servicio?: string; search?: string }): Promise<ItCredential[]> {
+    const q = new URLSearchParams();
+    if (params?.user_id) q.set('user_id', String(params.user_id));
+    if (params?.empresa_id) q.set('empresa_id', String(params.empresa_id));
+    if (params?.marca_id) q.set('marca_id', String(params.marca_id));
+    if (params?.tipo_servicio) q.set('tipo_servicio', params.tipo_servicio);
+    if (params?.search) q.set('search', params.search);
+    const res = await fetch(`${API_BASE}/it-vault/credentials?${q.toString()}`);
+    if (!res.ok) throw new Error('Error al obtener credenciales de la bóveda');
+    return res.json();
+  },
+
+  async createItCredential(cred: Partial<ItCredential> & { created_by: number; permissions?: any[] }): Promise<{ id: number; success: boolean }> {
+    const res = await fetch(`${API_BASE}/it-vault/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cred),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al registrar credencial' }));
+      throw new Error(err.error || 'Error al registrar credencial');
+    }
+    return res.json();
+  },
+
+  async updateItCredential(id: number, cred: Partial<ItCredential> & { updated_by?: number }): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/credentials/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cred),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar credencial' }));
+      throw new Error(err.error || 'Error al actualizar credencial');
+    }
+    return true;
+  },
+
+  async deleteItCredential(id: number, userId?: number): Promise<boolean> {
+    const q = userId ? `?user_id=${userId}` : '';
+    const res = await fetch(`${API_BASE}/it-vault/credentials/${id}${q}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar credencial' }));
+      throw new Error(err.error || 'Error al eliminar credencial');
+    }
+    return true;
+  },
+
+  async auditItCredential(id: number, userId: number, action: 'view_password' | 'copy_password'): Promise<boolean> {
+    try {
+      const res = await fetch(`${API_BASE}/it-vault/credentials/${id}/audit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, action }),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
+
+  async getItCredentialPermissions(credId: number): Promise<ItCredentialPermission[]> {
+    const res = await fetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`);
+    if (!res.ok) throw new Error('Error al obtener permisos de credencial');
+    return res.json();
+  },
+
+  async updateItCredentialPermissions(credId: number, assignedBy: number, permissions: { user_id: number; can_view: boolean; can_edit: boolean }[]): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assigned_by: assignedBy, permissions }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar permisos' }));
+      throw new Error(err.error || 'Error al actualizar permisos');
+    }
+    return true;
+  },
+
+  // ================= DIRECTORIO DE USUARIOS POR PLATAFORMA =================
+  async getItPlatformUsers(params?: { empresa_id?: number; marca_id?: number; plataforma?: string; search?: string; estado?: string }): Promise<ItPlatformUser[]> {
+    const q = new URLSearchParams();
+    if (params?.empresa_id) q.set('empresa_id', String(params.empresa_id));
+    if (params?.marca_id) q.set('marca_id', String(params.marca_id));
+    if (params?.plataforma) q.set('plataforma', params.plataforma);
+    if (params?.search) q.set('search', params.search);
+    if (params?.estado) q.set('estado', params.estado);
+    const res = await fetch(`${API_BASE}/it-vault/platform-users?${q.toString()}`);
+    if (!res.ok) throw new Error('Error al obtener directorio de usuarios');
+    return res.json();
+  },
+
+  async createItPlatformUser(user: Partial<ItPlatformUser>): Promise<ItPlatformUser> {
+    const res = await fetch(`${API_BASE}/it-vault/platform-users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al registrar usuario en la plataforma' }));
+      throw new Error(err.error || 'Error al registrar usuario en la plataforma');
+    }
+    return res.json();
+  },
+
+  async updateItPlatformUser(id: number, user: Partial<ItPlatformUser>): Promise<ItPlatformUser> {
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar usuario' }));
+      throw new Error(err.error || 'Error al actualizar usuario');
+    }
+    return res.json();
+  },
+
+  async resetItPlatformUserPassword(id: number, resetBy?: number, newPassword?: string): Promise<{ success: boolean; new_password: string; ultimo_reseteo: string; share_message: string }> {
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reset_by: resetBy, new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al resetear contraseña' }));
+      throw new Error(err.error || 'Error al resetear contraseña');
+    }
+    return res.json();
+  },
+
+  async deleteItPlatformUser(id: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar usuario' }));
+      throw new Error(err.error || 'Error al eliminar usuario');
+    }
+    return true;
+  },
+
+  // ================= GESTIÓN DE CATÁLOGOS TI =================
+  async getItPlataformas(): Promise<ItPlataforma[]> {
+    const res = await fetch(`${API_BASE}/it-vault/plataformas`);
+    if (!res.ok) throw new Error('Error al obtener plataformas');
+    return res.json();
+  },
+
+  async createItPlataforma(p: { nombre: string; tipo_servicio?: string; color?: string }): Promise<ItPlataforma> {
+    const res = await fetch(`${API_BASE}/it-vault/plataformas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al registrar plataforma' }));
+      throw new Error(err.error || 'Error al registrar plataforma');
+    }
+    return res.json();
+  },
+
+  async deleteItPlataforma(id: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/plataformas/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Error al eliminar plataforma');
+    return true;
+  },
+
+  async getItCargos(): Promise<ItCargo[]> {
+    const res = await fetch(`${API_BASE}/it-vault/cargos`);
+    if (!res.ok) throw new Error('Error al obtener cargos');
+    return res.json();
+  },
+
+  async createItCargo(c: { nombre: string; area?: string }): Promise<ItCargo> {
+    const res = await fetch(`${API_BASE}/it-vault/cargos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(c),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al registrar cargo' }));
+      throw new Error(err.error || 'Error al registrar cargo');
+    }
+    return res.json();
+  },
+
+  async deleteItCargo(id: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/cargos/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Error al eliminar cargo');
+    return true;
+  },
+
+  async deleteItEmpresa(id: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/empresas/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Error al eliminar empresa');
+    return true;
+  },
+
+  async deleteItMarca(id: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/it-vault/marcas/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Error al eliminar marca');
+    return true;
+  },
+
+  // ================= SEGURIDAD DE BÓVEDA TI (PIN / DESBLOQUEO) =================
+  async getVaultPinStatus(userId: number): Promise<{ has_pin: boolean }> {
+    const res = await fetch(`${API_BASE}/it-vault/pin-status?user_id=${userId}`);
+    if (!res.ok) return { has_pin: false };
+    return res.json();
+  },
+
+  async setVaultPin(userId: number, currentPassword: string, newPin: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/it-vault/set-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, current_password: currentPassword, new_pin: newPin }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al configurar PIN' }));
+      throw new Error(err.error || 'Error al configurar PIN');
+    }
+    return res.json();
+  },
+
+  async verifyVaultUnlock(userId: number, creds: { password?: string; pin?: string }): Promise<{ success: boolean; expires_in: number; message: string }> {
+    const res = await fetch(`${API_BASE}/it-vault/verify-unlock`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, ...creds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Credenciales inválidas' }));
+      throw new Error(err.error || 'Credenciales inválidas');
+    }
+    return res.json();
   },
 
   saveToLocalStorage(bitacora: Bitacora) {

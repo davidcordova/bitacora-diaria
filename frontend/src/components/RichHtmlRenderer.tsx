@@ -26,14 +26,27 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
     const hasHtmlTags = /<[a-z][\s\S]*>/i.test(raw);
 
     if (hasHtmlTags) {
-      // Asegurar que todos los enlaces tengan target="_blank" y rel="noopener noreferrer"
-      return raw.replace(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"([^>]*)>/gi, (match, url, rest) => {
-        const hasTarget = /target=/i.test(rest);
-        const hasRel = /rel=/i.test(rest);
-        let updated = rest;
-        if (!hasTarget) updated += ' target="_blank"';
-        if (!hasRel) updated += ' rel="noopener noreferrer"';
-        return `<a href="${url}"${updated} class="text-cyan-600 dark:text-[#00F0FF] font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity">`;
+      // Sanitizar scripts básicos y manejadores inline peligrosos
+      let sanitized = raw
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+        .replace(/\son\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
+        .replace(/href\s*=\s*(['"])javascript:[^'"]*\1/gi, 'href="#"');
+
+      // Asegurar que todos los enlaces tengan target="_blank", rel y clases estilizadas sin duplicar atributos
+      return sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
+        let cleanAttrs = attrs;
+        if (!/target=/i.test(cleanAttrs)) cleanAttrs += ' target="_blank"';
+        if (!/rel=/i.test(cleanAttrs)) cleanAttrs += ' rel="noopener noreferrer"';
+        
+        const linkClass = 'text-cyan-600 dark:text-[#00F0FF] font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity';
+        if (/class="/i.test(cleanAttrs)) {
+          cleanAttrs = cleanAttrs.replace(/class="([^"]*)"/i, (_m: string, c: string) => `class="${c} ${linkClass}"`);
+        } else if (/class='/i.test(cleanAttrs)) {
+          cleanAttrs = cleanAttrs.replace(/class='([^']*)'/i, (_m: string, c: string) => `class='${c} ${linkClass}'`);
+        } else {
+          cleanAttrs += ` class="${linkClass}"`;
+        }
+        return `<a${cleanAttrs}>`;
       });
     }
 

@@ -9,6 +9,7 @@ from flask import Flask, request, jsonify, send_from_directory, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
+from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 
 app = Flask(__name__)
 
@@ -341,6 +342,8 @@ def clean_production_data():
         
         cursor.execute("DELETE FROM actividades")
         cursor.execute("DELETE FROM bitacoras")
+        cursor.execute("DELETE FROM buzon_votos")
+        cursor.execute("DELETE FROM buzon_sugerencias")
         
         for tbl in ['tasks', 'audit_logs', 'notifications', 'evidencias']:
             try:
@@ -814,7 +817,11 @@ def admin_user_detail(user_id):
             try:
                 # 1. Desvincular liderazgo en equipos
                 cursor.execute("UPDATE teams SET lider_id = NULL WHERE lider_id = ?", (user_id,))
-                # 2. Desvincular dependencias en actividades
+                # 2. Desvincular dependencias en actividades (tanto hacia sus tareas como de sus tareas)
+                cursor.execute('''
+                    UPDATE actividades SET parent_task_id = NULL 
+                    WHERE parent_task_id IN (SELECT id FROM actividades WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?))
+                ''', (user_id,))
                 cursor.execute('''
                     UPDATE actividades SET parent_task_id = NULL 
                     WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?)
@@ -1626,10 +1633,37 @@ def update_actividad_estado(act_id):
     conn.close()
     return jsonify({"success": True, "id": act_id, "nuevo_estado": nuevo_estado})
 
-@app.route('/api/actividades/<int:act_id>', methods=['PUT', 'OPTIONS'])
+@app.route('/api/actividades/<int:act_id>', methods=['GET', 'PUT', 'OPTIONS'])
 def update_actividad_detalle(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+        
+    if request.method == 'GET':
+        conn = get_db()
+        cursor = conn.cursor()
+        query = '''
+            SELECT a.*, b.fecha as bitacora_fecha, b.colaborador
+            FROM actividades a
+            JOIN bitacoras b ON a.bitacora_id = b.id
+            WHERE a.id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+        '''
+        row = cursor.execute(query, (act_id,)).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'error': 'Actividad no encontrada'}), 404
+        d = dict(row)
+        if d.get('evidencias'):
+            try:
+                d['evidencias'] = json.loads(d['evidencias'])
+            except Exception:
+                pass
+        if d.get('shared_with'):
+            try:
+                d['shared_with'] = json.loads(d['shared_with'])
+            except Exception:
+                pass
+        return jsonify(d), 200
+
     data = request.get_json() or {}
     
     evidencias_json = None
@@ -1712,6 +1746,16 @@ def update_actividad_detalle(act_id):
             act_id
         ))
         
+    # Recalcular el tiempo_total_min de la bitácora asociada
+    b_row = cursor.execute("SELECT bitacora_id FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    if b_row and b_row['bitacora_id']:
+        cursor.execute('''
+            UPDATE bitacoras SET tiempo_total_min = (
+                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
+                WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+            ), updated_at = ? WHERE id = ?
+        ''', (b_row['bitacora_id'], now_peru, b_row['bitacora_id']))
+
     conn.commit()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
     updated_act = cursor.execute('''
@@ -1757,6 +1801,7 @@ def delete_bitacora(bitacora_id):
         return jsonify({}), 200
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE bitacora_id = ?)", (bitacora_id,))
     cursor.execute("DELETE FROM actividades WHERE bitacora_id = ?", (bitacora_id,))
     cursor.execute("DELETE FROM bitacoras WHERE id = ?", (bitacora_id,))
     conn.commit()
@@ -2628,9 +2673,1122 @@ def delete_sugerencia(sug_id):
     cursor.execute("DELETE FROM buzon_votos WHERE sugerencia_id = ?", (sug_id,))
     cursor.execute("DELETE FROM buzon_sugerencias WHERE id = ?", (sug_id,))
     conn.commit()
+    return jsonify({"success": True, "message": "Sugerencia eliminada correctamente"}), 200
+
+# ==================== CENTRO DE NOTIFICACIONES ====================
+
+@app.route('/api/notifications', methods=['GET', 'DELETE', 'OPTIONS'])
+def handle_notifications():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    user_id = request.args.get('user_id')
+
+    if request.method == 'GET':
+        if not user_id:
+            conn.close()
+            return jsonify([]), 200
+        rows = cursor.execute('''
+            SELECT id, user_id, title, message, type, is_read, created_at as timestamp
+            FROM notifications
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT 50
+        ''', (user_id,)).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d['id'] = str(d['id'])
+            d['read'] = bool(d.pop('is_read', 0))
+            result.append(d)
+        conn.close()
+        return jsonify(result), 200
+
+    elif request.method == 'DELETE':
+        if user_id:
+            cursor.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
+            conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Notificaciones eliminadas"}), 200
+
+@app.route('/api/notifications/<int:notif_id>/read', methods=['PATCH', 'OPTIONS'])
+def mark_notification_read(notif_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 200
+
+@app.route('/api/notifications/read-all', methods=['POST', 'OPTIONS'])
+def mark_all_notifications_read():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    if user_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+    return jsonify({"success": True}), 200
+
+
+# =========================================================================
+# RUTAS REST: ACCESOS DIRECTOS (QUICK LINKS)
+# =========================================================================
+
+@app.route('/api/quick-links', methods=['GET', 'POST', 'OPTIONS'])
+def api_quick_links():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        user_id = request.args.get('user_id', type=int)
+        categoria = request.args.get('categoria', '').strip()
+        search = request.args.get('search', '').strip().lower()
+
+        user_team_id = None
+        user_role = 'analista'
+        if user_id:
+            cursor.execute("SELECT team_id, role FROM users WHERE id = ?", (user_id,))
+            u_row = cursor.fetchone()
+            if u_row:
+                user_team_id = u_row['team_id']
+                user_role = u_row['role'] or 'analista'
+
+        query = '''
+            SELECT q.*, u.full_name as author_name, t.nombre as team_name
+            FROM quick_links q
+            LEFT JOIN users u ON q.user_id = u.id
+            LEFT JOIN teams t ON q.team_id = t.id
+            WHERE 1=1
+        '''
+        params = []
+
+        if user_role not in ('admin', 'lider'):
+            if user_id:
+                if user_team_id:
+                    query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'equipo' AND q.team_id = ?) OR (q.visibilidad = 'personal' AND q.user_id = ?))"
+                    params.extend([user_team_id, user_id])
+                else:
+                    query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'personal' AND q.user_id = ?))"
+                    params.append(user_id)
+            else:
+                query += " AND q.visibilidad = 'global'"
+
+        if categoria and categoria != 'todas':
+            query += " AND q.categoria = ?"
+            params.append(categoria)
+
+        if search:
+            query += " AND (LOWER(q.titulo) LIKE ? OR LOWER(q.url) LIKE ? OR LOWER(COALESCE(q.descripcion, '')) LIKE ?)"
+            s_param = f"%{search}%"
+            params.extend([s_param, s_param, s_param])
+
+        query += " ORDER BY q.updated_at DESC, q.titulo ASC"
+        cursor.execute(query, params)
+        raw_links = cursor.fetchall()
+        links = []
+        for row in raw_links:
+            item = dict(row)
+            if item.get('password'):
+                item['password'] = decrypt_vault_secret(item['password'])
+            links.append(item)
+        conn.close()
+        return jsonify(links), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('user_id')
+        titulo = (data.get('titulo') or '').strip()
+        url = (data.get('url') or '').strip()
+
+        if not user_id or not titulo or not url:
+            conn.close()
+            return jsonify({"error": "user_id, titulo y url son obligatorios"}), 400
+
+        cursor.execute("SELECT team_id FROM users WHERE id = ?", (user_id,))
+        u_row = cursor.fetchone()
+        team_id = u_row['team_id'] if u_row else None
+
+        categoria = (data.get('categoria') or 'General').strip()
+        descripcion = (data.get('descripcion') or '').strip()
+        icono = (data.get('icono') or 'Link').strip()
+        color = (data.get('color') or '#00F0FF').strip()
+        usuario = (data.get('usuario') or '').strip()
+        raw_password = (data.get('password') or '').strip()
+        password = encrypt_vault_secret(raw_password) if raw_password else ''
+        visibilidad = data.get('visibilidad', 'personal')
+        if visibilidad not in ('personal', 'equipo', 'global'):
+            visibilidad = 'personal'
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            INSERT INTO quick_links (
+                user_id, titulo, url, categoria, descripcion, icono, color,
+                usuario, password, visibilidad, team_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, titulo, url, categoria, descripcion, icono, color,
+              usuario, password, visibilidad, team_id, now_peru, now_peru))
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        cursor.execute('''
+            SELECT q.*, u.full_name as author_name, t.nombre as team_name
+            FROM quick_links q
+            LEFT JOIN users u ON q.user_id = u.id
+            LEFT JOIN teams t ON q.team_id = t.id
+            WHERE q.id = ?
+        ''', (new_id,))
+        created_item = dict(cursor.fetchone())
+        if created_item.get('password'):
+            created_item['password'] = decrypt_vault_secret(created_item['password'])
+        conn.close()
+        return jsonify(created_item), 201
+
+
+@app.route('/api/quick-links/<int:link_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+def api_quick_link_detail(link_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM quick_links WHERE id = ?", (link_id,))
+    link = cursor.fetchone()
+    if not link:
+        conn.close()
+        return jsonify({"error": "Acceso directo no encontrado"}), 404
+
+    if request.method == 'DELETE':
+        user_id = request.args.get('user_id', type=int)
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        u = cursor.fetchone()
+        is_admin = u and u['role'] == 'admin'
+
+        if not is_admin and link['user_id'] != user_id:
+            conn.close()
+            return jsonify({"error": "No tienes permiso para eliminar este enlace"}), 403
+
+        cursor.execute("DELETE FROM quick_links WHERE id = ?", (link_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('user_id')
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        u = cursor.fetchone()
+        is_admin = u and u['role'] == 'admin'
+
+        if not is_admin and link['user_id'] != user_id:
+            conn.close()
+            return jsonify({"error": "No tienes permiso para modificar este enlace"}), 403
+
+        titulo = (data.get('titulo') or link['titulo']).strip()
+        url = (data.get('url') or link['url']).strip()
+        categoria = (data.get('categoria') or link['categoria']).strip()
+        descripcion = (data.get('descripcion') if 'descripcion' in data else link['descripcion']) or ''
+        icono = data.get('icono') or link['icono']
+        color = data.get('color') or link['color']
+        usuario = data.get('usuario') if 'usuario' in data else link['usuario']
+        if 'password' in data:
+            raw_pass = (data.get('password') or '').strip()
+            password = encrypt_vault_secret(raw_pass) if raw_pass else ''
+        else:
+            password = link['password']
+        visibilidad = data.get('visibilidad') or link['visibilidad']
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            UPDATE quick_links SET
+                titulo = ?, url = ?, categoria = ?, descripcion = ?,
+                icono = ?, color = ?, usuario = ?, password = ?,
+                visibilidad = ?, updated_at = ?
+            WHERE id = ?
+        ''', (titulo, url, categoria, descripcion, icono, color, usuario, password, visibilidad, now_peru, link_id))
+        conn.commit()
+
+        cursor.execute('''
+            SELECT q.*, u.full_name as author_name, t.nombre as team_name
+            FROM quick_links q
+            LEFT JOIN users u ON q.user_id = u.id
+            LEFT JOIN teams t ON q.team_id = t.id
+            WHERE q.id = ?
+        ''', (link_id,))
+        updated_item = dict(cursor.fetchone())
+        if updated_item.get('password'):
+            updated_item['password'] = decrypt_vault_secret(updated_item['password'])
+        conn.close()
+        return jsonify(updated_item), 200
+
+
+# =========================================================================
+# RUTAS REST: BÓVEDA IT CORPORATIVA (MULTI-EMPRESA / MARCAS / CREDENCIALES)
+# =========================================================================
+
+@app.route('/api/it-vault/empresas', methods=['GET', 'POST', 'OPTIONS'])
+def api_it_empresas():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute("SELECT * FROM it_empresas ORDER BY nombre ASC")
+        empresas = [dict(row) for row in cursor.fetchall()]
+        for emp in empresas:
+            cursor.execute("SELECT * FROM it_marcas WHERE empresa_id = ? ORDER BY nombre ASC", (emp['id'],))
+            emp['marcas'] = [dict(m) for m in cursor.fetchall()]
+        conn.close()
+        return jsonify(empresas), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get('nombre') or '').strip()
+        color = data.get('color', '#00F0FF')
+        if not nombre:
+            conn.close()
+            return jsonify({"error": "El nombre de la empresa es obligatorio"}), 400
+
+        try:
+            cursor.execute("INSERT INTO it_empresas (nombre, color) VALUES (?, ?)", (nombre, color))
+            new_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            return jsonify({"id": new_id, "nombre": nombre, "color": color, "marcas": []}), 201
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"error": "Ya existe una empresa con ese nombre"}), 400
+
+
+@app.route('/api/it-vault/marcas', methods=['POST', 'OPTIONS'])
+def api_it_marcas():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json(silent=True) or {}
+    empresa_id = data.get('empresa_id')
+    nombre = (data.get('nombre') or '').strip()
+    if not empresa_id or not nombre:
+        return jsonify({"error": "empresa_id y nombre son obligatorios"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("INSERT INTO it_marcas (empresa_id, nombre) VALUES (?, ?)", (empresa_id, nombre))
+        new_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return jsonify({"id": new_id, "empresa_id": empresa_id, "nombre": nombre}), 201
+    except sqlite3.IntegrityError:
+        conn.close()
+        return jsonify({"error": "Esta marca ya existe para la empresa seleccionada"}), 400
+
+
+@app.route('/api/it-vault/credentials', methods=['GET', 'POST', 'OPTIONS'])
+def api_it_credentials():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        user_id = request.args.get('user_id', type=int)
+        empresa_id = request.args.get('empresa_id', type=int)
+        marca_id = request.args.get('marca_id', type=int)
+        tipo_servicio = request.args.get('tipo_servicio', '').strip()
+        search = request.args.get('search', '').strip().lower()
+
+        # Determinar rol del usuario
+        user_role = 'analista'
+        if user_id:
+            cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+            ur = cursor.fetchone()
+            if ur:
+                user_role = ur['role'] or 'analista'
+
+        is_admin_or_leader = user_role in ('admin', 'lider')
+
+        query = '''
+            SELECT c.*, 
+                   e.nombre as empresa_nombre, e.color as empresa_color,
+                   m.nombre as marca_nombre,
+                   u.full_name as author_name,
+                   COALESCE(p.can_view, 0) as user_can_view,
+                   COALESCE(p.can_edit, 0) as user_can_edit
+            FROM it_credentials c
+            JOIN it_empresas e ON c.empresa_id = e.id
+            LEFT JOIN it_marcas m ON c.marca_id = m.id
+            LEFT JOIN users u ON c.created_by = u.id
+            LEFT JOIN it_credential_permissions p ON p.credential_id = c.id AND p.user_id = ?
+            WHERE c.is_active = 1
+        '''
+        params = [user_id or 0]
+
+        if not is_admin_or_leader:
+            query += " AND (c.created_by = ? OR p.can_view = 1)"
+            params.append(user_id or 0)
+
+        if empresa_id:
+            query += " AND c.empresa_id = ?"
+            params.append(empresa_id)
+
+        if marca_id:
+            query += " AND c.marca_id = ?"
+            params.append(marca_id)
+
+        if tipo_servicio and tipo_servicio != 'todas':
+            query += " AND c.tipo_servicio = ?"
+            params.append(tipo_servicio)
+
+        if search:
+            query += " AND (LOWER(c.plataforma) LIKE ? OR LOWER(c.usuario_login) LIKE ? OR LOWER(COALESCE(c.notas, '')) LIKE ? OR LOWER(e.nombre) LIKE ?)"
+            s_param = f"%{search}%"
+            params.extend([s_param, s_param, s_param, s_param])
+
+        query += " ORDER BY e.nombre ASC, m.nombre ASC, c.plataforma ASC"
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        results = []
+        for r in rows:
+            item = dict(r)
+            if item.get('password_secret'):
+                item['password_secret'] = decrypt_vault_secret(item['password_secret'])
+            # Si es admin o líder, tiene permisos completos
+            if is_admin_or_leader or item['created_by'] == user_id:
+                item['can_view'] = True
+                item['can_edit'] = True
+            else:
+                item['can_view'] = bool(item.get('user_can_view'))
+                item['can_edit'] = bool(item.get('user_can_edit'))
+            results.append(item)
+
+        conn.close()
+        return jsonify(results), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('created_by') or data.get('user_id')
+        empresa_id = data.get('empresa_id')
+        marca_id = data.get('marca_id')
+        plataforma = (data.get('plataforma') or '').strip()
+        tipo_servicio = (data.get('tipo_servicio') or 'General').strip()
+        url_acceso = (data.get('url_acceso') or '').strip()
+        usuario_login = (data.get('usuario_login') or '').strip()
+        raw_secret = (data.get('password_secret') or '').strip()
+        password_secret = encrypt_vault_secret(raw_secret) if raw_secret else ''
+        notas = (data.get('notas') or '').strip()
+        tipo_cuenta = data.get('tipo_cuenta', 'operativa')
+        permissions = data.get('permissions', [])  # list of { user_id, can_view, can_edit }
+
+        if not user_id or not empresa_id or not plataforma or not usuario_login or not raw_secret:
+            conn.close()
+            return jsonify({"error": "empresa_id, plataforma, usuario_login y password_secret son requeridos"}), 400
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            INSERT INTO it_credentials (
+                empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
+                usuario_login, password_secret, notas, tipo_cuenta, created_by,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
+              usuario_login, password_secret, notas, tipo_cuenta, user_id, now_peru, now_peru))
+        cred_id = cursor.lastrowid
+
+        # Permiso completo para el creador
+        cursor.execute('''
+            INSERT OR REPLACE INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
+            VALUES (?, ?, 1, 1, ?)
+        ''', (cred_id, user_id, user_id))
+
+        # Asignar permisos específicos opcionales enviados por el admin
+        for p in permissions:
+            u_p_id = p.get('user_id')
+            if u_p_id and u_p_id != user_id:
+                c_view = 1 if p.get('can_view') else 0
+                c_edit = 1 if p.get('can_edit') else 0
+                cursor.execute('''
+                    INSERT OR REPLACE INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (cred_id, u_p_id, c_view, c_edit, user_id))
+
+        # Auditoría de creación
+        cursor.execute('''
+            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+            VALUES (?, ?, 'create', ?)
+        ''', (cred_id, user_id, request.remote_addr))
+
+        conn.commit()
+        conn.close()
+        return jsonify({"id": cred_id, "success": True}), 201
+
+
+@app.route('/api/it-vault/credentials/<int:cred_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+def api_it_credential_detail(cred_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM it_credentials WHERE id = ? AND is_active = 1", (cred_id,))
+    cred = cursor.fetchone()
+    if not cred:
+        conn.close()
+        return jsonify({"error": "Credencial no encontrada"}), 404
+
+    if request.method == 'DELETE':
+        user_id = request.args.get('user_id', type=int)
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        u = cursor.fetchone()
+        is_admin = u and u['role'] in ('admin', 'lider')
+
+        if not is_admin and cred['created_by'] != user_id:
+            conn.close()
+            return jsonify({"error": "No tienes permiso para eliminar esta credencial"}), 403
+
+        cursor.execute("UPDATE it_credentials SET is_active = 0 WHERE id = ?", (cred_id,))
+        cursor.execute('''
+            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+            VALUES (?, ?, 'delete', ?)
+        ''', (cred_id, user_id, request.remote_addr))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        user_id = data.get('updated_by') or data.get('user_id')
+        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+        u = cursor.fetchone()
+        is_admin = u and u['role'] in ('admin', 'lider')
+
+        # Verificar permiso can_edit
+        cursor.execute("SELECT can_edit FROM it_credential_permissions WHERE credential_id = ? AND user_id = ?", (cred_id, user_id))
+        perm = cursor.fetchone()
+        can_edit = (perm and perm['can_edit'] == 1) or is_admin or (cred['created_by'] == user_id)
+
+        if not can_edit:
+            conn.close()
+            return jsonify({"error": "No tienes permiso de edición sobre esta credencial"}), 403
+
+        empresa_id = data.get('empresa_id') or cred['empresa_id']
+        marca_id = data.get('marca_id') if 'marca_id' in data else cred['marca_id']
+        plataforma = (data.get('plataforma') or cred['plataforma']).strip()
+        tipo_servicio = (data.get('tipo_servicio') or cred['tipo_servicio']).strip()
+        url_acceso = data.get('url_acceso') if 'url_acceso' in data else cred['url_acceso']
+        usuario_login = (data.get('usuario_login') or cred['usuario_login']).strip()
+        if 'password_secret' in data:
+            raw_secret = (data.get('password_secret') or '').strip()
+            password_secret = encrypt_vault_secret(raw_secret) if raw_secret else ''
+        else:
+            password_secret = cred['password_secret']
+        notas = data.get('notas') if 'notas' in data else cred['notas']
+        tipo_cuenta = data.get('tipo_cuenta') or cred['tipo_cuenta']
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            UPDATE it_credentials SET
+                empresa_id = ?, marca_id = ?, plataforma = ?, tipo_servicio = ?,
+                url_acceso = ?, usuario_login = ?, password_secret = ?,
+                notas = ?, tipo_cuenta = ?, updated_by = ?, updated_at = ?
+            WHERE id = ?
+        ''', (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
+              usuario_login, password_secret, notas, tipo_cuenta, user_id, now_peru, cred_id))
+
+        cursor.execute('''
+            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+            VALUES (?, ?, 'update', ?)
+        ''', (cred_id, user_id, request.remote_addr))
+
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+
+
+@app.route('/api/it-vault/credentials/<int:cred_id>/audit', methods=['POST', 'OPTIONS'])
+def api_it_credential_audit(cred_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    action = data.get('action') or 'view_password'
+    if not user_id:
+        return jsonify({"error": "user_id es requerido"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+        VALUES (?, ?, ?, ?)
+    ''', (cred_id, user_id, action, request.remote_addr))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 201
+
+
+@app.route('/api/it-vault/credentials/<int:cred_id>/permissions', methods=['GET', 'PUT', 'OPTIONS'])
+def api_it_credential_permissions(cred_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute('''
+            SELECT u.id as user_id, u.full_name, u.username, u.role,
+                   COALESCE(p.can_view, 0) as can_view,
+                   COALESCE(p.can_edit, 0) as can_edit
+            FROM users u
+            LEFT JOIN it_credential_permissions p ON p.user_id = u.id AND p.credential_id = ?
+            WHERE u.is_active = 1
+            ORDER BY u.full_name ASC
+        ''', (cred_id,))
+        permissions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return jsonify(permissions), 200
+
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        assigned_by = data.get('assigned_by')
+        permissions_list = data.get('permissions', [])
+
+        cursor.execute("SELECT role FROM users WHERE id = ?", (assigned_by,))
+        u = cursor.fetchone()
+        if not u or u['role'] not in ('admin', 'lider'):
+            conn.close()
+            return jsonify({"error": "Solo administradores o líderes pueden configurar permisos"}), 403
+
+        for perm in permissions_list:
+            target_user_id = perm.get('user_id')
+            can_view = 1 if perm.get('can_view') else 0
+            can_edit = 1 if perm.get('can_edit') else 0
+            cursor.execute('''
+                INSERT INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(credential_id, user_id) DO UPDATE SET
+                    can_view = excluded.can_view,
+                    can_edit = excluded.can_edit,
+                    assigned_by = excluded.assigned_by
+            ''', (cred_id, target_user_id, can_view, can_edit, assigned_by))
+
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+
+
+# =========================================================================
+# RUTAS REST: DIRECTORIO DE USUARIOS POR PLATAFORMA (SOPORTE Y RESETEO)
+# =========================================================================
+
+@app.route('/api/it-vault/platform-users', methods=['GET', 'POST', 'OPTIONS'])
+def api_it_platform_users():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        empresa_id = request.args.get('empresa_id', type=int)
+        marca_id = request.args.get('marca_id', type=int)
+        plataforma = request.args.get('plataforma', '').strip()
+        search = request.args.get('search', '').strip().lower()
+        estado = request.args.get('estado', '').strip()
+
+        query = '''
+            SELECT pu.*, 
+                   e.nombre as empresa_nombre, e.color as empresa_color,
+                   m.nombre as marca_nombre,
+                   u.full_name as created_by_name
+            FROM it_platform_users pu
+            JOIN it_empresas e ON pu.empresa_id = e.id
+            LEFT JOIN it_marcas m ON pu.marca_id = m.id
+            LEFT JOIN users u ON pu.created_by = u.id
+            WHERE 1=1
+        '''
+        params = []
+
+        if empresa_id:
+            query += " AND pu.empresa_id = ?"
+            params.append(empresa_id)
+
+        if marca_id:
+            query += " AND pu.marca_id = ?"
+            params.append(marca_id)
+
+        if plataforma and plataforma != 'todas':
+            query += " AND pu.plataforma = ?"
+            params.append(plataforma)
+
+        if estado and estado != 'todos':
+            query += " AND pu.estado = ?"
+            params.append(estado)
+
+        if search:
+            query += " AND (LOWER(pu.colaborador_nombre) LIKE ? OR LOWER(pu.usuario_login) LIKE ? OR LOWER(COALESCE(pu.colaborador_email, '')) LIKE ? OR LOWER(COALESCE(pu.colaborador_cargo, '')) LIKE ?)"
+            s_param = f"%{search}%"
+            params.extend([s_param, s_param, s_param, s_param])
+
+        query += " ORDER BY pu.colaborador_nombre ASC, pu.plataforma ASC"
+        cursor.execute(query, params)
+        raw_users = cursor.fetchall()
+        users_list = []
+        for row in raw_users:
+            item = dict(row)
+            if item.get('password_actual'):
+                item['password_actual'] = decrypt_vault_secret(item['password_actual'])
+            if item.get('password_anterior'):
+                item['password_anterior'] = decrypt_vault_secret(item['password_anterior'])
+            users_list.append(item)
+        conn.close()
+        return jsonify(users_list), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        empresa_id = data.get('empresa_id')
+        marca_id = data.get('marca_id') or None
+        plataforma = (data.get('plataforma') or '').strip()
+        colaborador_nombre = (data.get('colaborador_nombre') or '').strip()
+        colaborador_cargo = (data.get('colaborador_cargo') or '').strip()
+        colaborador_email = (data.get('colaborador_email') or '').strip()
+        colaborador_telefono = (data.get('colaborador_telefono') or '').strip()
+        usuario_login = (data.get('usuario_login') or '').strip()
+        raw_password = (data.get('password_actual') or '').strip()
+        password_actual = encrypt_vault_secret(raw_password) if raw_password else ''
+        estado = data.get('estado') or 'activo'
+        notas = (data.get('notas') or '').strip()
+        created_by = data.get('created_by') or 1
+
+        if not empresa_id or not plataforma or not colaborador_nombre or not usuario_login or not raw_password:
+            conn.close()
+            return jsonify({"error": "Empresa, Plataforma, Colaborador, Usuario y Contraseña son obligatorios"}), 400
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            INSERT INTO it_platform_users (
+                empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
+                colaborador_email, colaborador_telefono, usuario_login, password_actual,
+                estado, ultimo_reseteo, notas, created_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
+              colaborador_email, colaborador_telefono, usuario_login, password_actual,
+              estado, now_peru, notas, created_by, now_peru, now_peru))
+        new_id = cursor.lastrowid
+        conn.commit()
+
+        cursor.execute('''
+            SELECT pu.*, e.nombre as empresa_nombre, e.color as empresa_color, m.nombre as marca_nombre
+            FROM it_platform_users pu
+            JOIN it_empresas e ON pu.empresa_id = e.id
+            LEFT JOIN it_marcas m ON pu.marca_id = m.id
+            WHERE pu.id = ?
+        ''', (new_id,))
+        created_row = dict(cursor.fetchone())
+        if created_row.get('password_actual'):
+            created_row['password_actual'] = decrypt_vault_secret(created_row['password_actual'])
+        conn.close()
+        return jsonify(created_row), 201
+
+
+@app.route('/api/it-vault/platform-users/<int:user_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
+def api_it_platform_user_detail(user_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM it_platform_users WHERE id = ?", (user_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": "Cuenta de usuario no encontrada"}), 404
+
+    if request.method == 'DELETE':
+        cursor.execute("DELETE FROM it_platform_users WHERE id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+
+    if request.method == 'PUT':
+        data = request.get_json(silent=True) or {}
+        empresa_id = data.get('empresa_id') or existing['empresa_id']
+        marca_id = data.get('marca_id') if 'marca_id' in data else existing['marca_id']
+        plataforma = (data.get('plataforma') or existing['plataforma']).strip()
+        colaborador_nombre = (data.get('colaborador_nombre') or existing['colaborador_nombre']).strip()
+        colaborador_cargo = (data.get('colaborador_cargo') if 'colaborador_cargo' in data else existing['colaborador_cargo']) or ''
+        colaborador_email = (data.get('colaborador_email') if 'colaborador_email' in data else existing['colaborador_email']) or ''
+        colaborador_telefono = (data.get('colaborador_telefono') if 'colaborador_telefono' in data else existing['colaborador_telefono']) or ''
+        usuario_login = (data.get('usuario_login') or existing['usuario_login']).strip()
+        if 'password_actual' in data:
+            raw_password = (data.get('password_actual') or '').strip()
+            password_actual = encrypt_vault_secret(raw_password) if raw_password else ''
+        else:
+            password_actual = existing['password_actual']
+        estado = data.get('estado') or existing['estado']
+        notas = (data.get('notas') if 'notas' in data else existing['notas']) or ''
+        updated_by = data.get('updated_by')
+
+        now_peru = get_peru_now()
+        cursor.execute('''
+            UPDATE it_platform_users SET
+                empresa_id = ?, marca_id = ?, plataforma = ?, colaborador_nombre = ?,
+                colaborador_cargo = ?, colaborador_email = ?, colaborador_telefono = ?,
+                usuario_login = ?, password_actual = ?, estado = ?, notas = ?,
+                updated_by = ?, updated_at = ?
+            WHERE id = ?
+        ''', (empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
+              colaborador_email, colaborador_telefono, usuario_login, password_actual,
+              estado, notas, updated_by, now_peru, user_id))
+        conn.commit()
+
+        cursor.execute('''
+            SELECT pu.*, e.nombre as empresa_nombre, e.color as empresa_color, m.nombre as marca_nombre
+            FROM it_platform_users pu
+            JOIN it_empresas e ON pu.empresa_id = e.id
+            LEFT JOIN it_marcas m ON pu.marca_id = m.id
+            WHERE pu.id = ?
+        ''', (user_id,))
+        updated_row = dict(cursor.fetchone())
+        if updated_row.get('password_actual'):
+            updated_row['password_actual'] = decrypt_vault_secret(updated_row['password_actual'])
+        if updated_row.get('password_anterior'):
+            updated_row['password_anterior'] = decrypt_vault_secret(updated_row['password_anterior'])
+        conn.close()
+        return jsonify(updated_row), 200
+
+
+@app.route('/api/it-vault/platform-users/<int:user_id>/reset-password', methods=['POST', 'OPTIONS'])
+def api_it_platform_user_reset_password(user_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT pu.*, e.nombre as empresa_nombre FROM it_platform_users pu JOIN it_empresas e ON pu.empresa_id = e.id WHERE pu.id = ?", (user_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Cuenta de usuario no encontrada"}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_password = (data.get('new_password') or '').strip()
+    reset_by = data.get('reset_by')
+
+    # Si no se envió clave, generamos una clave segura automáticamente
+    if not new_password:
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits + "!@#$%&*"
+        new_password = ''.join(secrets.choice(alphabet) for _ in range(14))
+
+    now_peru = get_peru_now()
+    encrypted_new = encrypt_vault_secret(new_password)
+    cursor.execute('''
+        UPDATE it_platform_users SET
+            password_anterior = password_actual,
+            password_actual = ?,
+            ultimo_reseteo = ?,
+            updated_by = ?,
+            updated_at = ?
+        WHERE id = ?
+    ''', (encrypted_new, now_peru, reset_by, now_peru, user_id))
+    conn.commit()
+
+    # Preparar plantilla de mensaje de soporte para compartir al colaborador por WhatsApp o correo
+    colab = row['colaborador_nombre']
+    plat = row['plataforma']
+    login = row['usuario_login']
+    emp = row['empresa_nombre']
+
+    share_message = (
+        f"Hola {colab}, el área de Sistemas de {emp} te comparte tus credenciales actualizadas:\n\n"
+        f"Plataforma: {plat}\n"
+        f"Usuario: {login}\n"
+        f"Contraseña temporal: {new_password}\n\n"
+        f"Por seguridad, te sugerimos cambiar tu contraseña al iniciar sesión o mantenerla en un lugar seguro."
+    )
+
+    conn.close()
+    return jsonify({
+        "success": True,
+        "new_password": new_password,
+        "ultimo_reseteo": now_peru,
+        "share_message": share_message
+    }), 200
+
+
+# =========================================================================
+# RUTAS REST: GESTIÓN DE CATÁLOGOS MAESTROS (PLATAFORMAS, CARGOS, EMPRESAS)
+# =========================================================================
+
+@app.route('/api/it-vault/plataformas', methods=['GET', 'POST', 'OPTIONS'])
+def api_it_plataformas():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute("SELECT * FROM it_plataformas ORDER BY nombre ASC")
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return jsonify(rows), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get('nombre') or '').strip()
+        tipo_servicio = (data.get('tipo_servicio') or 'General').strip()
+        color = data.get('color', '#00F0FF')
+        if not nombre:
+            conn.close()
+            return jsonify({"error": "El nombre de la plataforma es obligatorio"}), 400
+
+        try:
+            cursor.execute("INSERT INTO it_plataformas (nombre, tipo_servicio, color) VALUES (?, ?, ?)", (nombre, tipo_servicio, color))
+            new_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            return jsonify({"id": new_id, "nombre": nombre, "tipo_servicio": tipo_servicio, "color": color}), 201
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"error": "Esta plataforma ya existe en el catálogo"}), 400
+
+
+@app.route('/api/it-vault/plataformas/<int:plat_id>', methods=['DELETE', 'OPTIONS'])
+def api_it_plataforma_detail(plat_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM it_plataformas WHERE id = ?", (plat_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 200
+
+
+@app.route('/api/it-vault/cargos', methods=['GET', 'POST', 'OPTIONS'])
+def api_it_cargos():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'GET':
+        cursor.execute("SELECT * FROM it_cargos ORDER BY nombre ASC")
+        rows = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+        return jsonify(rows), 200
+
+    if request.method == 'POST':
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get('nombre') or '').strip()
+        area = (data.get('area') or 'General').strip()
+        if not nombre:
+            conn.close()
+            return jsonify({"error": "El nombre del cargo/área es obligatorio"}), 400
+
+        try:
+            cursor.execute("INSERT INTO it_cargos (nombre, area) VALUES (?, ?)", (nombre, area))
+            new_id = cursor.lastrowid
+            conn.commit()
+            conn.close()
+            return jsonify({"id": new_id, "nombre": nombre, "area": area}), 201
+        except sqlite3.IntegrityError:
+            conn.close()
+            return jsonify({"error": "Este cargo ya existe en el catálogo"}), 400
+
+
+@app.route('/api/it-vault/cargos/<int:cargo_id>', methods=['DELETE', 'OPTIONS'])
+def api_it_cargo_detail(cargo_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM it_cargos WHERE id = ?", (cargo_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 200
+
+
+@app.route('/api/it-vault/empresas/<int:empresa_id>', methods=['DELETE', 'OPTIONS'])
+def api_it_empresa_delete(empresa_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    # Validar si tiene credenciales o usuarios de plataforma asociados
+    cursor.execute("SELECT COUNT(*) FROM it_credentials WHERE empresa_id = ? AND is_active = 1", (empresa_id,))
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return jsonify({"error": "No se puede eliminar esta empresa porque contiene credenciales maestras registradas"}), 400
+
+    cursor.execute("SELECT COUNT(*) FROM it_platform_users WHERE empresa_id = ?", (empresa_id,))
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return jsonify({"error": "No se puede eliminar esta empresa porque contiene usuarios/colaboradores registrados"}), 400
+
+    cursor.execute("DELETE FROM it_marcas WHERE empresa_id = ?", (empresa_id,))
+    cursor.execute("DELETE FROM it_empresas WHERE id = ?", (empresa_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 200
+
+
+@app.route('/api/it-vault/marcas/<int:marca_id>', methods=['DELETE', 'OPTIONS'])
+def api_it_marca_delete(marca_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM it_marcas WHERE id = ?", (marca_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True}), 200
+
+
+# =========================================================================
+# RUTAS REST: MODO BÓVEDA SEGURA (DESBLOQUEO POR PIN / RE-AUTENTICACIÓN)
+# =========================================================================
+
+@app.route('/api/it-vault/pin-status', methods=['GET', 'OPTIONS'])
+def api_it_vault_pin_status():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    user_id = request.args.get('user_id', type=int)
+    if not user_id:
+        return jsonify({"error": "user_id es requerido"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT security_pin_hash FROM users WHERE id = ?", (user_id,))
+    row = cursor.fetchone()
     conn.close()
 
-    return jsonify({"success": True, "message": "Sugerencia eliminada correctamente"}), 200
+    has_pin = bool(row and row['security_pin_hash'])
+    return jsonify({"has_pin": has_pin}), 200
+
+
+@app.route('/api/it-vault/set-pin', methods=['POST', 'OPTIONS'])
+def api_it_vault_set_pin():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    current_password = (data.get('current_password') or '').strip()
+    new_pin = (data.get('new_pin') or '').strip()
+
+    if not user_id or not current_password or not new_pin:
+        return jsonify({"error": "Contraseña actual y nuevo PIN son obligatorios"}), 400
+
+    if len(new_pin) < 4 or len(new_pin) > 8:
+        return jsonify({"error": "El PIN debe tener entre 4 y 8 dígitos o caracteres"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT password_hash FROM users WHERE id = ? AND is_active = 1", (user_id,))
+    user = cursor.fetchone()
+    if not user or not check_password_hash(user['password_hash'], current_password):
+        conn.close()
+        return jsonify({"error": "La contraseña de inicio de sesión actual es incorrecta"}), 401
+
+    pin_hash = generate_password_hash(new_pin)
+    cursor.execute("UPDATE users SET security_pin_hash = ? WHERE id = ?", (pin_hash, user_id))
+    
+    # Auditoría
+    cursor.execute('''
+        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+        VALUES (NULL, ?, 'config_security_pin', ?)
+    ''', (user_id, request.remote_addr))
+
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "message": "PIN de seguridad configurado exitosamente"}), 200
+
+
+@app.route('/api/it-vault/verify-unlock', methods=['POST', 'OPTIONS'])
+def api_it_vault_verify_unlock():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    password = (data.get('password') or '').strip()
+    pin = (data.get('pin') or '').strip()
+
+    if not user_id or (not password and not pin):
+        return jsonify({"error": "Debes ingresar tu contraseña o tu PIN de seguridad"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, username, password_hash, security_pin_hash, role FROM users WHERE id = ? AND is_active = 1", (user_id,))
+    user = cursor.fetchone()
+    if not user:
+        conn.close()
+        return jsonify({"error": "Usuario no encontrado o inactivo"}), 404
+
+    is_valid = False
+    validation_method = None
+
+    if pin:
+        if not user['security_pin_hash']:
+            conn.close()
+            return jsonify({"error": "Aún no has configurado un PIN. Ingresa con tu contraseña de sesión o configúralo."}), 400
+        if check_password_hash(user['security_pin_hash'], pin):
+            is_valid = True
+            validation_method = 'pin'
+    elif password:
+        if check_password_hash(user['password_hash'], password):
+            is_valid = True
+            validation_method = 'password'
+
+    if not is_valid:
+        # Registrar intento fallido
+        cursor.execute('''
+            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+            VALUES (NULL, ?, 'failed_vault_unlock', ?)
+        ''', (user_id, request.remote_addr))
+        conn.commit()
+        conn.close()
+        return jsonify({"error": "Credencial de desbloqueo incorrecta. Inténtalo de nuevo.", "success": False}), 401
+
+    # Registrar desbloqueo exitoso
+    cursor.execute('''
+        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
+        VALUES (NULL, ?, ?, ?)
+    ''', (user_id, f'unlock_vault_{validation_method}', request.remote_addr))
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        "success": True,
+        "expires_in": 300,  # 5 minutos en segundos
+        "message": "Bóveda desbloqueada con éxito"
+    }), 200
 
 LAST_ROLLOVER_DATE = None
 rollover_lock = threading.Lock()

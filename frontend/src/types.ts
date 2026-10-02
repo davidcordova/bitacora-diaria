@@ -185,7 +185,7 @@ export interface DashboardStats {
   };
 }
 
-export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon';
+export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon' | 'vault';
 
 export interface SystemSettings {
   hora_inicio_default?: string;
@@ -232,4 +232,113 @@ export interface Sugerencia {
   created_at: string;
   updated_at?: string;
 }
+
+export interface QuickLink {
+  id: number;
+  user_id: number;
+  titulo: string;
+  url: string;
+  categoria?: string;
+  descripcion?: string;
+  icono?: string;
+  color?: string;
+  usuario?: string;
+  password?: string;
+  visibilidad: 'personal' | 'equipo' | 'global';
+  team_id?: number | null;
+  team_name?: string | null;
+  author_name?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ItMarca {
+  id: number;
+  empresa_id: number;
+  nombre: string;
+  created_at?: string;
+}
+
+export interface ItEmpresa {
+  id: number;
+  nombre: string;
+  color?: string;
+  created_at?: string;
+  marcas?: ItMarca[];
+}
+
+export interface ItCredential {
+  id: number;
+  empresa_id: number;
+  empresa_nombre?: string;
+  empresa_color?: string;
+  marca_id?: number | null;
+  marca_nombre?: string | null;
+  plataforma: string;
+  tipo_servicio: string;
+  url_acceso?: string;
+  usuario_login: string;
+  password_secret: string;
+  notas?: string;
+  tipo_cuenta?: 'master' | 'admin' | 'operativa' | 'consulta' | string;
+  is_active?: number;
+  created_by: number;
+  author_name?: string;
+  can_view?: boolean;
+  can_edit?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ItCredentialPermission {
+  user_id: number;
+  full_name: string;
+  username: string;
+  role: string;
+  can_view: boolean | number;
+  can_edit: boolean | number;
+}
+
+export interface ItPlatformUser {
+  id: number;
+  empresa_id: number;
+  empresa_nombre?: string;
+  empresa_color?: string;
+  marca_id?: number | null;
+  marca_nombre?: string | null;
+  plataforma: string;
+  colaborador_nombre: string;
+  colaborador_cargo?: string;
+  colaborador_email?: string;
+  colaborador_telefono?: string;
+  usuario_login: string;
+  password_actual: string;
+  password_anterior?: string;
+  estado: 'activo' | 'suspendido' | 'por_crear' | 'baja';
+  ultimo_reseteo?: string;
+  notas?: string;
+  created_by?: number;
+  created_by_name?: string;
+  updated_by?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ItPlataforma {
+  id: number;
+  nombre: string;
+  tipo_servicio?: string;
+  color?: string;
+  created_at?: string;
+}
+
+export interface ItCargo {
+  id: number;
+  nombre: string;
+  area?: string;
+  created_at?: string;
+}
+
+
+
 
