@@ -56,8 +56,44 @@ interface TeamSupervisionViewProps {
 export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ currentUser, teams, users }) => {
   // Date selection state: Defaults to today (local timezone)
   const [selectedDate, setSelectedDate] = useState<string>(getTodayLocalDateStr());
+
+  // Teams mapping dictionary
+  const teamsMap = useMemo(() => {
+    const map = new Map<number, Team>();
+    teams.forEach((t) => map.set(t.id, t));
+    return map;
+  }, [teams]);
+
+  // Filter teams accessible to this leader / admin (Admin: all, Leader: only squads they lead or belong to)
+  const accessibleTeams = useMemo(() => {
+    if (currentUser?.role === 'admin') {
+      return teams;
+    }
+    return teams.filter(
+      (t) => t.id === currentUser?.team_id || t.lider_id === currentUser?.id
+    );
+  }, [teams, currentUser]);
+
+  const primaryTeam = accessibleTeams[0] || teams[0] || null;
+
   // Team selection filter for admin / leaders with multiple teams: 'all' or team ID
-  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>('all');
+  const [selectedTeamFilter, setSelectedTeamFilter] = useState<string>(() => {
+    if (currentUser?.role === 'admin') return 'all';
+    const leaderTeam = teams.find(
+      (t) => t.lider_id === currentUser?.id || t.id === currentUser?.team_id
+    );
+    return leaderTeam ? String(leaderTeam.id) : (currentUser?.team_id ? String(currentUser.team_id) : 'all');
+  });
+
+  // Auto-sync filter if leader teams load asynchronously
+  useEffect(() => {
+    if (currentUser?.role !== 'admin' && accessibleTeams.length > 0) {
+      if (selectedTeamFilter === 'all' || !accessibleTeams.some((t) => String(t.id) === selectedTeamFilter)) {
+        setSelectedTeamFilter(String(accessibleTeams[0].id));
+      }
+    }
+  }, [accessibleTeams, currentUser?.role, selectedTeamFilter]);
+
   // 'all' for Master Team View, or user ID for Individual View
   const [selectedMemberId, setSelectedMemberId] = useState<number | 'all'>('all');
   // In Team Mode: 'feed' (realtime live stream), 'semaforo' (workload radar) or 'kanban' (board)
@@ -84,44 +120,32 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const isSelectedToday = selectedDate === todayStr;
   const isSelectedYesterday = selectedDate === yesterdayStr;
 
-  // Teams mapping dictionary
-  const teamsMap = useMemo(() => {
-    const map = new Map<number, Team>();
-    teams.forEach((t) => map.set(t.id, t));
-    return map;
-  }, [teams]);
-
-  // Filter teams accessible to this leader / admin
-  const accessibleTeams = useMemo(() => {
-    return currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader
-      ? teams
-      : teams.filter((t) => t.id === currentUser?.team_id || t.lider_id === currentUser?.id);
-  }, [teams, currentUser]);
-
-  const primaryTeam = accessibleTeams[0] || teams[0] || null;
-
   // Flatten accessible members using both users list and teams list
   const allMembers = useMemo(() => {
     if (users && users.length > 0) {
       let filteredUsers = users.filter((u) => u.is_active !== 0 && (u.is_active as any) !== false);
 
-      if (currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader) {
+      if (currentUser?.role === 'admin') {
         if (selectedTeamFilter !== 'all') {
           const tid = Number(selectedTeamFilter);
           filteredUsers = filteredUsers.filter((u) => u.team_id === tid);
         }
       } else {
-        // Operador/Analista: miembros de su propio equipo
+        // Líder: SOLO miembros de sus escuadrones asignados o liderados (NUNCA usuarios ajenos o admin)
         const leaderTeamIds = new Set(accessibleTeams.map((t) => t.id));
         filteredUsers = filteredUsers.filter(
           (u) =>
             (u.team_id && leaderTeamIds.has(u.team_id)) ||
             u.id === currentUser?.id ||
-            accessibleTeams.some((t) => t.members?.some((m) => m.id === u.id))
+            accessibleTeams.some((t) => t.lider_id === u.id || t.members?.some((m) => m.id === u.id))
         );
         if (selectedTeamFilter !== 'all') {
           const tid = Number(selectedTeamFilter);
-          filteredUsers = filteredUsers.filter((u) => u.team_id === tid);
+          filteredUsers = filteredUsers.filter(
+            (u) =>
+              u.team_id === tid ||
+              (u.id === currentUser?.id && accessibleTeams.some((t) => t.id === tid && t.lider_id === u.id))
+          );
         }
       }
 
@@ -406,13 +430,25 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 </h2>
 
                 {/* Filtro de Equipo si es Admin o tiene más de 1 equipo */}
-                {accessibleTeams.length > 1 ? (
+                {currentUser?.role === 'admin' && accessibleTeams.length > 1 ? (
                   <select
                     value={selectedTeamFilter}
                     onChange={(e) => setSelectedTeamFilter(e.target.value)}
                     className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-[#252636] focus:outline-none focus:ring-1 focus:ring-[#00F0FF] cursor-pointer"
                   >
                     <option value="all">🏢 Todos los Equipos ({accessibleTeams.length})</option>
+                    {accessibleTeams.map((t) => (
+                      <option key={t.id} value={t.id.toString()}>
+                        👥 {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                ) : accessibleTeams.length > 1 ? (
+                  <select
+                    value={selectedTeamFilter}
+                    onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-[#252636] focus:outline-none focus:ring-1 focus:ring-[#00F0FF] cursor-pointer"
+                  >
                     {accessibleTeams.map((t) => (
                       <option key={t.id} value={t.id.toString()}>
                         👥 {t.nombre}
@@ -648,7 +684,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             {allMembers.map((m) => {
               const isSelected = selectedMemberId === m.id;
               const memberLog = teamBitacoras.find(
-                (b) => (b.user_id === m.id || b.colaborador === m.full_name) && b.fecha === selectedDate
+                (b) =>
+                  (b.user_id === m.id ||
+                    (b.colaborador && m.full_name && b.colaborador.toLowerCase() === m.full_name.toLowerCase()) ||
+                    (m.username && b.colaborador && b.colaborador.toLowerCase() === m.username.toLowerCase())) &&
+                  b.fecha === selectedDate
               );
               const count = memberLog ? (memberLog.actividades || []).filter((a) => !a.is_deleted).length : 0;
               const hasSupport = memberLog?.necesita_apoyo === 'Si';

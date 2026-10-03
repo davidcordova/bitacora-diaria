@@ -218,6 +218,14 @@ def init_db():
             VALUES ('admin', 'admin@marketingalterno.pe', ?, 'Administrador Principal', 'admin', '51999888777', 1, CURRENT_TIMESTAMP)
         ''', (admin_hash,))
 
+    # 5.1 Auto-sincronizar consistencia de líderes y equipos
+    cursor.execute('''
+        UPDATE users SET team_id = (SELECT t.id FROM teams t WHERE t.lider_id = users.id LIMIT 1),
+                         role = CASE WHEN role = 'admin' THEN 'admin' ELSE 'lider' END
+        WHERE id IN (SELECT lider_id FROM teams WHERE lider_id IS NOT NULL)
+          AND (team_id IS NULL OR role NOT IN ('lider', 'admin'))
+    ''')
+
     # 6. Crear tabla system_settings para configuraciones globales y branding
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS system_settings (

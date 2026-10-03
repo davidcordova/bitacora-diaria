@@ -998,11 +998,27 @@ export function App() {
   };
 
   const handleGenerateBitacora = async () => {
+    // 1. Validar que existan actividades registradas en la jornada
+    const activeActs = (bitacora.actividades || []).filter((a) => !a.is_deleted);
+    if (activeActs.length === 0) {
+      showToast('error', 'Debes registrar al menos una actividad antes de generar la bitácora del día', 'Sin actividades');
+      return;
+    }
+
+    // 2. Si los campos de cierre están vacíos, autocompletar con texto estándar para no bloquear al usuario
+    const pendientesText = bitacora.pendientes?.trim() || 'Sin tareas pendientes para otra fecha';
+    const prioridadText = bitacora.prioridad_siguiente?.trim() || 'Continuar con el plan de actividades programado';
+
+    if (!bitacora.pendientes?.trim()) handleFieldChange('pendientes', pendientesText);
+    if (!bitacora.prioridad_siguiente?.trim()) handleFieldChange('prioridad_siguiente', prioridadText);
+
     setIsSaving(true);
     try {
       const match = users.find((u) => u.full_name === bitacora.colaborador);
       const payload: Bitacora = {
         ...bitacora,
+        pendientes: pendientesText,
+        prioridad_siguiente: prioridadText,
         user_id: match ? match.id : (bitacora.user_id || currentUser?.id),
         estado: 'generada',
       };
@@ -1024,7 +1040,7 @@ export function App() {
         });
       } catch (e) {}
 
-      showToast('success', '¡Bitácora guardada exitosamente en el historial!', 'Jornada Registrada');
+      showToast('success', '¡Bitácora guardada exitosamente en el servidor!', 'Jornada Registrada');
 
       const updatedHistory = await api.getBitacoras(undefined, undefined, undefined, currentUser?.id);
       setHistorial(updatedHistory);
@@ -1036,7 +1052,7 @@ export function App() {
       setMobileDrawerOpen(true);
     } catch (e: any) {
       console.error('Error generando bitacora', e);
-      showToast('error', e.message || 'Error al guardar la bitácora', 'Error');
+      showToast('error', e.message || 'Error al guardar la bitácora en el servidor', 'Atención');
     } finally {
       setIsSaving(false);
     }

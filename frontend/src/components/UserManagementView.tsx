@@ -94,6 +94,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     nombre: '',
     descripcion: '',
     lider_id: '' as number | '',
+    member_ids: [] as number[],
   });
 
   // Delete / deactivate user modal state
@@ -324,16 +325,20 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   // Team actions
   const handleOpenNewTeam = () => {
     setEditingTeamId(null);
-    setTeamForm({ nombre: '', descripcion: '', lider_id: '' });
+    setTeamForm({ nombre: '', descripcion: '', lider_id: '', member_ids: [] });
     setShowTeamModal(true);
   };
 
   const handleEditTeam = (t: Team) => {
     setEditingTeamId(t.id);
+    const existingMemberIds = (t.members || []).map((m) => m.id);
+    const usersInTeam = users.filter((u) => u.team_id === t.id).map((u) => u.id);
+    const allTMembers = Array.from(new Set([...existingMemberIds, ...usersInTeam]));
     setTeamForm({
       nombre: t.nombre,
       descripcion: t.descripcion || '',
       lider_id: t.lider_id || '',
+      member_ids: allTMembers,
     });
     setShowTeamModal(true);
   };
@@ -346,15 +351,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           nombre: teamForm.nombre,
           descripcion: teamForm.descripcion,
           lider_id: teamForm.lider_id ? Number(teamForm.lider_id) : null,
+          member_ids: teamForm.member_ids,
         });
-        setFeedbackMsg('Equipo actualizado');
+        setFeedbackMsg('Equipo y asignación de colaboradores actualizados');
       } else {
         await api.createTeam({
           nombre: teamForm.nombre,
           descripcion: teamForm.descripcion,
           lider_id: teamForm.lider_id ? Number(teamForm.lider_id) : null,
+          member_ids: teamForm.member_ids,
         });
-        setFeedbackMsg('Equipo creado');
+        setFeedbackMsg('Equipo creado con colaboradores asignados');
       }
       setShowTeamModal(false);
       onRefreshTeams();
@@ -1577,6 +1584,84 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Asignar Colaboradores al Equipo ({teamForm.member_ids.length} seleccionados)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nonAdminUsers = users.filter((u) => u.role !== 'admin');
+                        setTeamForm((prev) => ({
+                          ...prev,
+                          member_ids: nonAdminUsers.map((u) => u.id),
+                        }));
+                      }}
+                      className="text-[10px] text-[#00F0FF] hover:underline cursor-pointer font-bold"
+                    >
+                      Todos
+                    </button>
+                    <span className="text-slate-400">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setTeamForm((prev) => ({ ...prev, member_ids: [] }))}
+                      className="text-[10px] text-slate-400 hover:text-slate-200 cursor-pointer font-bold"
+                    >
+                      Ninguno
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-44 overflow-y-auto space-y-1.5 p-2 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636]">
+                  {users
+                    .filter((u) => u.role !== 'admin')
+                    .map((u) => {
+                      const isChecked = teamForm.member_ids.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[#1E2030] cursor-pointer transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setTeamForm((prev) => ({
+                                    ...prev,
+                                    member_ids: [...prev.member_ids, u.id],
+                                  }));
+                                } else {
+                                  setTeamForm((prev) => ({
+                                    ...prev,
+                                    member_ids: prev.member_ids.filter((id) => id !== u.id),
+                                  }));
+                                }
+                              }}
+                              className="rounded border-slate-300 dark:border-[#252636] text-[#00F0FF] focus:ring-[#00F0FF]"
+                            />
+                            <div>
+                              <div className="font-semibold text-slate-800 dark:text-slate-200">{u.full_name}</div>
+                              <div className="text-[10px] text-slate-400">@{u.username} • {u.team_name || 'Sin equipo'}</div>
+                            </div>
+                          </div>
+                          {isChecked && (
+                            <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                              Asignado
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Los colaboradores seleccionados pertenecerán a este escuadrón y serán visibles en la supervisión de su líder.
+                </p>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2">

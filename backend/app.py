@@ -922,12 +922,22 @@ def admin_teams():
         ''', (nombre, descripcion, lider_id))
         team_id = cursor.lastrowid
         
-        # Si se asignó un líder, actualizar su rol a líder si no es admin
+        member_ids = data.get('member_ids')
+        effective_members = set()
+        if member_ids and isinstance(member_ids, list):
+            effective_members.update(member_ids)
+            
+        # Si se asignó un líder, actualizar su rol a líder si no es admin y agregarlo al equipo
         if lider_id:
             cursor.execute('''
                 UPDATE users SET team_id = ?, role = CASE WHEN role = 'admin' THEN 'admin' ELSE 'lider' END
                 WHERE id = ?
             ''', (team_id, lider_id))
+            effective_members.add(lider_id)
+            
+        if effective_members:
+            placeholders = ','.join(['?'] * len(effective_members))
+            cursor.execute(f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})", [team_id] + list(effective_members))
             
         conn.commit()
         conn.close()
@@ -956,18 +966,28 @@ def admin_team_detail(team_id):
             WHERE id = ?
         ''', (nombre, descripcion, lider_id, team_id))
         
-        if lider_id:
+        # Obtener lider efectivo del equipo
+        effective_lider_id = lider_id
+        if effective_lider_id is None:
+            team_row = cursor.execute("SELECT lider_id FROM teams WHERE id = ?", (team_id,)).fetchone()
+            if team_row:
+                effective_lider_id = team_row['lider_id']
+                
+        if effective_lider_id:
             cursor.execute('''
                 UPDATE users SET team_id = ?, role = CASE WHEN role = 'admin' THEN 'admin' ELSE 'lider' END
                 WHERE id = ?
-            ''', (team_id, lider_id))
+            ''', (team_id, effective_lider_id))
             
         if member_ids is not None and isinstance(member_ids, list):
-            # Asignar miembros indicados a este equipo
+            # Asignar miembros indicados a este equipo, asegurando que el líder también mantenga su team_id
             cursor.execute("UPDATE users SET team_id = NULL WHERE team_id = ?", (team_id,))
-            if member_ids:
-                placeholders = ','.join(['?'] * len(member_ids))
-                cursor.execute(f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})", [team_id] + member_ids)
+            effective_members = set(member_ids)
+            if effective_lider_id:
+                effective_members.add(effective_lider_id)
+            if effective_members:
+                placeholders = ','.join(['?'] * len(effective_members))
+                cursor.execute(f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})", [team_id] + list(effective_members))
                 
         conn.commit()
         conn.close()
@@ -1145,7 +1165,18 @@ def get_bitacoras():
                 # Los analistas/operadores SOLO pueden ver sus propias bitácoras
                 query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
                 params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-            # Si es lider o admin, pueden ver todas las bitácoras o filtrar por team_id si se pasa como parámetro
+            elif r_role == 'lider':
+                # Un líder SOLO puede ver bitácoras de los equipos que lidera o pertenece
+                leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
+                if team_id and str(team_id).isdigit() and int(team_id) in leader_teams:
+                    pass  # Se filtrará por team_id exacto más abajo
+                elif leader_teams:
+                    placeholders = ','.join(['?'] * len(leader_teams))
+                    query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
+                    params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
+                else:
+                    query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                    params.extend([req_u['id'], req_u['full_name'], req_u['username']])
     
     if fecha:
         query += " AND b.fecha = ?"
@@ -1154,8 +1185,8 @@ def get_bitacoras():
         query += " AND (b.colaborador LIKE ? OR u.username LIKE ?)"
         params.extend([f"%{colaborador}%", f"%{colaborador}%"])
     if team_id:
-        query += " AND u.team_id = ?"
-        params.append(team_id)
+        query += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
+        params.extend([team_id, team_id])
     if user_id:
         query += " AND (b.user_id = ? OR u.id = ?)"
         params.extend([user_id, user_id])
@@ -2083,11 +2114,20 @@ def get_equipo_actividades_en_vivo():
             if req_u['role'] in ('analista', 'operador'):
                 query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
                 params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-            # Admin y líderes pueden ver las actividades de todo el equipo o filtrar por team_id
+            elif req_u['role'] == 'lider':
+                leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
+                if not team_id or team_id == 'all':
+                    if leader_teams:
+                        placeholders = ','.join(['?'] * len(leader_teams))
+                        query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
+                        params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
+                    else:
+                        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
+                        params.extend([req_u['id'], req_u['full_name']])
                     
     if team_id and team_id != 'all':
-        query += " AND u.team_id = ?"
-        params.append(team_id)
+        query += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
+        params.extend([team_id, team_id])
         
     query += " ORDER BY a.updated_at DESC, a.id DESC"
     rows = cursor.execute(query, params).fetchall()
@@ -2123,15 +2163,19 @@ def get_dashboard_stats():
                 user_id = req_u['id']
                 team_id = None
             elif req_u['role'] == 'lider':
-                if req_u['team_id'] and not team_id:
-                    team_id = req_u['team_id']
+                if not team_id:
+                    leader_t = cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ? LIMIT 1", (req_u['id'], req_u['team_id'])).fetchone()
+                    if leader_t:
+                        team_id = leader_t['id']
+                    elif req_u['team_id']:
+                        team_id = req_u['team_id']
     
     base_filter = "WHERE 1=1"
     params = []
     
     if team_id:
-        base_filter += " AND u.team_id = ?"
-        params.append(team_id)
+        base_filter += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
+        params.extend([team_id, team_id])
     if user_id:
         base_filter += " AND (b.user_id = ? OR u.id = ?)"
         params.extend([user_id, user_id])
@@ -2145,7 +2189,7 @@ def get_dashboard_stats():
                COALESCE(SUM(b.tiempo_total_min), 0) as total_minutos,
                COUNT(DISTINCT b.colaborador) as total_colaboradores
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter}
     '''
     totales = cursor.execute(total_query, params).fetchone()
@@ -2155,7 +2199,7 @@ def get_dashboard_stats():
         SELECT a.estado, COUNT(a.id) as cantidad, COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY a.estado
     '''
@@ -2168,7 +2212,7 @@ def get_dashboard_stats():
                COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY tipo
         ORDER BY minutos DESC
@@ -2182,7 +2226,7 @@ def get_dashboard_stats():
                COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY cliente
         ORDER BY minutos DESC
@@ -2201,7 +2245,7 @@ def get_dashboard_stats():
                COUNT(a.id) as total_actividades,
                SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         {base_filter}
@@ -2214,7 +2258,7 @@ def get_dashboard_stats():
     apoyo_query = f'''
         SELECT b.id, b.fecha, b.colaborador, b.apoyo_detalle, b.pendientes, t.nombre as team_name
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         {base_filter} AND b.necesita_apoyo = 'Si'
         ORDER BY b.fecha DESC, b.id DESC
@@ -2230,7 +2274,7 @@ def get_dashboard_stats():
                SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as completadas
         FROM bitacoras b
         LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter}
         GROUP BY b.fecha
         ORDER BY b.fecha ASC
@@ -2253,7 +2297,7 @@ def get_dashboard_stats():
             COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0) AND a.hora_inicio IS NOT NULL AND a.hora_inicio != ''
         GROUP BY franja
         ORDER BY MIN(a.hora_inicio) ASC

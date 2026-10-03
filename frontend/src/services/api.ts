@@ -160,7 +160,7 @@ export const api = {
     return await res.json();
   },
 
-  async createTeam(teamData: { nombre: string; descripcion?: string; lider_id?: number | null }): Promise<any> {
+  async createTeam(teamData: { nombre: string; descripcion?: string; lider_id?: number | null; member_ids?: number[] }): Promise<any> {
     const res = await fetch(`${API_BASE}/admin/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,12 +210,21 @@ export const api = {
   },
 
   async saveBitacora(bitacora: Bitacora): Promise<{ bitacora: Bitacora; message: string }> {
+    // 1. Respaldo preventivo inmediato en cliente ante cualquier falla de red o corte
+    this.saveToLocalStorage(bitacora);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    
     try {
       const res = await fetch(`${API_BASE}/bitacoras`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bitacora),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
+      
       if (res.ok) {
         const data = await res.json();
         this.saveToLocalStorage(data.bitacora);
@@ -224,12 +233,14 @@ export const api = {
         const errJson = await res.json().catch(() => ({}));
         const errMsg = errJson.error || `Error ${res.status} al guardar en el servidor`;
         console.warn('API error saving bitacora:', errMsg);
-        this.saveToLocalStorage(bitacora);
         throw new Error(errMsg);
       }
-    } catch (e) {
-      console.warn('Error saving to server, saving locally', e);
-      this.saveToLocalStorage(bitacora);
+    } catch (e: any) {
+      clearTimeout(timeoutId);
+      console.warn('Error saving to server, data preserved locally', e);
+      if (e.name === 'AbortError') {
+        throw new Error('El servidor tardó más de 15 segundos en responder. Tu bitácora está respaldada localmente en tu equipo y se sincronizará automáticamente.');
+      }
       throw e;
     }
   },

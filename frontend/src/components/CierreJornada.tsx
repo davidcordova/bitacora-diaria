@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, Sparkles, Send, Play } from 'lucide-react';
+import { CheckSquare, Sparkles, Send, Play, RefreshCw } from 'lucide-react';
 
 interface CierreJornadaProps {
   pendientes: string;
@@ -131,8 +131,12 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
           disabled={isSaving}
           className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-7 py-3 rounded-full text-xs sm:text-sm font-extrabold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all cursor-pointer min-h-[42px]"
         >
-          <Play className="w-3.5 h-3.5 fill-current" />
-          <span>{isSaving ? 'Guardando...' : 'Generar bitácora del día'}</span>
+          {isSaving ? (
+            <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+          ) : (
+            <Play className="w-3.5 h-3.5 fill-current" />
+          )}
+          <span>{isSaving ? 'Guardando en la nube...' : 'Generar bitácora del día'}</span>
         </button>
       </div>
     </div>

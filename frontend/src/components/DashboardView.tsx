@@ -42,10 +42,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   const [viewScope, setViewScope] = useState<'global' | 'personal'>(isOperador ? 'personal' : 'global');
   const isPersonalScope = isOperador || viewScope === 'personal';
 
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [selectedTeamId, setSelectedTeamId] = useState<number | ''>(
-    currentUser?.role === 'lider' && currentUser.team_id ? currentUser.team_id : ''
+  // Squad / team del líder
+  const leaderTeam = teams.find(
+    (t) => t.lider_id === currentUser?.id || t.id === currentUser?.team_id
   );
+
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<number | ''>(() => {
+    if (currentUser?.role === 'lider') {
+      return leaderTeam ? leaderTeam.id : (currentUser?.team_id || '');
+    }
+    return '';
+  });
+
+  // Auto-sync si los equipos se cargan asíncronamente
+  useEffect(() => {
+    if (currentUser?.role === 'lider' && !selectedTeamId) {
+      const lt = teams.find(
+        (t) => t.lider_id === currentUser?.id || t.id === currentUser?.team_id
+      );
+      if (lt) {
+        setSelectedTeamId(lt.id);
+      }
+    }
+  }, [teams, currentUser, selectedTeamId]);
+
   const [loading, setLoading] = useState(true);
 
   // Controles de gráficos interactivos
@@ -58,8 +79,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   const fetchStats = async () => {
     setLoading(true);
     try {
+      const activeTeamId = !isPersonalScope
+        ? (selectedTeamId ? Number(selectedTeamId) : (currentUser?.role === 'lider' ? (leaderTeam?.id || currentUser?.team_id) : undefined))
+        : undefined;
+
       const data = await api.getDashboardStats(
-        !isPersonalScope && selectedTeamId ? Number(selectedTeamId) : undefined,
+        activeTeamId,
         undefined,
         currentUser?.id,
         isPersonalScope ? currentUser?.id : undefined
@@ -74,7 +99,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   useEffect(() => {
     fetchStats();
-  }, [selectedTeamId, viewScope]);
+  }, [selectedTeamId, viewScope, currentUser?.id]);
 
   const totalMinutos = stats?.resumen?.total_minutos || 0;
   const totalBitacoras = stats?.resumen?.total_bitacoras || 0;
@@ -188,7 +213,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 ? `Análisis individual de jornadas, horas y efectividad • ${currentUser?.team_name || 'Operaciones'}`
                 : currentUser?.role === 'admin'
                 ? 'Consola global de operaciones, horas y distribución de proyectos'
-                : `Supervisión de escuadrón: ${currentUser?.team_name || 'Mi Equipo'}`}
+                : `Supervisión de escuadrón: ${currentUser?.team_name || leaderTeam?.nombre || 'Mi Equipo'}`}
             </p>
           </div>
         </div>
