@@ -1216,12 +1216,13 @@ def get_bitacoras():
               p.descripcion as parent_task_desc,
               p.estado as parent_task_estado,
               COALESCE((
-                WITH RECURSIVE lineage AS (
-                  SELECT id, parent_task_id, duracion_min FROM actividades WHERE id = a.id
+                WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
+                  SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
                   UNION ALL
-                  SELECT prev.id, prev.parent_task_id, prev.duracion_min
+                  SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
                   FROM actividades prev
                   JOIN lineage l ON prev.id = l.parent_task_id
+                  WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
                 )
                 SELECT SUM(duracion_min) FROM lineage
               ), a.duracion_min) AS tiempo_acumulado_min
@@ -1252,12 +1253,13 @@ def get_bitacora(bitacora_id):
           p.descripcion as parent_task_desc,
           p.estado as parent_task_estado,
           COALESCE((
-            WITH RECURSIVE lineage AS (
-              SELECT id, parent_task_id, duracion_min FROM actividades WHERE id = a.id
+            WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
+              SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
               UNION ALL
-              SELECT prev.id, prev.parent_task_id, prev.duracion_min
+              SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
               FROM actividades prev
               JOIN lineage l ON prev.id = l.parent_task_id
+              WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
             )
             SELECT SUM(duracion_min) FROM lineage
           ), a.duracion_min) AS tiempo_acumulado_min
@@ -1481,6 +1483,8 @@ def save_bitacora():
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
 
             parent_task_id = int(act['parent_task_id']) if act.get('parent_task_id') and str(act['parent_task_id']).isdigit() else None
+            if target_act_id and parent_task_id == target_act_id:
+                parent_task_id = None
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
 
@@ -2468,12 +2472,13 @@ def importar_actividades_pendientes():
     query = '''
         SELECT a.*, b.fecha as fecha_origen,
           COALESCE((
-            WITH RECURSIVE lineage AS (
-              SELECT id, parent_task_id, duracion_min FROM actividades WHERE id = a.id
+            WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
+              SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
               UNION ALL
-              SELECT prev.id, prev.parent_task_id, prev.duracion_min
+              SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
               FROM actividades prev
               JOIN lineage l ON prev.id = l.parent_task_id
+              WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
             )
             SELECT SUM(duracion_min) FROM lineage
           ), a.duracion_min) AS tiempo_acumulado_min

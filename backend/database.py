@@ -594,7 +594,8 @@ def init_db():
           )
     ''')
 
-    # 7.1 Limpieza de referencias huérfanas de parent_task_id que apuntan a actividades inexistentes
+    # 7.1 Limpieza de referencias huérfanas o cíclicas de parent_task_id
+    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = id")
     cursor.execute('''
         UPDATE actividades 
         SET parent_task_id = NULL 
