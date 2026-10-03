@@ -32,6 +32,10 @@ def close_open_connections(exception=None):
             conn.close()
         except Exception:
             pass
+    if hasattr(g, '_open_conns'):
+        g._open_conns = []
+    if hasattr(g, '_db_conn'):
+        g._db_conn = None
 
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -76,11 +80,18 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS,PATCH'
     return response
 
-def get_default_hora_inicio():
+def get_default_hora_inicio(cursor=None):
+    if cursor:
+        try:
+            row = cursor.execute("SELECT value FROM system_settings WHERE key = 'hora_inicio_default'").fetchone()
+            if row and row['value']:
+                return row['value']
+        except Exception:
+            pass
+        return '08:30'
     try:
         conn = get_db()
         row = conn.execute("SELECT value FROM system_settings WHERE key = 'hora_inicio_default'").fetchone()
-        conn.close()
         if row and row['value']:
             return row['value']
     except Exception:
@@ -1051,7 +1062,7 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
                 pendientes, necesita_apoyo, prioridad_siguiente,
                 tiempo_total_min, estado, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
-        ''', (u_id, today_str, get_default_hora_inicio(), u_name, area_val, now_peru, now_peru))
+        ''', (u_id, today_str, get_default_hora_inicio(cursor), u_name, area_val, now_peru, now_peru))
         today_b_id = cursor.lastrowid
 
     # IDs y descripciones de tareas que ya existen hoy
@@ -1548,7 +1559,7 @@ def save_bitacora():
                                         pendientes, necesita_apoyo, prioridad_siguiente,
                                         tiempo_total_min, estado, created_at, updated_at
                                     ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
-                                ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(), target_u['full_name'], now_peru, now_peru))
+                                ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
                                 target_b_id = cursor.lastrowid
                             else:
                                 target_b_id = target_b['id']
@@ -4602,30 +4613,46 @@ def api_it_vault_verify_unlock():
 LAST_ROLLOVER_DATE = None
 rollover_lock = threading.Lock()
 
-def ensure_daily_rollover(target_date=None):
+def ensure_daily_rollover(target_date=None, force=False):
     global LAST_ROLLOVER_DATE
     today_str = target_date or get_peru_today_str()
-    if LAST_ROLLOVER_DATE != today_str:
-        with rollover_lock:
-            if LAST_ROLLOVER_DATE != today_str:
-                print(f"[Scheduler] Verificando y ejecutando rollover para {today_str}...")
-                execute_daily_rollover(today_str)
-                LAST_ROLLOVER_DATE = today_str
+    if LAST_ROLLOVER_DATE == today_str and not force:
+        return
 
-@app.before_request
-def check_rollover_on_request():
-    if request.path.startswith('/api/') and not request.path.startswith('/api/uploads'):
-        ensure_daily_rollover()
+    with rollover_lock:
+        if LAST_ROLLOVER_DATE == today_str and not force:
+            return
+
+        # Comprobación atómica persistente en base de datos para coordinar entre múltiples workers de Gunicorn
+        try:
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM system_settings WHERE key = 'last_rollover_date'")
+            row = cursor.fetchone()
+            if row and row['value'] == today_str and not force:
+                LAST_ROLLOVER_DATE = today_str
+                return
+
+            # Registrar la fecha actual para que otros workers no ejecuten en paralelo
+            cursor.execute("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('last_rollover_date', ?, datetime('now'))", (today_str,))
+            conn.commit()
+            LAST_ROLLOVER_DATE = today_str
+            print(f"[Scheduler] Ejecutando rollover diario para {today_str}...")
+            execute_daily_rollover(today_str)
+        except Exception as e:
+            print("[Scheduler] Error en ensure_daily_rollover:", e)
 
 def start_midnight_scheduler():
-    """Inicia el hilo en background para ejecutar el rollover y catch-up periódico cada 30 segundos."""
+    """Inicia el hilo en background para ejecutar el rollover nocturno periódicamente."""
     def run_scheduler():
+        # Espera inicial para no competir con el arranque de workers
+        time.sleep(10)
         while True:
             try:
                 ensure_daily_rollover()
             except Exception as e:
                 print("[Scheduler] Error en ciclo periódico:", e)
-            time.sleep(30)
+            time.sleep(60)
 
     t = threading.Thread(target=run_scheduler, daemon=True)
     t.start()
@@ -4633,11 +4660,8 @@ def start_midnight_scheduler():
 # Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
 try:
     init_db()
-    cleanup_synthetic_historical_data()
-    fix_mock_data_jayala()
     start_midnight_scheduler()
 except Exception as e:
-
     print("[Startup] Error inicializando DB o scheduler:", e)
 
 if __name__ == '__main__':

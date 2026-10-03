@@ -65,10 +65,21 @@ export const api = {
     try {
       const res = await fetch(`${API_BASE}/users`);
       if (res.ok) {
-        return await res.json();
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          localStorage.setItem('cached_users', JSON.stringify(data));
+        }
+        return data;
       }
     } catch (e) {
       console.warn('API users error, using fallback', e);
+    }
+    const cached = localStorage.getItem('cached_users');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
     }
     return [
       { id: 1, username: 'admin', full_name: 'Administrador Principal', role: 'admin' },
@@ -78,9 +89,28 @@ export const api = {
   },
 
   async getAllAdminUsers(): Promise<User[]> {
-    const res = await fetch(`${API_BASE}/admin/users`);
-    if (!res.ok) throw new Error('Error al cargar usuarios');
-    return await res.json();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          localStorage.setItem('cached_admin_users', JSON.stringify(data));
+        }
+        return data;
+      }
+    } catch (e) {
+      console.warn('API getAllAdminUsers error:', e);
+    }
+    const cached = localStorage.getItem('cached_admin_users');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
+    }
+    try {
+      return await this.getUsers();
+    } catch {}
+    return [];
   },
 
   async createUser(userData: Partial<User> & { password?: string }): Promise<any> {
@@ -155,9 +185,25 @@ export const api = {
 
   // ================= TEAMS =================
   async getTeams(): Promise<Team[]> {
-    const res = await fetch(`${API_BASE}/admin/teams`);
-    if (!res.ok) throw new Error('Error al cargar equipos');
-    return await res.json();
+    try {
+      const res = await fetch(`${API_BASE}/admin/teams`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          localStorage.setItem('cached_teams', JSON.stringify(data));
+        }
+        return data;
+      }
+    } catch (e) {
+      console.warn('API getTeams error:', e);
+    }
+    const cached = localStorage.getItem('cached_teams');
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {}
+    }
+    return [];
   },
 
   async createTeam(teamData: { nombre: string; descripcion?: string; lider_id?: number | null; member_ids?: number[] }): Promise<any> {
@@ -214,7 +260,7 @@ export const api = {
     this.saveToLocalStorage(bitacora);
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     try {
       const res = await fetch(`${API_BASE}/bitacoras`, {
@@ -239,7 +285,7 @@ export const api = {
       clearTimeout(timeoutId);
       console.warn('Error saving to server, data preserved locally', e);
       if (e.name === 'AbortError') {
-        throw new Error('El servidor tardó más de 15 segundos en responder. Tu bitácora está respaldada localmente en tu equipo y se sincronizará automáticamente.');
+        throw new Error('El servidor tardó en responder. Tu bitácora ha sido respaldada localmente en tu equipo y se sincronizará automáticamente.');
       }
       throw e;
     }

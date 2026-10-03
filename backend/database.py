@@ -32,20 +32,40 @@ except ImportError:
     has_app_context = None
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    if has_app_context and has_app_context():
+        if '_db_conn' not in g:
+            conn = sqlite3.connect(DB_PATH, timeout=45.0)
+            conn.row_factory = sqlite3.Row
+            conn.create_function("peru_now", 0, get_peru_now_str)
+            conn.create_function("peru_today", 0, get_peru_today_str)
+            conn.execute("PRAGMA busy_timeout = 45000")
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            g._db_conn = conn
+            if '_open_conns' not in g:
+                g._open_conns = []
+            g._open_conns.append(conn)
+        return g._db_conn
+
+    conn = sqlite3.connect(DB_PATH, timeout=45.0)
     conn.row_factory = sqlite3.Row
     conn.create_function("peru_now", 0, get_peru_now_str)
     conn.create_function("peru_today", 0, get_peru_today_str)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA busy_timeout = 45000")
     conn.execute("PRAGMA foreign_keys = ON")
-    if has_app_context and has_app_context():
-        if '_open_conns' not in g:
-            g._open_conns = []
-        g._open_conns.append(conn)
+    conn.execute("PRAGMA synchronous = NORMAL")
     return conn
 
 def init_db():
+    # Asegurar modo WAL en el archivo de base de datos una sola vez
+    try:
+        w_conn = sqlite3.connect(DB_PATH, timeout=45.0)
+        w_conn.execute("PRAGMA journal_mode = WAL")
+        w_conn.execute("PRAGMA synchronous = NORMAL")
+        w_conn.close()
+    except Exception as e:
+        print("[DB Init] Advertencia configurando WAL:", e)
+
     conn = get_db()
     cursor = conn.cursor()
 

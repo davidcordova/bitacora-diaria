@@ -108,7 +108,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setLoading(true);
     try {
       const list = await api.getAllAdminUsers();
-      setUsers(list);
+      if (Array.isArray(list) && list.length > 0) {
+        setUsers(list);
+      } else if (users.length === 0 && Array.isArray(list)) {
+        setUsers(list);
+      }
     } catch (e) {
       console.error('Error loading admin users', e);
     } finally {
