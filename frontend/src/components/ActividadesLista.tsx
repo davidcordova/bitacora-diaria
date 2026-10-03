@@ -577,6 +577,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                 <span>Nota</span>
                               </span>
                             )}
+                            {act.created_by_name && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 rounded-md border border-teal-500/30 shrink-0"
+                                title={`Registrado en apoyo por ${act.created_by_name}`}
+                              >
+                                <UserCheck className="w-2.5 h-2.5 text-teal-500" />
+                                <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
+                              </span>
+                            )}
                           </div>
                           <RichHtmlRenderer
                             content={act.descripcion}
@@ -733,6 +742,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-[#EC4899]/10 text-[#EC4899] rounded-full border border-[#EC4899]/30 inline-flex items-center gap-1">
                           <Users className="w-3 h-3 text-[#EC4899]" />
                           <span>Compartida</span>
+                        </span>
+                      )}
+                      {act.created_by_name && (
+                        <span
+                          className="text-[10px] font-bold px-2 py-0.5 bg-teal-500/10 text-teal-700 dark:text-teal-300 rounded-full border border-teal-500/30 inline-flex items-center gap-1"
+                          title={`Registrado en apoyo por ${act.created_by_name}`}
+                        >
+                          <UserCheck className="w-3 h-3 text-teal-500" />
+                          <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
                         </span>
                       )}
                     </div>

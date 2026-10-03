@@ -66,10 +66,17 @@ def format_actividad_dict(act_row, users_map=None):
     else:
         a_dict['shared_with'] = []
 
-    if users_map and isinstance(a_dict.get('shared_with'), list):
-        a_dict['shared_with_names'] = [
-            users_map[uid] for uid in a_dict['shared_with'] if uid in users_map
-        ]
+    if users_map:
+        if isinstance(a_dict.get('shared_with'), list):
+            a_dict['shared_with_names'] = [
+                users_map[uid] for uid in a_dict['shared_with'] if uid in users_map
+            ]
+        creator_id = a_dict.get('created_by_user_id')
+        if creator_id and creator_id in users_map:
+            a_dict['created_by_name'] = users_map[creator_id]
+        updater_id = a_dict.get('updated_by_user_id')
+        if updater_id and updater_id in users_map:
+            a_dict['updated_by_name'] = users_map[updater_id]
     return a_dict
 
 # Configuración de CORS manual y limpia
@@ -1130,6 +1137,151 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
             
     return rolled_count
 
+# ==================== DELEGACIONES Y USUARIOS DE APOYO ====================
+
+@app.route('/api/admin/delegations', methods=['GET', 'OPTIONS'])
+def get_delegations():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        rows = cursor.execute('''
+            SELECT d.*, 
+                   u_del.full_name as delegate_name, u_del.username as delegate_username,
+                   u_tar.full_name as target_name, u_tar.username as target_username,
+                   t.nombre as team_name,
+                   u_asg.full_name as assigned_by_name
+            FROM user_delegations d
+            JOIN users u_del ON d.delegate_user_id = u_del.id
+            JOIN users u_tar ON d.target_user_id = u_tar.id
+            LEFT JOIN teams t ON d.team_id = t.id
+            LEFT JOIN users u_asg ON d.assigned_by = u_asg.id
+            ORDER BY d.id DESC
+        ''').fetchall()
+        res = [dict(r) for r in rows]
+        conn.close()
+        return jsonify(res), 200
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/delegations', methods=['POST', 'OPTIONS'])
+def create_delegation():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    data = request.get_json() or {}
+    delegate_id = data.get('delegate_user_id')
+    target_id = data.get('target_user_id')
+    assigned_by = data.get('assigned_by', 1)
+    motivo = data.get('motivo', 'Apoyo en registro de actividades')
+    
+    if not delegate_id or not target_id:
+        return jsonify({"error": "Debe especificar el usuario de apoyo y el colaborador destinatario"}), 400
+    if int(delegate_id) == int(target_id):
+        return jsonify({"error": "Un colaborador no puede ser delegado de apoyo de sí mismo"}), 400
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        # Obtener datos del colaborador destinatario
+        target_user = cursor.execute("SELECT team_id, full_name FROM users WHERE id = ?", (target_id,)).fetchone()
+        if not target_user:
+            conn.close()
+            return jsonify({"error": "Colaborador destinatario no existe"}), 404
+        
+        team_id = target_user['team_id']
+        
+        existing = cursor.execute('''
+            SELECT id FROM user_delegations 
+            WHERE delegate_user_id = ? AND target_user_id = ?
+        ''', (delegate_id, target_id)).fetchone()
+        
+        if existing:
+            cursor.execute('''
+                UPDATE user_delegations 
+                SET is_active = 1, motivo = ?, assigned_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (motivo, assigned_by, existing['id']))
+            delegation_id = existing['id']
+        else:
+            cursor.execute('''
+                INSERT INTO user_delegations (delegate_user_id, target_user_id, team_id, motivo, is_active, assigned_by)
+                VALUES (?, ?, ?, ?, 1, ?)
+            ''', (delegate_id, target_id, team_id, motivo, assigned_by))
+            delegation_id = cursor.lastrowid
+        
+        # Notificar al usuario designado como apoyo
+        cursor.execute('''
+            INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+            VALUES (?, 'Designación de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
+        ''', (delegate_id, f"Has sido designado como apoyo para registrar actividades de {target_user['full_name']}."))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Delegación de apoyo creada exitosamente", "id": delegation_id}), 201
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/delegations/<int:del_id>', methods=['DELETE', 'OPTIONS'])
+def delete_delegation(del_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM user_delegations WHERE id = ?", (del_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Delegación eliminada exitosamente"}), 200
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/delegations/my-targets', methods=['GET', 'OPTIONS'])
+def get_my_delegated_targets():
+    if request.method == 'OPTIONS':
+        return jsonify([]), 200
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify([]), 200
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        u = cursor.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not u:
+            conn.close()
+            return jsonify([]), 200
+        
+        if u['role'] == 'admin':
+            # Los administradores tienen acceso global de apoyo para todos los colaboradores activos
+            rows = cursor.execute('''
+                SELECT u.id, u.username, u.full_name, u.role, u.team_id, t.nombre as team_name, 'Acceso Administrativo' as motivo
+                FROM users u
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE u.is_active = 1 AND u.id != ?
+                ORDER BY u.full_name ASC
+            ''', (user_id,)).fetchall()
+        else:
+            rows = cursor.execute('''
+                SELECT u.id, u.username, u.full_name, u.role, u.team_id, t.nombre as team_name, d.motivo
+                FROM user_delegations d
+                JOIN users u ON d.target_user_id = u.id
+                LEFT JOIN teams t ON u.team_id = t.id
+                WHERE d.delegate_user_id = ? AND d.is_active = 1 AND u.is_active = 1
+                ORDER BY u.full_name ASC
+            ''', (user_id,)).fetchall()
+        
+        res = [dict(r) for r in rows]
+        conn.close()
+        return jsonify(res), 200
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/bitacoras', methods=['GET'])
 def get_bitacoras():
     conn = get_db()
@@ -1173,9 +1325,9 @@ def get_bitacoras():
         if req_u:
             r_role = req_u['role']
             if r_role in ('analista', 'operador'):
-                # Los analistas/operadores SOLO pueden ver sus propias bitácoras
-                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
-                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
+                # Los analistas/operadores pueden ver sus propias bitácoras o las que tienen asignadas como apoyo
+                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
+                params.extend([req_u['id'], req_u['full_name'], req_u['username'], req_u['id']])
             elif r_role == 'lider':
                 # Un líder SOLO puede ver bitácoras de los equipos que lidera o pertenece
                 leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
@@ -1303,6 +1455,34 @@ def save_bitacora():
         if u_by_id:
             colaborador = u_by_id['full_name']
 
+    # Verificación de Modo Apoyo / Delegación
+    requesting_user_id = data.get('requesting_user_id')
+    effective_creator_id = requesting_user_id or user_id
+    is_proxy_mode = False
+
+    if requesting_user_id and user_id and int(requesting_user_id) != int(user_id):
+        req_u = cursor.execute("SELECT id, role, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        if not req_u:
+            conn.close()
+            return jsonify({"error": "Usuario solicitante no válido"}), 403
+        
+        if req_u['role'] != 'admin':
+            delegation = cursor.execute('''
+                SELECT id FROM user_delegations 
+                WHERE delegate_user_id = ? AND target_user_id = ? AND is_active = 1
+            ''', (requesting_user_id, user_id)).fetchone()
+            if not delegation:
+                conn.close()
+                return jsonify({"error": "No tienes autorización de apoyo para registrar tareas de este colaborador"}), 403
+        is_proxy_mode = True
+
+    # REGLA DE CIERRE: El usuario de apoyo NO puede cerrar formalmente la jornada del titular
+    estado_req = data.get('estado', 'generada')
+    if is_proxy_mode and estado_req in ('completada', 'cerrada', 'cerrada_sistema'):
+        estado_to_save = 'generada'
+    else:
+        estado_to_save = estado_req
+
     try:
         now_peru = get_peru_now_str()
         actividades_data = data.get('actividades', [])
@@ -1340,7 +1520,7 @@ def save_bitacora():
                     data.get('prioridad_siguiente', ''),
                     tiempo_total,
                     data.get('resumen_texto', ''),
-                    data.get('estado', 'generada'),
+                    estado_to_save,
                     now_peru,
                     bitacora_id
                 ))
@@ -1381,7 +1561,7 @@ def save_bitacora():
                     data.get('prioridad_siguiente', ''),
                     tiempo_total,
                     data.get('resumen_texto', ''),
-                    data.get('estado', 'generada'),
+                    estado_to_save,
                     now_peru,
                     bitacora_id
                 ))
@@ -1404,7 +1584,7 @@ def save_bitacora():
                     data.get('prioridad_siguiente', ''),
                     tiempo_total,
                     data.get('resumen_texto', ''),
-                    data.get('estado', 'generada'),
+                    estado_to_save,
                     now_peru,
                     now_peru
                 ))
@@ -1498,6 +1678,8 @@ def save_bitacora():
                         estado = ?, evidencias = ?, shared_with = ?,
                         shared_uuid = COALESCE(?, shared_uuid),
                         comentarios = ?, parent_task_id = ?, tipo_vinculo = ?,
+                        created_by_user_id = COALESCE(created_by_user_id, ?),
+                        updated_by_user_id = ?,
                         updated_at = ?
                     WHERE id = ?
                 ''', (
@@ -1514,6 +1696,8 @@ def save_bitacora():
                     comentarios,
                     parent_task_id,
                     tipo_vinculo,
+                    effective_creator_id,
+                    effective_creator_id,
                     now_peru,
                     target_act_id
                 ))
@@ -1524,8 +1708,9 @@ def save_bitacora():
                         bitacora_id, orden, hora_inicio, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
                         shared_with, shared_uuid, comentarios, parent_task_id, tipo_vinculo,
+                        created_by_user_id, updated_by_user_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     bitacora_id,
                     idx,
@@ -1541,6 +1726,8 @@ def save_bitacora():
                     comentarios,
                     parent_task_id,
                     tipo_vinculo,
+                    effective_creator_id,
+                    effective_creator_id,
                     now_peru,
                     now_peru
                 ))
@@ -1649,6 +1836,19 @@ def save_bitacora():
 
         conn.commit()
         
+        # Notificar al titular si las actividades fueron ingresadas en Modo Apoyo
+        if is_proxy_mode:
+            try:
+                del_user = cursor.execute("SELECT full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+                del_name = del_user['full_name'] if del_user else "Un colaborador de apoyo"
+                cursor.execute('''
+                    INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                    VALUES (?, 'Registro de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
+                ''', (user_id, f"{del_name} ha registrado o actualizado actividades de apoyo en tu bitácora del {fecha}."))
+                conn.commit()
+            except Exception as ne:
+                print("[Notif proxy error]:", ne)
+
         users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
         b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
         b_dict = dict(b)

@@ -36,6 +36,10 @@ export interface Actividad {
   shared_with?: number[];
   shared_with_names?: string[];
   shared_uuid?: string;
+  created_by_user_id?: number | null;
+  created_by_name?: string;
+  updated_by_user_id?: number | null;
+  updated_by_name?: string;
   is_deleted?: number;
   deleted_at?: string;
 }
@@ -339,6 +343,21 @@ export interface ItCargo {
   created_at?: string;
 }
 
-
-
-
+export interface UserDelegation {
+  id: number;
+  delegate_user_id: number;
+  delegate_name?: string;
+  delegate_username?: string;
+  target_user_id: number;
+  target_name?: string;
+  target_username?: string;
+  team_id?: number | null;
+  team_name?: string | null;
+  tipo_alcance?: 'colaborador' | 'equipo' | 'global';
+  motivo?: string;
+  is_active: number | boolean;
+  assigned_by: number;
+  assigned_by_name?: string;
+  created_at?: string;
+  updated_at?: string;
+}

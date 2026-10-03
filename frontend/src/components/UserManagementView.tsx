@@ -31,7 +31,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
-import { User, Team, UserRole, SystemSettings } from '../types';
+import { User, Team, UserRole, SystemSettings, UserDelegation } from '../types';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 
@@ -40,6 +40,7 @@ interface UserManagementViewProps {
   onRefreshTeams: () => void;
   systemSettings?: SystemSettings;
   onUpdateSettings?: (newSettings: SystemSettings) => void;
+  currentUser?: User | null;
 }
 
 export const UserManagementView: React.FC<UserManagementViewProps> = ({
@@ -47,10 +48,28 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   onRefreshTeams,
   systemSettings,
   onUpdateSettings,
+  currentUser,
 }) => {
-  const [activeTab, setActiveTab] = useState<'usuarios' | 'equipos' | 'configuracion'>('usuarios');
+  const [activeTab, setActiveTab] = useState<'usuarios' | 'equipos' | 'delegaciones' | 'configuracion'>('usuarios');
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Delegaciones / Usuarios de Apoyo State
+  const [delegations, setDelegations] = useState<UserDelegation[]>([]);
+  const [loadingDelegations, setLoadingDelegations] = useState(false);
+  const [showDelegationModal, setShowDelegationModal] = useState(false);
+  const [savingDelegation, setSavingDelegation] = useState(false);
+  const [delegationForm, setDelegationForm] = useState<{
+    delegate_user_id: number | '';
+    target_user_id: number | '';
+    motivo: string;
+  }>({
+    delegate_user_id: '',
+    target_user_id: '',
+    motivo: 'Apoyo en registro de tareas',
+  });
+  const [delegationToDelete, setDelegationToDelete] = useState<UserDelegation | null>(null);
+  const [showDeleteDelegationModal, setShowDeleteDelegationModal] = useState(false);
 
   // Settings & Branding State
   const [defaultHoraInicio, setDefaultHoraInicio] = useState(systemSettings?.hora_inicio_default || '08:30');
@@ -120,8 +139,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
   };
 
+  const loadDelegations = async () => {
+    setLoadingDelegations(true);
+    try {
+      const data = await api.getDelegations();
+      setDelegations(data);
+    } catch (e) {
+      console.error('Error loading delegations:', e);
+    } finally {
+      setLoadingDelegations(false);
+    }
+  };
+
   useEffect(() => {
     loadUsers();
+    loadDelegations();
     api.getSettings().then((s) => {
       if (s) {
         if (s.hora_inicio_default) setDefaultHoraInicio(s.hora_inicio_default);
@@ -326,6 +358,59 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
   };
 
+  // Delegation / Apoyo actions
+  const handleOpenNewDelegation = () => {
+    setDelegationForm({
+      delegate_user_id: '',
+      target_user_id: '',
+      motivo: 'Apoyo en registro de tareas',
+    });
+    setShowDelegationModal(true);
+  };
+
+  const handleSaveDelegation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!delegationForm.delegate_user_id || !delegationForm.target_user_id) {
+      alert('Debes seleccionar tanto al colaborador de apoyo como al titular destinatario');
+      return;
+    }
+    if (Number(delegationForm.delegate_user_id) === Number(delegationForm.target_user_id)) {
+      alert('El colaborador de apoyo no puede ser la misma persona que el titular');
+      return;
+    }
+    setSavingDelegation(true);
+    try {
+      await api.createDelegation({
+        delegate_user_id: Number(delegationForm.delegate_user_id),
+        target_user_id: Number(delegationForm.target_user_id),
+        motivo: delegationForm.motivo.trim() || 'Apoyo en registro de tareas',
+        assigned_by: currentUser?.id || 1,
+      });
+      setFeedbackMsg('Colaborador de apoyo asignado exitosamente');
+      setShowDelegationModal(false);
+      loadDelegations();
+      setTimeout(() => setFeedbackMsg(''), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Error al guardar asignación de apoyo');
+    } finally {
+      setSavingDelegation(false);
+    }
+  };
+
+  const handleConfirmDeleteDelegation = async () => {
+    if (!delegationToDelete) return;
+    try {
+      await api.deleteDelegation(delegationToDelete.id);
+      setFeedbackMsg('Delegación de apoyo revocada exitosamente');
+      setShowDeleteDelegationModal(false);
+      setDelegationToDelete(null);
+      loadDelegations();
+      setTimeout(() => setFeedbackMsg(''), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Error al revocar apoyo');
+    }
+  };
+
   // Team actions
   const handleOpenNewTeam = () => {
     setEditingTeamId(null);
@@ -431,6 +516,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
             <button
               type="button"
+              onClick={() => setActiveTab('delegaciones')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+                activeTab === 'delegaciones'
+                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Usuarios de Apoyo ({delegations.length})</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActiveTab('configuracion')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeTab === 'configuracion'
@@ -462,6 +560,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             >
               <FolderPlus className="w-3.5 h-3.5" />
               <span>Nuevo Equipo</span>
+            </button>
+          )}
+
+          {activeTab === 'delegaciones' && (
+            <button
+              type="button"
+              onClick={handleOpenNewDelegation}
+              className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Asignar Apoyo</span>
             </button>
           )}
         </div>
@@ -1376,6 +1485,312 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             </button>
           </div>
         </form>
+      )}
+
+      {/* TAB 4: DELEGACIONES Y USUARIOS DE APOYO */}
+      {activeTab === 'delegaciones' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-6 shadow-sm overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100 dark:border-[#252636]">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-[#00F0FF]" />
+                  <span>Asignaciones de Usuarios de Apoyo</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Designa colaboradores autorizados para registrar y actualizar actividades en nombre de otros usuarios. Las horas se atribuirán al titular.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenNewDelegation}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>Asignar Nuevo Apoyo</span>
+              </button>
+            </div>
+
+            {loadingDelegations ? (
+              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                <RefreshCw className="w-6 h-6 animate-spin text-[#00F0FF]" />
+                <span className="text-xs">Cargando delegaciones activas...</span>
+              </div>
+            ) : delegations.length === 0 ? (
+              <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-white/2">
+                <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center mx-auto mb-3">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">No hay usuarios de apoyo designados</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-4 leading-relaxed">
+                  Puedes autorizar a un colaborador (ej. asistente, coordinador o compañero) para que registre actividades de forma asistida en la bitácora de otro miembro.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOpenNewDelegation}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#00F0FF] text-slate-950 text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>Asignar Primer Usuario de Apoyo</span>
+                </button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-[#252636] text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                      <th className="pb-3 px-3">Colaborador de Apoyo (Digita)</th>
+                      <th className="pb-3 px-3">Titular Destinatario (Recibe las horas)</th>
+                      <th className="pb-3 px-3">Motivo / Alcance</th>
+                      <th className="pb-3 px-3">Asignado por</th>
+                      <th className="pb-3 px-3 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-[#252636]/60">
+                    {delegations.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors">
+                        {/* Usuario Apoyo */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center font-bold text-xs shrink-0">
+                              {d.delegate_name ? d.delegate_name.charAt(0).toUpperCase() : 'A'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {d.delegate_name}
+                              </div>
+                              <div className="text-[10px] text-slate-400 font-mono">
+                                @{d.delegate_username}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Titular */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+                              {d.target_name ? d.target_name.charAt(0).toUpperCase() : 'T'}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                                {d.target_name}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {d.team_name || 'Sin equipo'}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Motivo */}
+                        <td className="py-3 px-3">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 font-medium">
+                            <ShieldCheck className="w-3 h-3 text-[#00F0FF]" />
+                            <span>{d.motivo || 'Apoyo general'}</span>
+                          </span>
+                        </td>
+
+                        {/* Asignado Por */}
+                        <td className="py-3 px-3 text-slate-500 dark:text-slate-400">
+                          <div className="font-medium text-slate-700 dark:text-slate-300">
+                            {d.assigned_by_name || 'Administrador'}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {d.created_at ? d.created_at.split(' ')[0] : 'Activo'}
+                          </div>
+                        </td>
+
+                        {/* Acciones */}
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDelegationToDelete(d);
+                              setShowDeleteDelegationModal(true);
+                            }}
+                            className="p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors cursor-pointer"
+                            title="Revocar asignación de apoyo"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ASIGNAR USUARIO DE APOYO */}
+      {showDelegationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF]">
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                    Asignar Usuario de Apoyo
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Autorización de carga asistida de tareas</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDelegationModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDelegation} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  1. ¿Quién brindará el apoyo? (Usuario Digitador)
+                </label>
+                <select
+                  value={delegationForm.delegate_user_id}
+                  onChange={(e) =>
+                    setDelegationForm({
+                      ...delegationForm,
+                      delegate_user_id: e.target.value ? Number(e.target.value) : '',
+                    })
+                  }
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
+                  required
+                >
+                  <option value="">-- Seleccionar Colaborador de Apoyo --</option>
+                  {users
+                    .filter((u) => Boolean(u.is_active))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} (@{u.username})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">Este usuario tendrá la opción en su cabecera para alternar a "Modo Apoyo".</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  2. ¿A quién brindará apoyo? (Colaborador Titular)
+                </label>
+                <select
+                  value={delegationForm.target_user_id}
+                  onChange={(e) =>
+                    setDelegationForm({
+                      ...delegationForm,
+                      target_user_id: e.target.value ? Number(e.target.value) : '',
+                    })
+                  }
+                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
+                  required
+                >
+                  <option value="">-- Seleccionar Titular Destinatario --</option>
+                  {users
+                    .filter((u) => Boolean(u.is_active) && u.id !== Number(delegationForm.delegate_user_id))
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.full_name} ({u.team_name || 'Sin equipo'})
+                      </option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-slate-400 mt-1">Las horas de las tareas cargadas computarán 100% para este colaborador.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Motivo o Justificación
+                </label>
+                <input
+                  type="text"
+                  value={delegationForm.motivo}
+                  onChange={(e) => setDelegationForm({ ...delegationForm, motivo: e.target.value })}
+                  placeholder="ej: Asistente administrativo, cobertura de campo, apoyo de escuadrón"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
+                />
+              </div>
+
+              <div className="p-3 bg-cyan-50/70 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/40 rounded-2xl text-[11px] text-cyan-900 dark:text-cyan-300 flex items-start gap-2 leading-relaxed">
+                <AlertCircle className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0 mt-0.5" />
+                <span>
+                  <strong>Control de Seguridad:</strong> El usuario de apoyo podrá registrar y editar actividades en nombre del titular con trazabilidad de auditoría. El cierre formal de jornada está protegido y reservado al titular.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDelegationModal(false)}
+                  className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#161722] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingDelegation}
+                  className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-5 py-2 rounded-full text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{savingDelegation ? 'Guardando...' : 'Guardar Asignación'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR REVOCAR APOYO */}
+      {showDeleteDelegationModal && delegationToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-6 shadow-2xl relative">
+            <div className="flex items-center gap-3.5 mb-4 text-rose-500">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+                  Revocar Asignación
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Confirmación de baja de permiso
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+              ¿Estás seguro de revocar la autorización de apoyo de <strong>{delegationToDelete.delegate_name}</strong> hacia <strong>{delegationToDelete.target_name}</strong>? El usuario ya no podrá ingresar actividades en nombre del titular.
+            </p>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteDelegationModal(false);
+                  setDelegationToDelete(null);
+                }}
+                className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#161722] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteDelegation}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Revocar Apoyo</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL USUARIO */}

@@ -177,6 +177,10 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN comentarios TEXT")
     if 'tipo_vinculo' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN tipo_vinculo TEXT DEFAULT 'continuacion'")
+    if 'created_by_user_id' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN created_by_user_id INTEGER REFERENCES users(id)")
+    if 'updated_by_user_id' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN updated_by_user_id INTEGER REFERENCES users(id)")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
@@ -186,6 +190,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_shared ON actividades(shared_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_estado ON actividades(estado)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_deleted ON actividades(is_deleted, deleted_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_creator ON actividades(created_by_user_id)")
 
     # 4.2. Crear tabla buzon_sugerencias y buzon_votos
     cursor.execute('''
@@ -222,6 +227,28 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ''')
+
+    # 4.3. Crear tabla user_delegations para apoyo entre colaboradores
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_delegations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            delegate_user_id INTEGER NOT NULL,
+            target_user_id INTEGER NOT NULL,
+            team_id INTEGER,
+            tipo_alcance TEXT DEFAULT 'colaborador' CHECK(tipo_alcance IN ('colaborador', 'equipo', 'global')),
+            motivo TEXT,
+            is_active INTEGER DEFAULT 1,
+            assigned_by INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (delegate_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL,
+            FOREIGN KEY (assigned_by) REFERENCES users(id) ON DELETE RESTRICT
+        )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_delegations_delegate ON user_delegations(delegate_user_id, is_active)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_delegations_target ON user_delegations(target_user_id, is_active)")
 
     # 5. Configurar el usuario admin obligatorio con contraseña M1un1c4cl4v3
     admin_hash = generate_password_hash('M1un1c4cl4v3')

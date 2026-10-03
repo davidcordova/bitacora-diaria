@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation } from '../types';
 
 const API_BASE = '/api';
 
@@ -255,7 +255,7 @@ export const api = {
     return local ? JSON.parse(local) : [];
   },
 
-  async saveBitacora(bitacora: Bitacora): Promise<{ bitacora: Bitacora; message: string }> {
+  async saveBitacora(bitacora: Bitacora, requesting_user_id?: number): Promise<{ bitacora: Bitacora; message: string }> {
     // 1. Respaldo preventivo inmediato en cliente ante cualquier falla de red o corte
     this.saveToLocalStorage(bitacora);
     
@@ -263,10 +263,11 @@ export const api = {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     try {
+      const payload = requesting_user_id ? { ...bitacora, requesting_user_id } : bitacora;
       const res = await fetch(`${API_BASE}/bitacoras`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bitacora),
+        body: JSON.stringify(payload),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
@@ -1086,6 +1087,60 @@ export const api = {
       throw new Error(err.error || 'Credenciales inválidas');
     }
     return res.json();
+  },
+
+  // ================= DELEGACIONES Y USUARIOS DE APOYO =================
+  async getDelegations(): Promise<UserDelegation[]> {
+    try {
+      const res = await fetch(`${API_BASE}/admin/delegations`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Error fetching delegations:', e);
+    }
+    return [];
+  },
+
+  async createDelegation(data: {
+    delegate_user_id: number;
+    target_user_id: number;
+    motivo?: string;
+    assigned_by: number;
+  }): Promise<{ message: string; id: number }> {
+    const res = await fetch(`${API_BASE}/admin/delegations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al asignar usuario de apoyo' }));
+      throw new Error(err.error || 'Error al asignar usuario de apoyo');
+    }
+    return await res.json();
+  },
+
+  async deleteDelegation(delegationId: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/admin/delegations/${delegationId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al revocar apoyo' }));
+      throw new Error(err.error || 'Error al revocar apoyo');
+    }
+    return true;
+  },
+
+  async getMyDelegatedTargets(userId: number): Promise<User[]> {
+    try {
+      const res = await fetch(`${API_BASE}/delegations/my-targets?user_id=${userId}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('Error fetching delegated targets:', e);
+    }
+    return [];
   },
 
   saveToLocalStorage(bitacora: Bitacora) {

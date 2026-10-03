@@ -200,6 +200,8 @@ export function App() {
   const [papeleraModalOpen, setPapeleraModalOpen] = useState(false);
   const [papeleraCount, setPapeleraCount] = useState(0);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [delegatedTargets, setDelegatedTargets] = useState<User[]>([]);
+  const [activeProxyUser, setActiveProxyUser] = useState<User | null>(null);
   const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
   const [notifications, setNotifications] = useState<SystemNotification[]>(() => {
     try {
@@ -388,11 +390,13 @@ export function App() {
     // Solo auto-guardar si hay un usuario activamente logueado
     if (!currentUser || !currentUser.id) return;
 
-    const uid = currentUser.id;
-    const colab = currentUser.full_name;
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser.id;
+    const colab = effectiveUser.full_name;
+    const requestingUid = currentUser.id;
 
     // SEGURO CRÍTICO CONTRA CONTAMINACIÓN DE SESIONES:
-    // Si la bitácora en memoria pertenece a otro usuario, jamás guardarla ni sobrescribir
+    // Si la bitácora en memoria pertenece a otro usuario que no es el efectivo, jamás guardarla
     if (bitacora.user_id && bitacora.user_id !== uid) {
       return;
     }
@@ -402,7 +406,9 @@ export function App() {
 
     // Persistir siempre el borrador en localStorage de manera síncrona e instantánea (0ms de latencia)
     localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(bitacora));
-    localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
+    if (!activeProxyUser) {
+      localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
+    }
 
     const currentSignature = getBitacoraSignature(bitacora, colab, uid);
 
@@ -419,7 +425,7 @@ export function App() {
           colaborador: colab,
           user_id: uid,
         };
-        const result = await api.saveBitacora(payload);
+        const result = await api.saveBitacora(payload, requestingUid);
         
         if (result.bitacora) {
           lastSavedSignature.current = getBitacoraSignature(result.bitacora, colab, uid);
@@ -432,7 +438,9 @@ export function App() {
           }));
 
           localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(result.bitacora));
-          localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
+          if (!activeProxyUser) {
+            localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
+          }
         } else {
           lastSavedSignature.current = currentSignature;
         }
@@ -440,16 +448,18 @@ export function App() {
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
 
-        // Actualizar historial local silenciosamente
-        setHistorial((prev) => {
-          const idx = prev.findIndex((b) => b.id === result.bitacora.id || (b.fecha === payload.fecha && b.user_id === payload.user_id));
-          if (idx >= 0) {
-            const next = [...prev];
-            next[idx] = result.bitacora;
-            return next;
-          }
-          return [result.bitacora, ...prev];
-        });
+        // Actualizar historial local silenciosamente solo si estamos en la bitácora personal
+        if (!activeProxyUser) {
+          setHistorial((prev) => {
+            const idx = prev.findIndex((b) => b.id === result.bitacora.id || (b.fecha === payload.fecha && b.user_id === payload.user_id));
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = result.bitacora;
+              return next;
+            }
+            return [result.bitacora, ...prev];
+          });
+        }
       } catch (err) {
         console.warn('Auto-save error:', err);
         setAutoSaveStatus('error');
@@ -457,7 +467,7 @@ export function App() {
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [bitacora, currentUser]);
+  }, [bitacora, currentUser, activeProxyUser]);
 
   // Carga inicial de datos con aislamiento estricto de usuario
   const loadInitialData = async (userOverride?: User | null) => {
@@ -468,16 +478,21 @@ export function App() {
 
       if (!activeUser || !activeUser.id) return;
 
-      const [uList, tList, hList, sysSettings, srvNotifs] = await Promise.all([
+      const [uList, tList, hList, sysSettings, srvNotifs, myTargets] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
         api.getBitacoras(undefined, undefined, undefined, activeUser.id),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
         api.getNotifications(activeUser.id).catch(() => []),
+        api.getMyDelegatedTargets(activeUser.id).catch(() => []),
       ]);
       setUsers(uList);
       setTeams(tList);
       setHistorial(hList);
+      setDelegatedTargets(myTargets);
+      if (activeProxyUser && !myTargets.some((t: User) => t.id === activeProxyUser.id)) {
+        setActiveProxyUser(null);
+      }
       if (sysSettings) {
         setSystemSettings(sysSettings);
       }
@@ -645,14 +660,15 @@ export function App() {
       showToast('error', 'No hay datos válidos para sincronizar');
       return;
     }
+    const effectiveUser = activeProxyUser || currentUser;
     setAutoSaveStatus('saving');
     try {
       const payload: Bitacora = {
         ...bitacora,
-        colaborador: currentUser?.full_name || bitacora.colaborador,
-        user_id: currentUser?.id || bitacora.user_id,
+        colaborador: effectiveUser?.full_name || bitacora.colaborador,
+        user_id: effectiveUser?.id || bitacora.user_id,
       };
-      const res = await api.saveBitacora(payload);
+      const res = await api.saveBitacora(payload, currentUser?.id);
       lastSavedSignature.current = getBitacoraSignature(res.bitacora || payload, payload.colaborador, payload.user_id);
       setAutoSaveStatus('saved');
       setLastSavedTime(new Date());
@@ -706,8 +722,10 @@ export function App() {
     if (!newDate || newDate === bitacora.fecha) return;
     isSwitchingDateRef.current = true;
 
-    const activeUid = currentUser?.id || bitacora.user_id;
-    const activeName = currentUser?.full_name || bitacora.colaborador;
+    const effectiveUser = activeProxyUser || currentUser;
+    const activeUid = effectiveUser?.id || bitacora.user_id;
+    const activeName = effectiveUser?.full_name || bitacora.colaborador;
+    const requestingUid = currentUser?.id;
 
     // 1. Guardar la bitácora del día actual de forma segura antes de cambiar de fecha (inmediato en local, no bloquea UI)
     if (bitacora.fecha && activeName) {
@@ -719,18 +737,18 @@ export function App() {
           ...bitacora,
           colaborador: activeName,
           user_id: activeUid,
-        }).catch((e) => console.warn('Background save before date switch:', e));
+        }, requestingUid).catch((e) => console.warn('Background save before date switch:', e));
       }
     }
 
     try {
       // 2. Consultar al backend por la bitácora de la nueva fecha
-      const serverBitacoras = await api.getBitacoras(newDate, undefined, undefined, activeUid, activeUid);
+      const serverBitacoras = await api.getBitacoras(newDate, undefined, undefined, activeUid, requestingUid);
       const serverMatch = serverBitacoras.find(
         (b) =>
           (b.user_id === activeUid ||
             b.colaborador.toLowerCase() === activeName.toLowerCase() ||
-            (currentUser?.username && b.colaborador.toLowerCase() === currentUser.username.toLowerCase())) &&
+            (effectiveUser?.username && b.colaborador.toLowerCase() === effectiveUser.username.toLowerCase())) &&
           b.fecha === newDate
       );
 
@@ -743,7 +761,7 @@ export function App() {
       if (localDraft && localActsCount > serverActsCount) {
         setBitacora(localDraft);
         setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
-        api.saveBitacora(localDraft).then((res) => {
+        api.saveBitacora(localDraft, requestingUid).then((res) => {
           if (res.bitacora) setBitacora(res.bitacora);
           setAutoSaveStatus('saved');
           setLastSavedTime(new Date());
@@ -762,7 +780,7 @@ export function App() {
           if (extra.length > 0) {
             merged.actividades = [...(serverMatch.actividades || []), ...extra];
             setBitacora(merged);
-            api.saveBitacora(merged).catch(console.warn);
+            api.saveBitacora(merged, requestingUid).catch(console.warn);
             return;
           }
         }
@@ -791,7 +809,7 @@ export function App() {
         hora_inicio: systemSettings?.hora_inicio_default || bitacora.hora_inicio || '08:30',
         colaborador: activeName,
         user_id: activeUid,
-        area: currentUser?.team_name || bitacora.area || 'Sistemas',
+        area: effectiveUser?.team_name || currentUser?.team_name || bitacora.area || 'Sistemas',
         actividades: [],
         pendientes: '',
         necesita_apoyo: 'No',
@@ -834,15 +852,16 @@ export function App() {
 
   const reloadActiveBitacora = async () => {
     refreshPapeleraCount();
-    const activeUid = currentUser?.id || bitacora.user_id;
-    const activeName = currentUser?.full_name || bitacora.colaborador;
+    const effectiveUser = activeProxyUser || currentUser;
+    const activeUid = effectiveUser?.id || bitacora.user_id;
+    const activeName = effectiveUser?.full_name || bitacora.colaborador;
     try {
-      const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, activeUid, activeUid);
+      const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, activeUid, currentUser?.id);
       const serverMatch = serverBitacoras.find(
         (b) =>
           (b.user_id === activeUid ||
             b.colaborador.toLowerCase() === activeName.toLowerCase() ||
-            (currentUser?.username && b.colaborador.toLowerCase() === currentUser.username.toLowerCase())) &&
+            (effectiveUser?.username && b.colaborador.toLowerCase() === effectiveUser.username.toLowerCase())) &&
           b.fecha === bitacora.fecha
       );
       if (serverMatch) {
@@ -851,6 +870,98 @@ export function App() {
       }
     } catch (e) {
       console.warn('Error reloading bitacora:', e);
+    }
+  };
+
+  // Alternar entre bitácora personal y Modo Apoyo
+  const handleSelectProxyUser = async (targetUser: User | null) => {
+    // 1. Guardar de inmediato cualquier cambio de la bitácora activa en memoria
+    const currentEffective = activeProxyUser || currentUser;
+    if (currentEffective && bitacora.fecha) {
+      localStorage.setItem(getDraftKey(currentEffective.id, bitacora.fecha), JSON.stringify(bitacora));
+      if (!activeProxyUser) {
+        localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
+      }
+      if (bitacora.actividades.length > 0) {
+        api.saveBitacora({
+          ...bitacora,
+          colaborador: currentEffective.full_name,
+          user_id: currentEffective.id,
+        }, currentUser?.id).catch((e) => console.warn('Sync before switching proxy:', e));
+      }
+    }
+
+    isSwitchingDateRef.current = true;
+    setActiveProxyUser(targetUser);
+
+    const newTarget = targetUser || currentUser;
+    const targetDate = bitacora.fecha || getTodayLocalDateStr();
+
+    if (!newTarget || !newTarget.id) {
+      isSwitchingDateRef.current = false;
+      return;
+    }
+
+    try {
+      setAutoSaveStatus('saving');
+      // Consultar servidor con requesting_user_id
+      const serverBitacoras = await api.getBitacoras(targetDate, undefined, undefined, newTarget.id, currentUser?.id);
+      const serverMatch = serverBitacoras.find(
+        (b) => (b.user_id === newTarget.id || b.colaborador.toLowerCase() === newTarget.full_name.toLowerCase()) && b.fecha === targetDate
+      );
+
+      const localDraft = getBestLocalDraft(newTarget.id, targetDate, newTarget.full_name);
+      const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
+      const serverActsCount = (serverMatch?.actividades || []).filter((a) => !a.is_deleted).length;
+
+      let nextBitacora: Bitacora;
+
+      if (localDraft && localActsCount > serverActsCount) {
+        nextBitacora = localDraft;
+      } else if (serverMatch) {
+        let merged = { ...serverMatch };
+        if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
+          const sDescs = new Set((serverMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase()));
+          const extra = localDraft.actividades.filter(
+            (a) => a.descripcion && a.descripcion.trim() && !sDescs.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
+          );
+          if (extra.length > 0) {
+            merged.actividades = [...(serverMatch.actividades || []), ...extra];
+          }
+        }
+        nextBitacora = merged;
+      } else if (localDraft) {
+        nextBitacora = localDraft;
+      } else {
+        nextBitacora = {
+          ...defaultBitacora,
+          fecha: targetDate,
+          hora_inicio: systemSettings?.hora_inicio_default || '08:30',
+          colaborador: newTarget.full_name,
+          user_id: newTarget.id,
+          area: newTarget.team_name || 'Sistemas',
+          actividades: [],
+          estado: 'borrador',
+        };
+      }
+
+      setBitacora(nextBitacora);
+      setIsGenerated(nextBitacora.estado === 'generada' || nextBitacora.estado === 'cerrada' || nextBitacora.estado === 'cerrada_sistema');
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, newTarget.full_name, newTarget.id);
+      setAutoSaveStatus('saved');
+
+      if (targetUser) {
+        showToast('info', `Modo Apoyo activado: registrando tareas para ${targetUser.full_name}`, '🤝 Modo Apoyo');
+      } else {
+        showToast('info', 'Has vuelto a tu bitácora personal', '👤 Mi Bitácora');
+      }
+    } catch (e) {
+      console.warn('Error switching proxy target:', e);
+      setAutoSaveStatus('error');
+    } finally {
+      setTimeout(() => {
+        isSwitchingDateRef.current = false;
+      }, 50);
     }
   };
 
@@ -985,8 +1096,9 @@ export function App() {
 
   const handleSyncWithBitacora = async () => {
     try {
-      const colab = bitacora.colaborador || currentUser?.full_name || 'Juan Pérez García';
-      const uid = bitacora.user_id || currentUser?.id;
+      const effectiveUser = activeProxyUser || currentUser;
+      const colab = bitacora.colaborador || effectiveUser?.full_name || 'Juan Pérez García';
+      const uid = bitacora.user_id || effectiveUser?.id;
       const res = await api.importarActividadesPendientes(colab, uid, bitacora.fecha);
       if (res.actividades && res.actividades.length > 0) {
         setBitacora((prev) => {
@@ -1009,6 +1121,12 @@ export function App() {
   };
 
   const handleGenerateBitacora = async () => {
+    // 0. En Modo Apoyo, el cierre formal de jornada está reservado al titular o al auto-cierre del sistema
+    if (activeProxyUser) {
+      showToast('error', `El cierre formal de jornada está reservado al colaborador titular (${activeProxyUser.full_name}) o al auto-cierre nocturno del sistema. Las tareas de apoyo ya están guardadas y respaldadas.`, 'Cierre no permitido');
+      return;
+    }
+
     // 1. Validar que existan actividades registradas en la jornada
     const activeActs = (bitacora.actividades || []).filter((a) => !a.is_deleted);
     if (activeActs.length === 0) {
@@ -1105,6 +1223,7 @@ export function App() {
     setHistorial([]);
     
     // 3. Establecer usuario y cargar datos frescos desde el servidor
+    setActiveProxyUser(null);
     setCurrentUser(user);
     loadInitialData(user);
     
@@ -1117,6 +1236,8 @@ export function App() {
 
   const handleLogout = () => {
     // 1. Limpiar usuario autenticado
+    setActiveProxyUser(null);
+    setDelegatedTargets([]);
     setCurrentUser(null);
     localStorage.removeItem('auth_user');
     
@@ -1190,12 +1311,52 @@ export function App() {
           unreadNotificationsCount={notifications.filter((n) => !n.read).length}
           onOpenNotifications={() => setNotificationsModalOpen(true)}
           onToggleMobileMenu={() => setMobileMenuOpen(true)}
+          delegatedTargets={delegatedTargets}
+          activeProxyUser={activeProxyUser}
+          onSelectProxyUser={handleSelectProxyUser}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
           {/* VIEW 1: MI BITÁCORA */}
           {viewMode === 'lista' && (
             <div className="w-full max-w-[1700px] mx-auto space-y-6">
+              {activeProxyUser && (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+                  <div className="flex items-center space-x-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+                      🤝
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] uppercase tracking-wider font-extrabold bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                          Modo Apoyo Activo
+                        </span>
+                        <span className="text-xs text-amber-700/80 dark:text-amber-400/80 hidden sm:inline">
+                          Las actividades se registrarán en la bitácora de este colaborador
+                        </span>
+                      </div>
+                      <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 mt-0.5">
+                        Registrando para:{' '}
+                        <span className="text-amber-600 dark:text-amber-400 font-extrabold">
+                          {activeProxyUser.full_name}
+                        </span>
+                        {activeProxyUser.team_name && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400 font-normal ml-2">
+                            ({activeProxyUser.team_name})
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleSelectProxyUser(null)}
+                    className="inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer self-start sm:self-center"
+                  >
+                    Volver a mi bitácora
+                  </button>
+                </div>
+              )}
+
               <ActividadesLista
                 actividades={bitacora.actividades}
                 onAddActividad={handleAddActividad}
@@ -1222,6 +1383,8 @@ export function App() {
                 isSaving={isSaving}
                 onChange={handleFieldChange}
                 onSubmit={handleGenerateBitacora}
+                isProxyMode={Boolean(activeProxyUser)}
+                proxyUserName={activeProxyUser?.full_name}
               />
             </div>
           )}
@@ -1256,6 +1419,7 @@ export function App() {
               onRefreshTeams={loadInitialData}
               systemSettings={systemSettings || undefined}
               onUpdateSettings={setSystemSettings}
+              currentUser={currentUser}
             />
           )}
 

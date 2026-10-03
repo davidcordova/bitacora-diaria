@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, Sparkles, Send, Play, RefreshCw } from 'lucide-react';
+import { CheckSquare, Sparkles, Send, Play, RefreshCw, UserCheck } from 'lucide-react';
 
 interface CierreJornadaProps {
   pendientes: string;
@@ -9,6 +9,8 @@ interface CierreJornadaProps {
   isSaving: boolean;
   onChange: (field: string, value: string) => void;
   onSubmit: () => void;
+  isProxyMode?: boolean;
+  proxyUserName?: string;
 }
 
 export const CierreJornada: React.FC<CierreJornadaProps> = ({
@@ -19,6 +21,8 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
   isSaving,
   onChange,
   onSubmit,
+  isProxyMode = false,
+  proxyUserName,
 }) => {
   return (
     <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 sm:p-6 shadow-sm transition-all duration-200">
@@ -122,22 +126,35 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
       <div className="mt-6 pt-4 border-t border-slate-100 dark:border-[#252636]/60 flex flex-col sm:flex-row items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
           <Sparkles className="w-4 h-4 text-[#00F0FF]" />
-          <span>Genera el resumen listo para compartir por WhatsApp, correo o Teams.</span>
+          <span>
+            {isProxyMode
+              ? 'Tus tareas quedan registradas con auto-guardado en la nube.'
+              : 'Genera el resumen listo para compartir por WhatsApp, correo o Teams.'}
+          </span>
         </div>
 
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={isSaving}
-          className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-7 py-3 rounded-full text-xs sm:text-sm font-extrabold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all cursor-pointer min-h-[42px]"
-        >
-          {isSaving ? (
-            <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
-          ) : (
-            <Play className="w-3.5 h-3.5 fill-current" />
-          )}
-          <span>{isSaving ? 'Guardando en la nube...' : 'Generar bitácora del día'}</span>
-        </button>
+        {isProxyMode ? (
+          <div className="w-full sm:w-auto flex items-center gap-2.5 p-2.5 px-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed shadow-xs">
+            <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>
+              <strong>Modo Apoyo:</strong> El cierre formal de jornada está reservado al titular ({proxyUserName || 'colaborador'}) o al auto-cierre nocturno del sistema.
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={isSaving}
+            className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-7 py-3 rounded-full text-xs sm:text-sm font-extrabold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all cursor-pointer min-h-[42px]"
+          >
+            {isSaving ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+            ) : (
+              <Play className="w-3.5 h-3.5 fill-current" />
+            )}
+            <span>{isSaving ? 'Guardando en la nube...' : 'Generar bitácora del día'}</span>
+          </button>
+        )}
       </div>
     </div>
   );

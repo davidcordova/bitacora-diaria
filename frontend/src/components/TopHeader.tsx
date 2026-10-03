@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Bell,
   HelpCircle,
@@ -15,6 +15,10 @@ import {
   Lightbulb,
   KeyRound,
   Settings,
+  ChevronDown,
+  UserCheck,
+  Search,
+  X,
 } from 'lucide-react';
 import { User, ViewMode } from '../types';
 
@@ -30,6 +34,9 @@ interface TopHeaderProps {
   onOpenNotifications?: () => void;
   unreadNotificationsCount?: number;
   onToggleMobileMenu?: () => void;
+  delegatedTargets?: User[];
+  activeProxyUser?: User | null;
+  onSelectProxyUser?: (user: User | null) => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -44,7 +51,28 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenNotifications,
   unreadNotificationsCount = 0,
   onToggleMobileMenu,
+  delegatedTargets = [],
+  activeProxyUser = null,
+  onSelectProxyUser,
 }) => {
+  const [proxyMenuOpen, setProxyMenuOpen] = useState(false);
+  const [proxySearch, setProxySearch] = useState('');
+  const proxyMenuRef = useRef<HTMLDivElement>(null);
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (proxyMenuRef.current && !proxyMenuRef.current.contains(e.target as Node)) {
+        setProxyMenuOpen(false);
+      }
+    };
+    if (proxyMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [proxyMenuOpen]);
   // Helper para formatear fecha en la cabecera
   const formatHeaderDate = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -235,6 +263,153 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           >
             <HelpCircle className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Context Selector / Modo Apoyo */}
+        {(delegatedTargets.length > 0 || activeProxyUser || currentUser?.role === 'admin') && onSelectProxyUser && (
+          <div className="relative" ref={proxyMenuRef}>
+            <button
+              type="button"
+              onClick={() => setProxyMenuOpen(!proxyMenuOpen)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+                activeProxyUser
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-slate-100/80 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-cyan-500/40'
+              }`}
+              title={
+                activeProxyUser
+                  ? `Registrando tareas en apoyo a: ${activeProxyUser.full_name}. Clic para cambiar o salir.`
+                  : 'Modo Apoyo: registrar tareas para otro colaborador'
+              }
+            >
+              <UserCheck className={`w-3.5 h-3.5 ${activeProxyUser ? 'text-amber-500' : 'text-cyan-500'}`} />
+              <span className="hidden sm:inline font-medium">
+                {activeProxyUser ? `Apoyando: ${activeProxyUser.full_name.split(' ')[0]}` : 'Modo Apoyo'}
+              </span>
+              {activeProxyUser ? (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectProxyUser(null);
+                  }}
+                  className="p-0.5 hover:bg-amber-500/30 rounded-full transition-colors cursor-pointer text-amber-600 dark:text-amber-300 inline-flex items-center"
+                  title="Volver a mi bitácora personal"
+                >
+                  <X className="w-3 h-3" />
+                </span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-[#00F0FF] font-bold">
+                  {delegatedTargets.length}
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3 opacity-60" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {proxyMenuOpen && (
+              <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#12131C] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-3 py-2 border-b border-slate-100 dark:border-white/5 mb-2">
+                  <div className="text-xs font-bold text-slate-800 dark:text-white flex items-center justify-between">
+                    <span>Seleccionar Colaborador</span>
+                    {activeProxyUser && (
+                      <span className="text-[10px] font-bold text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                        Modo Apoyo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    Registra tareas directamente en la jornada de un compañero de trabajo.
+                  </p>
+                </div>
+
+                {/* Búsqueda rápida si hay más de 3 colaboradores */}
+                {delegatedTargets.length > 3 && (
+                  <div className="relative px-2 mb-2">
+                    <Search className="w-3.5 h-3.5 absolute left-4 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={proxySearch}
+                      onChange={(e) => setProxySearch(e.target.value)}
+                      placeholder="Buscar por nombre o equipo..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-hidden focus:border-cyan-500"
+                    />
+                  </div>
+                )}
+
+                {/* Opción 1: Mi propia bitácora */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelectProxyUser(null);
+                    setProxyMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
+                    !activeProxyUser
+                      ? 'bg-cyan-500/15 text-cyan-800 dark:text-[#00F0FF] font-bold'
+                      : 'hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center font-bold text-xs shrink-0">
+                    {currentUser?.full_name ? currentUser.full_name.charAt(0).toUpperCase() : 'M'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs truncate font-semibold">Mi Bitácora Personal</div>
+                    <div className="text-[10px] text-slate-500 truncate">{currentUser?.full_name}</div>
+                  </div>
+                  {!activeProxyUser && <span className="text-[10px] font-bold text-cyan-600 dark:text-[#00F0FF]">Activo</span>}
+                </button>
+
+                {/* Lista de colaboradores delegados */}
+                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 max-h-56 overflow-y-auto space-y-1">
+                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    Colaboradores Asignados ({delegatedTargets.length})
+                  </div>
+                  {delegatedTargets
+                    .filter((u) => {
+                      if (!proxySearch.trim()) return true;
+                      const q = proxySearch.toLowerCase();
+                      return (
+                        u.full_name.toLowerCase().includes(q) ||
+                        (u.team_name && u.team_name.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((target) => {
+                      const isSelected = activeProxyUser?.id === target.id;
+                      return (
+                        <button
+                          key={target.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectProxyUser(target);
+                            setProxyMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-left transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold'
+                              : 'hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
+                            {target.full_name ? target.full_name.charAt(0).toUpperCase() : 'U'}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs truncate font-semibold">{target.full_name}</div>
+                            <div className="text-[10px] text-slate-400 truncate">
+                              {target.team_name || 'Equipo general'}
+                            </div>
+                          </div>
+                          {isSelected && (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                              En curso
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* User Profile Pill Button (Consolidated "Mi Perfil") */}

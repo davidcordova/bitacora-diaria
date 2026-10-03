@@ -203,6 +203,13 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </div>
               )}
 
+              {actividad.created_by_name && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 text-xs font-semibold text-teal-800 dark:text-teal-300">
+                  <UserCheck className="w-3.5 h-3.5 text-teal-500" />
+                  <span>Registrada por: {actividad.created_by_name} (Colaborador de Apoyo)</span>
+                </div>
+              )}
+
               {(actividad.parent_task_id || actividad.is_rollover) && (
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-[#EC4899]/15 border border-pink-200 dark:border-[#EC4899]/30 px-3 py-1 rounded-full">
                   <RefreshCw className="w-3.5 h-3.5 text-[#EC4899]" />
