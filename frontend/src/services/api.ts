@@ -1104,10 +1104,11 @@ export const api = {
 
   async createDelegation(data: {
     delegate_user_id: number;
-    target_user_id: number;
+    target_user_id?: number;
+    target_user_ids?: number[];
     motivo?: string;
     assigned_by: number;
-  }): Promise<{ message: string; id: number }> {
+  }): Promise<{ message: string; count?: number; id?: number }> {
     const res = await fetch(`${API_BASE}/admin/delegations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1127,6 +1128,17 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Error al revocar apoyo' }));
       throw new Error(err.error || 'Error al revocar apoyo');
+    }
+    return true;
+  },
+
+  async deleteDelegationsByDelegate(delegateUserId: number): Promise<boolean> {
+    const res = await fetch(`${API_BASE}/admin/delegations/by-delegate/${delegateUserId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al revocar asignaciones de apoyo' }));
+      throw new Error(err.error || 'Error al revocar asignaciones de apoyo');
     }
     return true;
   },

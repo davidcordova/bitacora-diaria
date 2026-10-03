@@ -1348,12 +1348,37 @@ export function App() {
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleSelectProxyUser(null)}
-                    className="inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer self-start sm:self-center"
-                  >
-                    Volver a mi bitácora
-                  </button>
+                  <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                    {delegatedTargets.length > 1 && (
+                      <div className="flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-600/40 shadow-xs">
+                        <label htmlFor="proxy-target-select" className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                          Cambiar a:
+                        </label>
+                        <select
+                          id="proxy-target-select"
+                          value={activeProxyUser.id}
+                          onChange={(e) => {
+                            const selectedId = Number(e.target.value);
+                            const target = delegatedTargets.find((t) => t.id === selectedId);
+                            if (target) handleSelectProxyUser(target);
+                          }}
+                          className="bg-transparent text-xs font-bold text-amber-700 dark:text-amber-300 focus:outline-hidden cursor-pointer"
+                        >
+                          {delegatedTargets.map((t) => (
+                            <option key={t.id} value={t.id} className="text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800">
+                              {t.full_name} {t.team_name ? `(${t.team_name})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => handleSelectProxyUser(null)}
+                      className="inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer"
+                    >
+                      Volver a mi bitácora
+                    </button>
+                  </div>
                 </div>
               )}
 

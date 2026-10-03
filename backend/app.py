@@ -1172,54 +1172,81 @@ def create_delegation():
         return jsonify({}), 200
     data = request.get_json() or {}
     delegate_id = data.get('delegate_user_id')
+    target_ids = data.get('target_user_ids')
     target_id = data.get('target_user_id')
     assigned_by = data.get('assigned_by', 1)
     motivo = data.get('motivo', 'Apoyo en registro de actividades')
     
-    if not delegate_id or not target_id:
-        return jsonify({"error": "Debe especificar el usuario de apoyo y el colaborador destinatario"}), 400
-    if int(delegate_id) == int(target_id):
-        return jsonify({"error": "Un colaborador no puede ser delegado de apoyo de sí mismo"}), 400
+    if target_ids is None and target_id is not None:
+        target_ids = [target_id]
+    elif not isinstance(target_ids, list):
+        target_ids = [target_ids] if target_ids else []
+        
+    # Filtrar destinatarios válidos y que no sea el mismo usuario
+    valid_target_ids = []
+    for tid in target_ids:
+        try:
+            n_tid = int(tid)
+            if delegate_id and n_tid != int(delegate_id):
+                valid_target_ids.append(n_tid)
+        except (ValueError, TypeError):
+            pass
+            
+    # Eliminar duplicados preservando orden
+    valid_target_ids = list(dict.fromkeys(valid_target_ids))
+    
+    if not delegate_id or len(valid_target_ids) == 0:
+        return jsonify({"error": "Debe especificar el usuario de apoyo y al menos un colaborador destinatario válido"}), 400
     
     conn = get_db()
     cursor = conn.cursor()
     try:
-        # Obtener datos del colaborador destinatario
-        target_user = cursor.execute("SELECT team_id, full_name FROM users WHERE id = ?", (target_id,)).fetchone()
-        if not target_user:
-            conn.close()
-            return jsonify({"error": "Colaborador destinatario no existe"}), 404
-        
-        team_id = target_user['team_id']
-        
-        existing = cursor.execute('''
-            SELECT id FROM user_delegations 
-            WHERE delegate_user_id = ? AND target_user_id = ?
-        ''', (delegate_id, target_id)).fetchone()
-        
-        if existing:
-            cursor.execute('''
-                UPDATE user_delegations 
-                SET is_active = 1, motivo = ?, assigned_by = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            ''', (motivo, assigned_by, existing['id']))
-            delegation_id = existing['id']
-        else:
-            cursor.execute('''
-                INSERT INTO user_delegations (delegate_user_id, target_user_id, team_id, motivo, is_active, assigned_by)
-                VALUES (?, ?, ?, ?, 1, ?)
-            ''', (delegate_id, target_id, team_id, motivo, assigned_by))
-            delegation_id = cursor.lastrowid
+        created_count = 0
+        names_assigned = []
+        for t_id in valid_target_ids:
+            target_user = cursor.execute("SELECT team_id, full_name FROM users WHERE id = ?", (t_id,)).fetchone()
+            if not target_user:
+                continue
+            
+            team_id = target_user['team_id']
+            existing = cursor.execute('''
+                SELECT id FROM user_delegations 
+                WHERE delegate_user_id = ? AND target_user_id = ?
+            ''', (delegate_id, t_id)).fetchone()
+            
+            if existing:
+                cursor.execute('''
+                    UPDATE user_delegations 
+                    SET is_active = 1, motivo = ?, assigned_by = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (motivo, assigned_by, existing['id']))
+            else:
+                cursor.execute('''
+                    INSERT INTO user_delegations (delegate_user_id, target_user_id, team_id, motivo, is_active, assigned_by)
+                    VALUES (?, ?, ?, ?, 1, ?)
+                ''', (delegate_id, t_id, team_id, motivo, assigned_by))
+            
+            created_count += 1
+            names_assigned.append(target_user['full_name'])
         
         # Notificar al usuario designado como apoyo
-        cursor.execute('''
-            INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-            VALUES (?, 'Designación de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
-        ''', (delegate_id, f"Has sido designado como apoyo para registrar actividades de {target_user['full_name']}."))
+        if created_count > 0:
+            if created_count == 1:
+                notif_msg = f"Has sido designado como apoyo para registrar actividades de {names_assigned[0]}."
+            else:
+                notif_msg = f"Has sido designado como apoyo para {created_count} colaboradores: {', '.join(names_assigned[:3])}{' y otros más' if created_count > 3 else ''}."
+                
+            cursor.execute('''
+                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                VALUES (?, 'Designación de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
+            ''', (delegate_id, notif_msg))
         
         conn.commit()
         conn.close()
-        return jsonify({"message": "Delegación de apoyo creada exitosamente", "id": delegation_id}), 201
+        return jsonify({
+            "message": f"Se han asignado {created_count} colaborador(es) como apoyo exitosamente",
+            "count": created_count
+        }), 201
     except Exception as e:
         conn.rollback()
         conn.close()
@@ -1236,6 +1263,22 @@ def delete_delegation(del_id):
         conn.commit()
         conn.close()
         return jsonify({"message": "Delegación eliminada exitosamente"}), 200
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/admin/delegations/by-delegate/<int:del_user_id>', methods=['DELETE', 'OPTIONS'])
+def delete_delegations_by_delegate(del_user_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("DELETE FROM user_delegations WHERE delegate_user_id = ?", (del_user_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Todas las asignaciones de apoyo han sido eliminadas"}), 200
     except Exception as e:
         conn.rollback()
         conn.close()

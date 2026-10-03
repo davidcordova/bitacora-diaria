@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   CheckCircle2,
+  Search,
 } from 'lucide-react';
 import { User, Team, UserRole, SystemSettings, UserDelegation } from '../types';
 import { api } from '../services/api';
@@ -61,15 +62,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [savingDelegation, setSavingDelegation] = useState(false);
   const [delegationForm, setDelegationForm] = useState<{
     delegate_user_id: number | '';
-    target_user_id: number | '';
+    target_user_ids: number[];
     motivo: string;
   }>({
     delegate_user_id: '',
-    target_user_id: '',
+    target_user_ids: [],
     motivo: 'Apoyo en registro de tareas',
   });
+  const [delegationModalSearch, setDelegationModalSearch] = useState('');
+  const [delegationModalTeamFilter, setDelegationModalTeamFilter] = useState<number | 'all'>('all');
   const [delegationToDelete, setDelegationToDelete] = useState<UserDelegation | null>(null);
   const [showDeleteDelegationModal, setShowDeleteDelegationModal] = useState(false);
+  const [delegateToRevokeAll, setDelegateToRevokeAll] = useState<{ id: number; name: string } | null>(null);
+  const [showRevokeAllModal, setShowRevokeAllModal] = useState(false);
 
   // Settings & Branding State
   const [defaultHoraInicio, setDefaultHoraInicio] = useState(systemSettings?.hora_inicio_default || '08:30');
@@ -150,6 +155,54 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       setLoadingDelegations(false);
     }
   };
+
+  // Agrupar delegaciones por colaborador de apoyo
+  const groupedDelegations = React.useMemo(() => {
+    const map = new Map<number, {
+      delegate_user_id: number;
+      delegate_name: string;
+      delegate_username: string;
+      motivo: string;
+      assigned_by_name?: string;
+      created_at?: string;
+      targets: {
+        delegation_id: number;
+        target_user_id: number;
+        target_name: string;
+        target_username?: string;
+        team_name?: string;
+      }[];
+    }>();
+
+    delegations.forEach((d) => {
+      const existing = map.get(d.delegate_user_id);
+      const targetItem = {
+        delegation_id: d.id,
+        target_user_id: d.target_user_id,
+        target_name: d.target_name || `Usuario #${d.target_user_id}`,
+        target_username: d.target_username,
+        team_name: d.team_name || undefined,
+      };
+
+      if (existing) {
+        if (!existing.targets.some((t) => t.target_user_id === d.target_user_id)) {
+          existing.targets.push(targetItem);
+        }
+      } else {
+        map.set(d.delegate_user_id, {
+          delegate_user_id: d.delegate_user_id,
+          delegate_name: d.delegate_name || `Usuario #${d.delegate_user_id}`,
+          delegate_username: d.delegate_username || '',
+          motivo: d.motivo || 'Apoyo general',
+          assigned_by_name: d.assigned_by_name,
+          created_at: d.created_at,
+          targets: [targetItem],
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [delegations]);
 
   useEffect(() => {
     loadUsers();
@@ -359,39 +412,47 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   };
 
   // Delegation / Apoyo actions
-  const handleOpenNewDelegation = () => {
+  const handleOpenNewDelegation = (preselectedDelegateId?: number) => {
+    const initialTargets: number[] = [];
+    if (preselectedDelegateId) {
+      delegations
+        .filter((d) => d.delegate_user_id === preselectedDelegateId)
+        .forEach((d) => initialTargets.push(d.target_user_id));
+    }
     setDelegationForm({
-      delegate_user_id: '',
-      target_user_id: '',
+      delegate_user_id: preselectedDelegateId || '',
+      target_user_ids: initialTargets,
       motivo: 'Apoyo en registro de tareas',
     });
+    setDelegationModalSearch('');
+    setDelegationModalTeamFilter('all');
     setShowDelegationModal(true);
   };
 
   const handleSaveDelegation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!delegationForm.delegate_user_id || !delegationForm.target_user_id) {
-      alert('Debes seleccionar tanto al colaborador de apoyo como al titular destinatario');
+    if (!delegationForm.delegate_user_id) {
+      alert('Debes seleccionar al colaborador que brindará el apoyo');
       return;
     }
-    if (Number(delegationForm.delegate_user_id) === Number(delegationForm.target_user_id)) {
-      alert('El colaborador de apoyo no puede ser la misma persona que el titular');
+    if (delegationForm.target_user_ids.length === 0) {
+      alert('Debes seleccionar al menos un colaborador titular para brindarle apoyo');
       return;
     }
     setSavingDelegation(true);
     try {
-      await api.createDelegation({
+      const res = await api.createDelegation({
         delegate_user_id: Number(delegationForm.delegate_user_id),
-        target_user_id: Number(delegationForm.target_user_id),
+        target_user_ids: delegationForm.target_user_ids,
         motivo: delegationForm.motivo.trim() || 'Apoyo en registro de tareas',
         assigned_by: currentUser?.id || 1,
       });
-      setFeedbackMsg('Colaborador de apoyo asignado exitosamente');
+      setFeedbackMsg(res.message || `${delegationForm.target_user_ids.length} colaborador(es) asignado(s) exitosamente`);
       setShowDelegationModal(false);
       loadDelegations();
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar asignación de apoyo');
+      alert(err.message || 'Error al guardar asignaciones de apoyo');
     } finally {
       setSavingDelegation(false);
     }
@@ -401,13 +462,27 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     if (!delegationToDelete) return;
     try {
       await api.deleteDelegation(delegationToDelete.id);
-      setFeedbackMsg('Delegación de apoyo revocada exitosamente');
+      setFeedbackMsg('Asignación de apoyo revocada exitosamente');
       setShowDeleteDelegationModal(false);
       setDelegationToDelete(null);
       loadDelegations();
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
       alert(err.message || 'Error al revocar apoyo');
+    }
+  };
+
+  const handleConfirmRevokeAllDelegations = async () => {
+    if (!delegateToRevokeAll) return;
+    try {
+      await api.deleteDelegationsByDelegate(delegateToRevokeAll.id);
+      setFeedbackMsg(`Se revocaron todas las asignaciones de apoyo de ${delegateToRevokeAll.name}`);
+      setShowRevokeAllModal(false);
+      setDelegateToRevokeAll(null);
+      loadDelegations();
+      setTimeout(() => setFeedbackMsg(''), 3500);
+    } catch (err: any) {
+      alert(err.message || 'Error al revocar asignaciones');
     }
   };
 
@@ -566,7 +641,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
           {activeTab === 'delegaciones' && (
             <button
               type="button"
-              onClick={handleOpenNewDelegation}
+              onClick={() => handleOpenNewDelegation()}
               className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -1496,14 +1571,19 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                   <UserCheck className="w-4 h-4 text-[#00F0FF]" />
                   <span>Asignaciones de Usuarios de Apoyo</span>
+                  {delegations.length > 0 && (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-[#00F0FF]">
+                      {groupedDelegations.length} {groupedDelegations.length === 1 ? 'usuario' : 'usuarios'} con {delegations.length} {delegations.length === 1 ? 'asignación' : 'asignaciones'}
+                    </span>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Designa colaboradores autorizados para registrar y actualizar actividades en nombre de otros usuarios. Las horas se atribuirán al titular.
+                  Designa colaboradores autorizados para registrar y actualizar actividades en nombre de 1 o más compañeros. Las horas se atribuirán al titular.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={handleOpenNewDelegation}
+                onClick={() => handleOpenNewDelegation()}
                 className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" />
@@ -1516,18 +1596,18 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <RefreshCw className="w-6 h-6 animate-spin text-[#00F0FF]" />
                 <span className="text-xs">Cargando delegaciones activas...</span>
               </div>
-            ) : delegations.length === 0 ? (
+            ) : groupedDelegations.length === 0 ? (
               <div className="text-center py-12 px-4 rounded-2xl border border-dashed border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-white/2">
                 <div className="w-12 h-12 rounded-2xl bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center mx-auto mb-3">
                   <UserCheck className="w-6 h-6" />
                 </div>
                 <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">No hay usuarios de apoyo designados</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1 mb-4 leading-relaxed">
-                  Puedes autorizar a un colaborador (ej. asistente, coordinador o compañero) para que registre actividades de forma asistida en la bitácora de otro miembro.
+                  Puedes autorizar a un colaborador (ej. asistente, coordinador o compañero) para que registre actividades de forma asistida en la bitácora de uno o más miembros de la empresa.
                 </p>
                 <button
                   type="button"
-                  onClick={handleOpenNewDelegation}
+                  onClick={() => handleOpenNewDelegation()}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#00F0FF] text-slate-950 text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
@@ -1539,78 +1619,109 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-[#252636] text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                      <th className="pb-3 px-3">Colaborador de Apoyo (Digita)</th>
-                      <th className="pb-3 px-3">Titular Destinatario (Recibe las horas)</th>
+                      <th className="pb-3 px-3">Colaborador de Apoyo (Digitador)</th>
+                      <th className="pb-3 px-3">Colaboradores a su Cargo ({delegations.length})</th>
                       <th className="pb-3 px-3">Motivo / Alcance</th>
                       <th className="pb-3 px-3">Asignado por</th>
                       <th className="pb-3 px-3 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-[#252636]/60">
-                    {delegations.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors">
+                    {groupedDelegations.map((group) => (
+                      <tr key={group.delegate_user_id} className="hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors">
                         {/* Usuario Apoyo */}
-                        <td className="py-3 px-3">
+                        <td className="py-3.5 px-3 align-top">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center font-bold text-xs shrink-0">
-                              {d.delegate_name ? d.delegate_name.charAt(0).toUpperCase() : 'A'}
+                            <div className="w-9 h-9 rounded-full bg-cyan-500/15 text-cyan-600 dark:text-[#00F0FF] flex items-center justify-center font-bold text-xs shrink-0">
+                              {group.delegate_name ? group.delegate_name.charAt(0).toUpperCase() : 'A'}
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
-                                {d.delegate_name}
+                              <div className="font-bold text-slate-800 dark:text-slate-200">
+                                {group.delegate_name}
                               </div>
                               <div className="text-[10px] text-slate-400 font-mono">
-                                @{d.delegate_username}
+                                @{group.delegate_username}
+                              </div>
+                              <div className="mt-1">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-700 dark:text-[#00F0FF] bg-cyan-500/10 px-2 py-0.5 rounded-full">
+                                  🤝 {group.targets.length} {group.targets.length === 1 ? 'colaborador' : 'colaboradores'}
+                                </span>
                               </div>
                             </div>
                           </div>
                         </td>
 
-                        {/* Titular */}
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0">
-                              {d.target_name ? d.target_name.charAt(0).toUpperCase() : 'T'}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="font-bold text-slate-800 dark:text-slate-200 truncate">
-                                {d.target_name}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {d.team_name || 'Sin equipo'}
-                              </div>
-                            </div>
+                        {/* Titulares Asignados */}
+                        <td className="py-3.5 px-3 align-top">
+                          <div className="flex flex-wrap gap-1.5 max-w-lg">
+                            {group.targets.map((t) => (
+                              <span
+                                key={t.delegation_id}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 shadow-2xs"
+                              >
+                                <span>{t.target_name}</span>
+                                {t.team_name && <span className="text-[10px] opacity-75 font-normal">({t.team_name})</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDelegationToDelete({
+                                      id: t.delegation_id,
+                                      delegate_user_id: group.delegate_user_id,
+                                      target_user_id: t.target_user_id,
+                                      delegate_name: group.delegate_name,
+                                      target_name: t.target_name,
+                                      is_active: 1,
+                                      assigned_by: 1,
+                                    });
+                                    setShowDeleteDelegationModal(true);
+                                  }}
+                                  className="w-4 h-4 rounded-full hover:bg-amber-500/30 flex items-center justify-center text-amber-700 dark:text-amber-200 cursor-pointer ml-0.5"
+                                  title={`Quitar apoyo a ${t.target_name}`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
                           </div>
                         </td>
 
                         {/* Motivo */}
-                        <td className="py-3 px-3">
+                        <td className="py-3.5 px-3 align-top">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 font-medium">
                             <ShieldCheck className="w-3 h-3 text-[#00F0FF]" />
-                            <span>{d.motivo || 'Apoyo general'}</span>
+                            <span>{group.motivo || 'Apoyo general'}</span>
                           </span>
                         </td>
 
                         {/* Asignado Por */}
-                        <td className="py-3 px-3 text-slate-500 dark:text-slate-400">
+                        <td className="py-3.5 px-3 align-top text-slate-500 dark:text-slate-400">
                           <div className="font-medium text-slate-700 dark:text-slate-300">
-                            {d.assigned_by_name || 'Administrador'}
+                            {group.assigned_by_name || 'Administrador'}
                           </div>
                           <div className="text-[10px] text-slate-400">
-                            {d.created_at ? d.created_at.split(' ')[0] : 'Activo'}
+                            {group.created_at ? group.created_at.split(' ')[0] : 'Activo'}
                           </div>
                         </td>
 
                         {/* Acciones */}
-                        <td className="py-3 px-3 text-right">
+                        <td className="py-3.5 px-3 align-top text-right space-x-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenNewDelegation(group.delegate_user_id)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-cyan-600 dark:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors cursor-pointer"
+                            title="Asignar más colaboradores a este apoyo"
+                          >
+                            <UserPlus className="w-3.5 h-3.5" />
+                            <span className="hidden lg:inline">Añadir</span>
+                          </button>
                           <button
                             type="button"
                             onClick={() => {
-                              setDelegationToDelete(d);
-                              setShowDeleteDelegationModal(true);
+                              setDelegateToRevokeAll({ id: group.delegate_user_id, name: group.delegate_name });
+                              setShowRevokeAllModal(true);
                             }}
-                            className="p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors cursor-pointer"
-                            title="Revocar asignación de apoyo"
+                            className="p-1.5 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors cursor-pointer inline-flex items-center"
+                            title="Revocar todas las asignaciones de este usuario"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1625,10 +1736,10 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         </div>
       )}
 
-      {/* MODAL ASIGNAR USUARIO DE APOYO */}
+      {/* MODAL ASIGNAR USUARIOS DE APOYO (SOPORTE MÚLTIPLE) */}
       {showDelegationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF]">
@@ -1638,7 +1749,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                     Asignar Usuario de Apoyo
                   </h3>
-                  <p className="text-[11px] text-slate-400">Autorización de carga asistida de tareas</p>
+                  <p className="text-[11px] text-slate-400">Autorización para registrar actividades de uno o más colaboradores</p>
                 </div>
               </div>
               <button
@@ -1651,18 +1762,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveDelegation} className="space-y-4 text-xs">
+              {/* Paso 1: Usuario de Apoyo */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   1. ¿Quién brindará el apoyo? (Usuario Digitador)
                 </label>
                 <select
                   value={delegationForm.delegate_user_id}
-                  onChange={(e) =>
-                    setDelegationForm({
-                      ...delegationForm,
-                      delegate_user_id: e.target.value ? Number(e.target.value) : '',
-                    })
-                  }
+                  onChange={(e) => {
+                    const newDelegateId = e.target.value ? Number(e.target.value) : '';
+                    setDelegationForm((prev) => ({
+                      ...prev,
+                      delegate_user_id: newDelegateId,
+                      target_user_ids: prev.target_user_ids.filter((id) => id !== newDelegateId),
+                    }));
+                  }}
                   className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
                   required
                 >
@@ -1678,36 +1792,154 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <p className="text-[10px] text-slate-400 mt-1">Este usuario tendrá la opción en su cabecera para alternar a "Modo Apoyo".</p>
               </div>
 
+              {/* Paso 2: Selección Múltiple de Colaboradores Titulares */}
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  2. ¿A quién brindará apoyo? (Colaborador Titular)
-                </label>
-                <select
-                  value={delegationForm.target_user_id}
-                  onChange={(e) =>
-                    setDelegationForm({
-                      ...delegationForm,
-                      target_user_id: e.target.value ? Number(e.target.value) : '',
-                    })
-                  }
-                  className="w-full px-3 py-2.5 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
-                  required
-                >
-                  <option value="">-- Seleccionar Titular Destinatario --</option>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    2. ¿A quiénes brindará apoyo? (Selecciona 1 o más colaboradores)
+                  </label>
+                  <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full ${
+                    delegationForm.target_user_ids.length > 0
+                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                      : 'text-slate-400 bg-slate-100 dark:bg-white/5'
+                  }`}>
+                    {delegationForm.target_user_ids.length} seleccionado(s)
+                  </span>
+                </div>
+
+                {/* Toolbar de Búsqueda y Filtros */}
+                <div className="space-y-2 mb-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={delegationModalSearch}
+                      onChange={(e) => setDelegationModalSearch(e.target.value)}
+                      placeholder="Buscar colaboradores por nombre..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 placeholder-slate-400 focus:outline-hidden focus:border-[#00F0FF]"
+                    />
+                  </div>
+
+                  {/* Filtro por Equipos */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-[11px] scrollbar-thin">
+                    <button
+                      type="button"
+                      onClick={() => setDelegationModalTeamFilter('all')}
+                      className={`px-2.5 py-0.5 rounded-full transition-all shrink-0 cursor-pointer ${
+                        delegationModalTeamFilter === 'all'
+                          ? 'bg-[#00F0FF] text-slate-950 font-bold'
+                          : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {teams.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setDelegationModalTeamFilter(t.id)}
+                        className={`px-2.5 py-0.5 rounded-full transition-all shrink-0 cursor-pointer ${
+                          delegationModalTeamFilter === t.id
+                            ? 'bg-[#00F0FF] text-slate-950 font-bold'
+                            : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        {t.nombre}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Acciones de selección masiva */}
+                  <div className="flex items-center justify-between text-[11px] pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selectable = users
+                          .filter((u) => Boolean(u.is_active) && u.id !== Number(delegationForm.delegate_user_id))
+                          .filter((u) => delegationModalTeamFilter === 'all' || u.team_id === delegationModalTeamFilter)
+                          .filter((u) => !delegationModalSearch.trim() || u.full_name.toLowerCase().includes(delegationModalSearch.toLowerCase()));
+                        const allIds = Array.from(new Set([...delegationForm.target_user_ids, ...selectable.map((u) => u.id)]));
+                        setDelegationForm({ ...delegationForm, target_user_ids: allIds });
+                      }}
+                      className="text-cyan-600 dark:text-[#00F0FF] hover:underline cursor-pointer font-semibold"
+                    >
+                      + Seleccionar visibles
+                    </button>
+                    {delegationForm.target_user_ids.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDelegationForm({ ...delegationForm, target_user_ids: [] })}
+                        className="text-rose-500 hover:underline cursor-pointer font-semibold"
+                      >
+                        Limpiar selección
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Lista de Colaboradores con Checkbox */}
+                <div className="max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-[#161722]/50 p-2 space-y-1 divide-y divide-slate-100 dark:divide-[#252636]/40">
                   {users
                     .filter((u) => Boolean(u.is_active) && u.id !== Number(delegationForm.delegate_user_id))
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.full_name} ({u.team_name || 'Sin equipo'})
-                      </option>
-                    ))}
-                </select>
-                <p className="text-[10px] text-slate-400 mt-1">Las horas de las tareas cargadas computarán 100% para este colaborador.</p>
+                    .filter((u) => delegationModalTeamFilter === 'all' || u.team_id === delegationModalTeamFilter)
+                    .filter((u) => !delegationModalSearch.trim() || u.full_name.toLowerCase().includes(delegationModalSearch.toLowerCase()) || (u.team_name && u.team_name.toLowerCase().includes(delegationModalSearch.toLowerCase())))
+                    .map((u) => {
+                      const isChecked = delegationForm.target_user_ids.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors pt-2 ${
+                            isChecked
+                              ? 'bg-amber-500/10 border border-amber-500/30'
+                              : 'hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setDelegationForm((prev) => ({
+                                    ...prev,
+                                    target_user_ids: [...prev.target_user_ids, u.id],
+                                  }));
+                                } else {
+                                  setDelegationForm((prev) => ({
+                                    ...prev,
+                                    target_user_ids: prev.target_user_ids.filter((id) => id !== u.id),
+                                  }));
+                                }
+                              }}
+                              className="rounded border-slate-300 dark:border-[#252636] text-[#00F0FF] focus:ring-[#00F0FF]"
+                            />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                {u.full_name}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                @{u.username} • {u.team_name || 'Sin equipo'}
+                              </div>
+                            </div>
+                          </div>
+                          {isChecked && (
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded-full shrink-0">
+                              Asignado
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Las horas de las tareas cargadas computarán 100% para cada colaborador titular correspondiente.
+                </p>
               </div>
 
+              {/* Paso 3: Motivo */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Motivo o Justificación
+                  3. Motivo o Justificación
                 </label>
                 <input
                   type="text"
@@ -1721,7 +1953,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <div className="p-3 bg-cyan-50/70 dark:bg-cyan-950/20 border border-cyan-200 dark:border-cyan-800/40 rounded-2xl text-[11px] text-cyan-900 dark:text-cyan-300 flex items-start gap-2 leading-relaxed">
                 <AlertCircle className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0 mt-0.5" />
                 <span>
-                  <strong>Control de Seguridad:</strong> El usuario de apoyo podrá registrar y editar actividades en nombre del titular con trazabilidad de auditoría. El cierre formal de jornada está protegido y reservado al titular.
+                  <strong>Control de Seguridad:</strong> El usuario de apoyo podrá alternar entre cualquiera de estos colaboradores desde su cabecera y registrar tareas con trazabilidad completa. El cierre formal de jornada está protegido y reservado al titular.
                 </span>
               </div>
 
@@ -1739,7 +1971,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-5 py-2 rounded-full text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{savingDelegation ? 'Guardando...' : 'Guardar Asignación'}</span>
+                  <span>
+                    {savingDelegation
+                      ? 'Guardando...'
+                      : `Guardar Asignaciones (${delegationForm.target_user_ids.length})`}
+                  </span>
                 </button>
               </div>
             </form>
@@ -1747,7 +1983,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         </div>
       )}
 
-      {/* MODAL CONFIRMAR REVOCAR APOYO */}
+      {/* MODAL CONFIRMAR REVOCAR APOYO INDIVIDUAL */}
       {showDeleteDelegationModal && delegationToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
           <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-6 shadow-2xl relative">
@@ -1766,7 +2002,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
-              ¿Estás seguro de revocar la autorización de apoyo de <strong>{delegationToDelete.delegate_name}</strong> hacia <strong>{delegationToDelete.target_name}</strong>? El usuario ya no podrá ingresar actividades en nombre del titular.
+              ¿Estás seguro de quitar el apoyo a <strong>{delegationToDelete.target_name}</strong> por parte de <strong>{delegationToDelete.delegate_name}</strong>? El usuario ya no podrá ingresar actividades en nombre de este colaborador.
             </p>
 
             <div className="flex items-center justify-end gap-2">
@@ -1786,7 +2022,53 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Revocar Apoyo</span>
+                <span>Quitar Asignación</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMAR REVOCAR TODAS LAS ASIGNACIONES DE UN USUARIO */}
+      {showRevokeAllModal && delegateToRevokeAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-6 shadow-2xl relative">
+            <div className="flex items-center gap-3.5 mb-4 text-rose-500">
+              <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+                <AlertTriangle className="w-6 h-6 text-rose-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 dark:text-slate-100">
+                  Revocar Todo el Apoyo
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Eliminar todas las asignaciones
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-6">
+              ¿Estás seguro de revocar <strong>todas las asignaciones de apoyo</strong> de <strong>{delegateToRevokeAll.name}</strong>? Este colaborador ya no tendrá acceso a la bitácora de ningún compañero.
+            </p>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRevokeAllModal(false);
+                  setDelegateToRevokeAll(null);
+                }}
+                className="px-4 py-2 rounded-full text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-[#161722] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRevokeAllDelegations}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg shadow-rose-600/25 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Revocar Todo</span>
               </button>
             </div>
           </div>
