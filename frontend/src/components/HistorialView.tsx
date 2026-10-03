@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   User as UserIcon,
@@ -29,6 +29,7 @@ import {
 } from '../utils/formatters';
 import { HistorialResumenModal } from './HistorialResumenModal';
 import { EmptyState } from './EmptyState';
+import { api } from '../services/api';
 
 interface HistorialViewProps {
   historial: Bitacora[];
@@ -50,9 +51,48 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   const [colaboradorFilter, setColaboradorFilter] = useState('');
   const [selectedBitacoraForModal, setSelectedBitacoraForModal] = useState<Bitacora | null>(null);
   const [displayMode, setDisplayMode] = useState<'list' | 'grid'>('list');
+  const [loading, setLoading] = useState(false);
+  const [liveHistorial, setLiveHistorial] = useState<Bitacora[]>(historial || []);
 
   const todayStr = useMemo(() => getTodayLocalDateStr(), []);
   const yesterdayStr = useMemo(() => getYesterdayLocalDateStr(), []);
+
+  // Sincronizar si el prop externo 'historial' cambia
+  useEffect(() => {
+    if (historial && historial.length > 0) {
+      setLiveHistorial((prev) => {
+        // Combinar evitando duplicados
+        const map = new Map<number, Bitacora>();
+        historial.forEach((b) => map.set(b.id, b));
+        prev.forEach((b) => map.set(b.id, b));
+        return Array.from(map.values()).sort((a, b) => (b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : b.id - a.id));
+      });
+    }
+  }, [historial]);
+
+  // Carga proactiva desde el servidor en montaje y al cambiar filtros
+  const fetchFromServer = async (fecha?: string, colab?: string) => {
+    setLoading(true);
+    try {
+      const data = await api.getBitacoras(
+        fecha || undefined,
+        colab || undefined,
+        undefined,
+        currentUser?.id
+      );
+      if (Array.isArray(data)) {
+        setLiveHistorial(data);
+      }
+    } catch (e) {
+      console.warn('Error fetching bitacoras in HistorialView:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFromServer(dateFilter, colaboradorFilter);
+  }, [dateFilter, colaboradorFilter, currentUser?.id]);
 
   // PRIVACIDAD POR ROL:
   // Si el usuario es analista (y no líder ni admin), solo puede ver su propia información
@@ -63,17 +103,17 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
   // Base list filtered by role privacy
   const roleFilteredHistorial = useMemo(() => {
-    if (!currentUser) return historial;
+    if (!currentUser) return liveHistorial;
     if (isAnalyst) {
       // Los analistas SOLO ven sus propias bitácoras
-      return historial.filter(
+      return liveHistorial.filter(
         (b) =>
           b.user_id === currentUser.id ||
           (currentUser.full_name && b.colaborador.toLowerCase() === currentUser.full_name.toLowerCase())
       );
     }
-    return historial;
-  }, [historial, currentUser, isAnalyst]);
+    return liveHistorial;
+  }, [liveHistorial, currentUser, isAnalyst]);
 
   // Distinct collaborators list (only for leaders and admins)
   const collaboratorsList = useMemo(() => {
@@ -111,8 +151,15 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         return false;
       }
       // Filter by collaborator (only if leader/admin)
-      if (!isAnalyst && colaboradorFilter && b.colaborador !== colaboradorFilter) {
-        return false;
+      if (!isAnalyst && colaboradorFilter) {
+        const target = colaboradorFilter.trim().toLowerCase();
+        const bColab = (b.colaborador || '').trim().toLowerCase();
+        const targetUser = users?.find((u) => u.full_name?.trim().toLowerCase() === target);
+        const matchesId = targetUser && b.user_id === targetUser.id;
+        const matchesName = bColab === target || bColab.includes(target) || target.includes(bColab);
+        if (!matchesName && !matchesId) {
+          return false;
+        }
       }
       // Filter by search term
       if (searchTerm) {
@@ -127,7 +174,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
       }
       return true;
     });
-  }, [roleFilteredHistorial, dateFilter, colaboradorFilter, searchTerm, isAnalyst]);
+  }, [roleFilteredHistorial, dateFilter, colaboradorFilter, searchTerm, isAnalyst, users]);
 
   return (
     <div className="space-y-4">
@@ -220,6 +267,18 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               <UserIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
             </div>
           )}
+
+          {/* 3.1 Refresh Button */}
+          <button
+            type="button"
+            onClick={() => fetchFromServer(dateFilter, colaboradorFilter)}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-[#161722] hover:bg-slate-200 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+            title="Recargar bitácoras del servidor"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
+            <span>{loading ? 'Cargando...' : 'Refrescar'}</span>
+          </button>
 
           {/* 4. Reset Filters Button */}
           {hasActiveFilters && (

@@ -628,6 +628,17 @@ export function App() {
     }
   }, [currentUser?.id]);
 
+  // Refrescar historial completo desde el servidor al entrar a la vista 'historial'
+  useEffect(() => {
+    if (viewMode === 'historial' && currentUser?.id) {
+      api.getBitacoras(undefined, undefined, undefined, currentUser.id).then((fresh) => {
+        if (Array.isArray(fresh) && fresh.length > 0) {
+          setHistorial(fresh);
+        }
+      }).catch(console.warn);
+    }
+  }, [viewMode, currentUser?.id]);
+
   // Forzar sincronización completa con la nube a demanda
   const handleForceSyncCloud = async () => {
     if (!bitacora.colaborador || !bitacora.fecha) {
