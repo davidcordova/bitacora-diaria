@@ -22,7 +22,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
-import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
+import { formatDuration, getTimeInStatusInfo, stripHtml, calculateHoraFin } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 
@@ -142,7 +142,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
           {/* Body */}
           <div className="p-6 space-y-5 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636]">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636]">
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Hora Inicio
@@ -150,6 +150,16 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
                   <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                   <span>{actividad.hora_inicio || '--:--'}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Hora Fin
+                </span>
+                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                  <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                  <span>{actividad.hora_fin || calculateHoraFin(actividad.hora_inicio, actividad.duracion_min) || '--:--'}</span>
                 </div>
               </div>
 

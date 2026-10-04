@@ -137,6 +137,7 @@ def init_db():
             bitacora_id INTEGER,
             orden INTEGER DEFAULT 0,
             hora_inicio TEXT,
+            hora_fin TEXT,
             duracion_min INTEGER DEFAULT 0,
             tipo_trabajo TEXT,
             descripcion TEXT NOT NULL,
@@ -181,6 +182,8 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN created_by_user_id INTEGER REFERENCES users(id)")
     if 'updated_by_user_id' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN updated_by_user_id INTEGER REFERENCES users(id)")
+    if 'hora_fin' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN hora_fin TEXT")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")

@@ -15,6 +15,7 @@ export interface Actividad {
   bitacora_id?: number;
   orden?: number;
   hora_inicio: string;
+  hora_fin?: string;
   duracion_min: number;
   tipo_trabajo: string;
   descripcion: string;

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
+import { calculateHoraFin, calculateDuracionMin, getCurrentTimeStr } from '../utils/formatters';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { HtmlEditor } from './HtmlEditor';
 import { api } from '../services/api';
@@ -47,6 +48,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 }) => {
   const [horaInicio, setHoraInicio] = useState('08:00');
   const [duracionMin, setDuracionMin] = useState<number>(30);
+  const [horaFin, setHoraFin] = useState('08:30');
   const [tipoTrabajo, setTipoTrabajo] = useState('Desarrollo');
   const [descripcion, setDescripcion] = useState('');
   const [paraCliente, setParaCliente] = useState('');
@@ -80,8 +82,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (actividadToEdit) {
-        setHoraInicio(actividadToEdit.hora_inicio || '08:00');
-        setDuracionMin(Number(actividadToEdit.duracion_min) || 0);
+        const hIni = actividadToEdit.hora_inicio || '08:00';
+        const dMin = Number(actividadToEdit.duracion_min) || 0;
+        setHoraInicio(hIni);
+        setDuracionMin(dMin);
+        setHoraFin(actividadToEdit.hora_fin || calculateHoraFin(hIni, dMin));
         setTipoTrabajo(actividadToEdit.tipo_trabajo || 'Desarrollo');
         setDescripcion(actividadToEdit.descripcion || '');
         setParaCliente(actividadToEdit.para_cliente || '');
@@ -97,8 +102,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(Math.floor(now.getMinutes() / 5) * 5).padStart(2, '0');
-        setHoraInicio(`${hh}:${mm}`);
+        const hIni = `${hh}:${mm}`;
+        setHoraInicio(hIni);
         setDuracionMin(30);
+        setHoraFin(calculateHoraFin(hIni, 30));
         setTipoTrabajo('Desarrollo');
         setDescripcion('');
         setParaCliente('');
@@ -135,9 +142,71 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     );
   };
 
-  const handleAddMinutes = (extra: number) => {
-    setDuracionMin((prev) => Math.max(0, (Number(prev) || 0) + extra));
+  const handleHoraInicioChange = (val: string) => {
+    setHoraInicio(val);
+    if (val && duracionMin > 0) {
+      setHoraFin(calculateHoraFin(val, duracionMin));
+    }
   };
+
+  const handleDuracionChange = (val: number) => {
+    const mins = Math.max(0, val || 0);
+    setDuracionMin(mins);
+    if (horaInicio) {
+      setHoraFin(calculateHoraFin(horaInicio, mins));
+    }
+  };
+
+  const handleHoraFinChange = (val: string) => {
+    setHoraFin(val);
+    if (horaInicio && val) {
+      const calculatedMins = calculateDuracionMin(horaInicio, val);
+      setDuracionMin(calculatedMins);
+    }
+  };
+
+  const handleSetHoraFinNow = () => {
+    const nowStr = getCurrentTimeStr();
+    setHoraFin(nowStr);
+    if (horaInicio) {
+      const calculatedMins = calculateDuracionMin(horaInicio, nowStr);
+      setDuracionMin(calculatedMins);
+    }
+  };
+
+  const handleAddMinutes = (extra: number) => {
+    const nextDur = Math.max(0, (Number(duracionMin) || 0) + extra);
+    setDuracionMin(nextDur);
+    if (horaInicio) {
+      setHoraFin(calculateHoraFin(horaInicio, nextDur));
+    }
+  };
+
+  // Interceptar Ctrl+V global en el modal para capturas de pantalla
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            try {
+              const uploaded = await api.uploadFile(file);
+              setEvidencias((prev) => [...prev, uploaded]);
+            } catch (err) {
+              console.error('Error al subir captura pegada:', err);
+            }
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [isOpen]);
 
   // Interceptar Ctrl+V para capturas en el textarea de descripción
   const handlePasteInDescription = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -180,6 +249,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       ...(actividadToEdit || {}),
       id: actividadToEdit?.id,
       hora_inicio: horaInicio,
+      hora_fin: horaFin || calculateHoraFin(horaInicio, Number(duracionMin) || 0),
       duracion_min: Number(duracionMin) || 0,
       tipo_trabajo: tipoTrabajo,
       descripcion: descripcion.trim(),
@@ -241,8 +311,8 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               </div>
             )}
 
-            {/* Row 1: Time, Duration & Status */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Row 1: Smart Time Engine (Inicio, Duración, Fin) & Estado */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {/* Hora Inicio */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -252,7 +322,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                 <input
                   type="time"
                   value={horaInicio}
-                  onChange={(e) => setHoraInicio(e.target.value)}
+                  onChange={(e) => handleHoraInicioChange(e.target.value)}
                   className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
                 />
                 <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
@@ -262,21 +332,31 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             {/* Duración */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Duración (min)</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Duración</label>
                 <div className="flex gap-1">
                   <button
                     type="button"
                     onClick={() => handleAddMinutes(15)}
-                    className="text-[10px] px-2 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-full transition-colors"
+                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
+                    title="Añadir 15 minutos"
                   >
                     +15m
                   </button>
                   <button
                     type="button"
                     onClick={() => handleAddMinutes(30)}
-                    className="text-[10px] px-2 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-full transition-colors"
+                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
+                    title="Añadir 30 minutos"
                   >
                     +30m
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddMinutes(60)}
+                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
+                    title="Añadir 1 hora"
+                  >
+                    +1h
                   </button>
                 </div>
               </div>
@@ -286,11 +366,38 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                   min="0"
                   step="5"
                   value={duracionMin || ''}
-                  onChange={(e) => setDuracionMin(Math.max(0, parseInt(e.target.value) || 0))}
+                  onChange={(e) => handleDuracionChange(parseInt(e.target.value) || 0)}
                   placeholder="0"
-                  className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                  className="w-full pl-8 pr-12 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-bold text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
                 />
                 <Timer className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
+                <span className="absolute right-3 top-2 text-[11px] font-semibold text-slate-400 dark:text-slate-500 pointer-events-none">
+                  min
+                </span>
+              </div>
+            </div>
+
+            {/* Hora Fin (Reactiva & Botón Ahora) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Hora Fin</label>
+                <button
+                  type="button"
+                  onClick={handleSetHoraFinNow}
+                  className="text-[10px] px-2 py-0.5 font-bold bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-0.5"
+                  title="Fijar la hora actual en Hora Fin y calcular minutos transcurridos"
+                >
+                  <span>⚡ Ahora</span>
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type="time"
+                  value={horaFin}
+                  onChange={(e) => handleHoraFinChange(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                />
+                <Clock className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
               </div>
             </div>
 
@@ -300,7 +407,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               <select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value as EstadoActividad)}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all cursor-pointer"
               >
                 <option value="completada" className="bg-white dark:bg-[#161722]">Completada</option>
                 <option value="en_proceso" className="bg-white dark:bg-[#161722]">En proceso</option>

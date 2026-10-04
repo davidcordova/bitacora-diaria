@@ -19,6 +19,49 @@ export const formatHoursClean = (totalMinutes: number): string => {
   return `${hours}h ${minutes}m`;
 };
 
+/**
+ * Calcula la hora fin a partir de una hora inicio (HH:MM) y duración en minutos.
+ */
+export const calculateHoraFin = (horaInicio: string, duracionMin: number): string => {
+  if (!horaInicio) return '';
+  const [hStr, mStr] = horaInicio.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return '';
+  const totalMinutes = h * 60 + m + Math.max(0, duracionMin || 0);
+  const finalH = Math.floor(totalMinutes / 60) % 24;
+  const finalM = totalMinutes % 60;
+  return `${String(finalH).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
+};
+
+/**
+ * Calcula los minutos transcurridos entre hora inicio y hora fin (HH:MM).
+ * Soporta transiciones de medianoche automáticamente.
+ */
+export const calculateDuracionMin = (horaInicio: string, horaFin: string): number => {
+  if (!horaInicio || !horaFin) return 0;
+  const [h1Str, m1Str] = horaInicio.split(':');
+  const [h2Str, m2Str] = horaFin.split(':');
+  const h1 = parseInt(h1Str, 10);
+  const m1 = parseInt(m1Str, 10);
+  const h2 = parseInt(h2Str, 10);
+  const m2 = parseInt(m2Str, 10);
+  if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+  let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
+  if (diff < 0) {
+    diff += 24 * 60; // Cruce de medianoche
+  }
+  return diff;
+};
+
+/**
+ * Retorna la hora actual local formateada en HH:MM.
+ */
+export const getCurrentTimeStr = (): string => {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
 
 export const formatDateDisplay = (dateStr: string): string => {
   if (!dateStr) return '';

@@ -27,7 +27,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
-import { formatDuration } from '../utils/formatters';
+import { formatDuration, calculateHoraFin } from '../utils/formatters';
 import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
@@ -50,6 +50,7 @@ interface ActividadesListaProps {
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   lastSavedTime?: Date | null;
   onForceSyncCloud?: () => void;
+  onOpenErrorReport?: () => void;
 }
 
 export const ActividadesLista: React.FC<ActividadesListaProps> = ({
@@ -68,6 +69,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   autoSaveStatus = 'idle',
   lastSavedTime = null,
   onForceSyncCloud,
+  onOpenErrorReport,
 }) => {
   const dateInputRef = useRef<HTMLInputElement>(null);
   // Modal states
@@ -319,15 +321,27 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 <span>Guardando cambios...</span>
               </span>
             ) : autoSaveStatus === 'error' ? (
-              <button
-                type="button"
-                onClick={onForceSyncCloud}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer shadow-xs"
-                title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
-              >
-                <CloudOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-                <span>Sin conexión (Reintentar)</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={onForceSyncCloud}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer shadow-xs"
+                  title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
+                >
+                  <CloudOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                  <span>Sin conexión (Reintentar)</span>
+                </button>
+                {onOpenErrorReport && (
+                  <button
+                    type="button"
+                    onClick={onOpenErrorReport}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all cursor-pointer shadow-xs"
+                    title="Ver diagnóstico del error y adjuntar captura para soporte"
+                  >
+                    <span>⚠️ Ver detalle / Reportar</span>
+                  </button>
+                )}
+              </div>
             ) : (
               <button
                 type="button"
@@ -522,8 +536,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       {/* Horario / Tiempo */}
                       <td className="py-3.5 px-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
-                          <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                          <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                           <span>{act.hora_inicio || '--:--'}</span>
+                          <span className="text-slate-400 dark:text-slate-500 font-normal">→</span>
+                          <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min) || '--:--'}</span>
                           <span className="text-slate-300 dark:text-slate-700 mx-0.5">•</span>
                           <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
                         </div>
@@ -734,7 +750,9 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-[10px] font-bold text-slate-600 dark:text-slate-400">
                         {index + 1}
                       </span>
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{act.hora_inicio || '--:--'}</span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min) || '--:--'}
+                      </span>
                       <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
                         {act.duracion_min}m
                       </span>

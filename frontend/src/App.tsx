@@ -21,6 +21,7 @@ import { BottomNav } from './components/BottomNav';
 import { HelpGuideModal } from './components/HelpGuideModal';
 import { PapeleraModal } from './components/PapeleraModal';
 import { NotificationsModal } from './components/NotificationsModal';
+import { ErrorReportModal } from './components/ErrorReportModal';
 import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
@@ -203,6 +204,8 @@ export function App() {
   const [delegatedTargets, setDelegatedTargets] = useState<User[]>([]);
   const [activeProxyUser, setActiveProxyUser] = useState<User | null>(null);
   const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
+  const [errorReportModalOpen, setErrorReportModalOpen] = useState(false);
+  const [lastSyncErrorMessage, setLastSyncErrorMessage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<SystemNotification[]>(() => {
     try {
       const saved = localStorage.getItem('system_notifications_history');
@@ -447,6 +450,7 @@ export function App() {
 
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
+        setLastSyncErrorMessage(null);
 
         // Actualizar historial local silenciosamente solo si estamos en la bitácora personal
         if (!activeProxyUser) {
@@ -460,9 +464,10 @@ export function App() {
             return [result.bitacora, ...prev];
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Auto-save error:', err);
         setAutoSaveStatus('error');
+        setLastSyncErrorMessage(err?.message || 'Error desconocido de sincronización en servidor');
       }
     }, 600);
 
@@ -570,10 +575,12 @@ export function App() {
             }
             setAutoSaveStatus('saved');
             setLastSavedTime(new Date());
+            setLastSyncErrorMessage(null);
             showToast('success', `¡Sincronizadas tus ${localActsCount} actividades locales con el servidor!`);
           }).catch((err) => {
             console.warn('[SmartSync] Error al sincronizar borrador local con la nube:', err);
             setAutoSaveStatus('error');
+            setLastSyncErrorMessage(err?.message || 'Error al sincronizar borrador inicial');
           });
           return;
         }
@@ -672,6 +679,7 @@ export function App() {
       lastSavedSignature.current = getBitacoraSignature(res.bitacora || payload, payload.colaborador, payload.user_id);
       setAutoSaveStatus('saved');
       setLastSavedTime(new Date());
+      setLastSyncErrorMessage(null);
       if (res.bitacora) {
         setBitacora((prev) => ({
           ...prev,
@@ -685,6 +693,7 @@ export function App() {
       showToast('success', `¡Bitácora sincronizada exitosamente con el servidor (${count} actividades guardadas en la nube)!`);
     } catch (err: any) {
       setAutoSaveStatus('error');
+      setLastSyncErrorMessage(err?.message || 'Fallo de conexión al sincronizar');
       showToast('error', `Error al sincronizar con el servidor: ${err.message || 'Fallo de conexión'}`);
     }
   };
@@ -1314,6 +1323,7 @@ export function App() {
           delegatedTargets={delegatedTargets}
           activeProxyUser={activeProxyUser}
           onSelectProxyUser={handleSelectProxyUser}
+          onOpenErrorReport={() => setErrorReportModalOpen(true)}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -1398,6 +1408,7 @@ export function App() {
                 autoSaveStatus={autoSaveStatus}
                 lastSavedTime={lastSavedTime}
                 onForceSyncCloud={handleForceSyncCloud}
+                onOpenErrorReport={() => setErrorReportModalOpen(true)}
               />
 
               <CierreJornada
@@ -1554,6 +1565,18 @@ export function App() {
         onMarkAllAsRead={handleMarkAllNotificationsAsRead}
         onClearAll={handleClearAllNotifications}
         onRemoveNotification={handleRemoveNotification}
+      />
+
+      {/* Modal de Diagnóstico y Reporte Técnico de Errores con Captura de Pantalla */}
+      <ErrorReportModal
+        isOpen={errorReportModalOpen}
+        onClose={() => setErrorReportModalOpen(false)}
+        errorMessage={lastSyncErrorMessage}
+        currentUser={currentUser}
+        onRetrySync={async () => {
+          await handleForceSyncCloud();
+          setErrorReportModalOpen(false);
+        }}
       />
     </div>
   );

@@ -37,6 +37,7 @@ interface TopHeaderProps {
   delegatedTargets?: User[];
   activeProxyUser?: User | null;
   onSelectProxyUser?: (user: User | null) => void;
+  onOpenErrorReport?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -54,6 +55,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   delegatedTargets = [],
   activeProxyUser = null,
   onSelectProxyUser,
+  onOpenErrorReport,
 }) => {
   const [proxyMenuOpen, setProxyMenuOpen] = useState(false);
   const [proxySearch, setProxySearch] = useState('');
@@ -205,12 +207,12 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         {onForceSyncCloud && (
           <button
             type="button"
-            onClick={onForceSyncCloud}
+            onClick={autoSaveStatus === 'error' && onOpenErrorReport ? onOpenErrorReport : onForceSyncCloud}
             title={
               autoSaveStatus === 'saving'
                 ? 'Sincronizando con el servidor...'
                 : autoSaveStatus === 'error'
-                ? 'Error al sincronizar con el servidor. Clic para forzar sincronización'
+                ? 'Error al sincronizar con el servidor. Clic para ver diagnóstico técnico y reportar incidencia'
                 : 'Sincronizado en la nube. Clic para forzar actualización'
             }
             className={`min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 rounded-full transition-colors cursor-pointer flex items-center justify-center gap-1.5 text-xs font-semibold ${

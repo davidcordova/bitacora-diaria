@@ -1155,6 +1155,25 @@ export const api = {
     return [];
   },
 
+  async reportSupportError(data: {
+    user_id?: number;
+    user_name?: string;
+    error_message: string;
+    context?: string;
+    screenshot_url?: string;
+  }): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/support/report-error`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al enviar reporte' }));
+      throw new Error(err.error || 'Error al enviar reporte');
+    }
+    return await res.json();
+  },
+
   saveToLocalStorage(bitacora: Bitacora) {
     try {
       const existingStr = localStorage.getItem('bitacoras_history');

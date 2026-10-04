@@ -41,9 +41,27 @@ UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
+def calculate_hora_fin(hora_inicio, duracion_min):
+    if not hora_inicio:
+        return ''
+    try:
+        parts = hora_inicio.strip().split(':')
+        h = int(parts[0])
+        m = int(parts[1])
+        dur = int(duracion_min or 0)
+        total = h * 60 + m + max(0, dur)
+        final_h = (total // 60) % 24
+        final_m = total % 60
+        return f"{final_h:02d}:{final_m:02d}"
+    except Exception:
+        return ''
+
 # Helper para normalizar evidencias y tareas compartidas en el diccionario de una actividad
 def format_actividad_dict(act_row, users_map=None):
     a_dict = dict(act_row)
+    if not a_dict.get('hora_fin') and a_dict.get('hora_inicio'):
+        a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'))
+
     ev_val = a_dict.get('evidencias')
     if isinstance(ev_val, str):
         try:
@@ -1710,11 +1728,12 @@ def save_bitacora():
                 parent_task_id = None
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
+            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), act.get('duracion_min'))
 
             if target_act_id:
                 cursor.execute('''
                     UPDATE actividades SET
-                        orden = ?, hora_inicio = ?, duracion_min = ?,
+                        orden = ?, hora_inicio = ?, hora_fin = ?, duracion_min = ?,
                         tipo_trabajo = ?, descripcion = ?, para_cliente = ?,
                         estado = ?, evidencias = ?, shared_with = ?,
                         shared_uuid = COALESCE(?, shared_uuid),
@@ -1726,6 +1745,7 @@ def save_bitacora():
                 ''', (
                     idx,
                     act.get('hora_inicio', ''),
+                    act_hora_fin,
                     int(act.get('duracion_min', 0) or 0),
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
@@ -1746,16 +1766,17 @@ def save_bitacora():
             else:
                 cursor.execute('''
                     INSERT INTO actividades (
-                        bitacora_id, orden, hora_inicio, duracion_min,
+                        bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
                         shared_with, shared_uuid, comentarios, parent_task_id, tipo_vinculo,
                         created_by_user_id, updated_by_user_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     bitacora_id,
                     idx,
                     act.get('hora_inicio', ''),
+                    act_hora_fin,
                     int(act.get('duracion_min', 0) or 0),
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
@@ -1807,6 +1828,7 @@ def save_bitacora():
                                 cursor.execute('''
                                     UPDATE actividades SET
                                         hora_inicio = ?,
+                                        hora_fin = ?,
                                         duracion_min = ?,
                                         tipo_trabajo = ?,
                                         descripcion = ?,
@@ -1818,6 +1840,7 @@ def save_bitacora():
                                     WHERE id = ?
                                 ''', (
                                     act.get('hora_inicio', ''),
+                                    act_hora_fin,
                                     int(act.get('duracion_min', 0) or 0),
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
@@ -1835,14 +1858,15 @@ def save_bitacora():
                                 ).fetchone()[0]
                                 cursor.execute('''
                                     INSERT INTO actividades (
-                                        bitacora_id, orden, hora_inicio, duracion_min,
+                                        bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
                                         tipo_trabajo, descripcion, para_cliente, estado,
                                         evidencias, shared_with, shared_uuid, created_at, updated_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ''', (
                                     target_b_id,
                                     next_ord,
                                     act.get('hora_inicio', ''),
+                                    act_hora_fin,
                                     int(act.get('duracion_min', 0) or 0),
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
@@ -3048,7 +3072,40 @@ def mark_all_notifications_read():
         cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_id = ?", (user_id,))
         conn.commit()
         conn.close()
-    return jsonify({"success": True}), 200
+@app.route('/api/support/report-error', methods=['POST', 'OPTIONS'])
+def report_support_error():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    user_name = data.get('user_name', 'Usuario anónimo')
+    error_message = data.get('error_message', 'Error no especificado')
+    context = data.get('context', 'General')
+    screenshot_url = data.get('screenshot_url', '')
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        admins = cursor.execute("SELECT id FROM users WHERE role = 'admin' AND is_active = 1").fetchall()
+        now_peru = get_peru_now_str()
+        title = f"🚨 Incidencia Reportada: {user_name}"
+        msg = f"[{context}] {error_message}"
+        if screenshot_url:
+            msg += f" | Captura: {screenshot_url}"
+            
+        for adm in admins:
+            cursor.execute('''
+                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                VALUES (?, ?, ?, 'error', 0, ?)
+            ''', (adm['id'], title, msg, now_peru))
+            
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "Incidencia reportada con éxito a soporte técnico"}), 200
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
 
 
 # =========================================================================
