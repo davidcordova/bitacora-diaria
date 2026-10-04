@@ -134,6 +134,32 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Interceptar Ctrl+V global en el modal para capturas de pantalla
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            try {
+              const uploaded = await api.uploadFile(file);
+              setEvidencias((prev) => [...prev, uploaded]);
+            } catch (err) {
+              console.error('Error al subir captura pegada:', err);
+            }
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleToggleSharedUser = (userId: number) => {
@@ -181,32 +207,6 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       setHoraFin(calculateHoraFin(horaInicio, nextDur));
     }
   };
-
-  // Interceptar Ctrl+V global en el modal para capturas de pantalla
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleGlobalPaste = async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image/')) {
-          e.preventDefault();
-          const file = items[i].getAsFile();
-          if (file) {
-            try {
-              const uploaded = await api.uploadFile(file);
-              setEvidencias((prev) => [...prev, uploaded]);
-            } catch (err) {
-              console.error('Error al subir captura pegada:', err);
-            }
-          }
-          break;
-        }
-      }
-    };
-    window.addEventListener('paste', handleGlobalPaste);
-    return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [isOpen]);
 
   // Interceptar Ctrl+V para capturas en el textarea de descripción
   const handlePasteInDescription = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
