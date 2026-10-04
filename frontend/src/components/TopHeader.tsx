@@ -19,6 +19,7 @@ import {
   UserCheck,
   Search,
   X,
+  BookOpen,
 } from 'lucide-react';
 import { User, ViewMode } from '../types';
 
@@ -148,6 +149,14 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           subtitle: 'Directorio de cuentas, credenciales AES-256 y enlaces',
           badge: 'Gestor IT',
           badgeColor: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#00F0FF] border-cyan-200 dark:border-cyan-800/60',
+        };
+      case 'manual':
+        return {
+          title: 'Manual de Procesos & Operaciones',
+          icon: <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
+          subtitle: 'Guía interactiva paso a paso para el uso integral del sistema',
+          badge: 'Guía Online',
+          badgeColor: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
         };
       case 'lista':
       default:

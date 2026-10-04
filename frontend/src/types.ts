@@ -190,7 +190,7 @@ export interface DashboardStats {
   };
 }
 
-export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon' | 'vault';
+export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon' | 'vault' | 'manual';
 
 export interface SystemSettings {
   hora_inicio_default?: string;

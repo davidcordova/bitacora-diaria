@@ -13,6 +13,7 @@ import { TeamSupervisionView } from './components/TeamSupervisionView';
 import { UserManagementView } from './components/UserManagementView';
 import { BuzonView } from './components/BuzonView';
 import { VaultView } from './components/VaultView';
+import { ManualView } from './components/ManualView';
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
@@ -1483,6 +1484,18 @@ export function App() {
             <VaultView
               currentUser={currentUser}
               onShowToast={(msg, type) => showToast(type || 'info', msg)}
+            />
+          )}
+
+          {/* VIEW 8: MANUAL DE PROCESOS & OPERACIONES */}
+          {viewMode === 'manual' && (
+            <ManualView
+              currentUser={currentUser}
+              onNavigateToView={(v) => {
+                setViewMode(v);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              onOpenHelpModal={() => setHelpModalOpen(true)}
             />
           )}
         </main>

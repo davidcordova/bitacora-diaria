@@ -20,6 +20,7 @@ import {
   KeyRound,
   Trash2,
   Lightbulb,
+  BookOpen,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
 
@@ -124,6 +125,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Shield,
       show: isAdmin,
       badge: null,
+    },
+    {
+      id: 'manual' as ViewMode,
+      label: 'Manual & Guía',
+      icon: BookOpen,
+      show: true,
+      badge: 'Guía',
     },
   ];
 
