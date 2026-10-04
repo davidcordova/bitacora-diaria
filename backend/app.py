@@ -1704,14 +1704,12 @@ def save_bitacora():
             shared_uuid = act.get('shared_uuid')
             if shared_with_val and not shared_uuid:
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
-
+            target_act_id = matched_target_ids.get(idx)
             parent_task_id = int(act['parent_task_id']) if act.get('parent_task_id') and str(act['parent_task_id']).isdigit() else None
             if target_act_id and parent_task_id == target_act_id:
                 parent_task_id = None
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
-
-            target_act_id = matched_target_ids.get(idx)
 
             if target_act_id:
                 cursor.execute('''
