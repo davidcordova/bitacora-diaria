@@ -1314,7 +1314,6 @@ export function App() {
           currentUser={currentUser}
           bitacoraFecha={bitacora.fecha}
           activitiesCount={bitacora.actividades.length}
-          onOpenHelp={() => setHelpModalOpen(true)}
           onOpenProfile={() => setUserProfileModalOpen(true)}
           autoSaveStatus={autoSaveStatus}
           onForceSyncCloud={handleForceSyncCloud}

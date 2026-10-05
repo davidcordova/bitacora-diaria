@@ -178,15 +178,6 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* Privacy Notice for Analyst */}
-      {isAnalyst && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs text-slate-700 dark:text-slate-300">
-          <UserIcon className="w-4 h-4 text-[#00C9A7] shrink-0" />
-          <span>
-            <strong>Vista Personal:</strong> Estás viendo exclusivamente tu historial de actividades y bitácoras registradas.
-          </span>
-        </div>
-      )}
 
       {/* Search and filter controls bar */}
       <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 space-y-3.5 shadow-sm transition-all duration-200">

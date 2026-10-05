@@ -27,30 +27,27 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
   return (
     <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 sm:p-6 shadow-sm transition-all duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5 border-b border-slate-100 dark:border-[#252636]/60 pb-3.5">
+      <div className="flex items-center justify-between gap-3 mb-5 border-b border-slate-100 dark:border-[#252636]/60 pb-3">
         <div className="flex items-center gap-2.5 text-slate-800 dark:text-white">
           <div className="p-2 rounded-xl bg-[#EC4899]/15 text-[#EC4899]">
             <CheckSquare className="w-4 h-4 stroke-[2.5]" />
           </div>
           <h2 className="text-base sm:text-lg font-extrabold tracking-tight">Cierre de jornada</h2>
         </div>
-        <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">
-          Campos requeridos <span className="text-rose-500">*</span>
-        </span>
       </div>
 
       {/* 2-Column Responsive Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4.5 mb-4.5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         {/* Col 1: Pendientes */}
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Pendientes para otro momento <span className="text-rose-500">*</span>
+            Pendientes <span className="text-rose-500">*</span>
           </label>
           <textarea
             rows={3}
             value={pendientes}
             onChange={(e) => onChange('pendientes', e.target.value)}
-            placeholder="Ajustes o tareas que quedan pendientes para otra fecha..."
+            placeholder="Ajustes o tareas pendientes..."
             className="w-full px-3.5 py-2.5 bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             required
           />
@@ -59,25 +56,25 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
         {/* Col 2: Prioridad para el siguiente día */}
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Prioridad para el siguiente día <span className="text-rose-500">*</span>
+            Prioridad de mañana <span className="text-rose-500">*</span>
           </label>
           <textarea
             rows={3}
             value={prioridadSiguiente}
             onChange={(e) => onChange('prioridad_siguiente', e.target.value)}
-            placeholder="¿Cuál será tu principal objetivo al iniciar la siguiente jornada?"
+            placeholder="Objetivo principal de la siguiente jornada..."
             className="w-full px-3.5 py-2.5 bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             required
           />
         </div>
       </div>
 
-      {/* Row 2: Apoyo del jefe */}
+      {/* Row 2: Apoyo */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* ¿Necesitas apoyo del jefe? */}
+        {/* ¿Requiere apoyo? */}
         <div className="md:col-span-3">
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            ¿Necesitas apoyo del jefe? <span className="text-rose-500">*</span>
+            ¿Requiere apoyo? <span className="text-rose-500">*</span>
           </label>
           <select
             value={necesitaApoyo}
@@ -93,10 +90,10 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
           </select>
         </div>
 
-        {/* ¿En qué? */}
+        {/* Detalle del apoyo */}
         <div className="md:col-span-9">
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            ¿En qué?{' '}
+            Detalle del apoyo{' '}
             {necesitaApoyo === 'Si' ? (
               <span className="text-amber-600 dark:text-amber-400 font-bold">(Requerido)</span>
             ) : (
@@ -122,22 +119,13 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
         </div>
       </div>
 
-      {/* Action Button: Glowing Purple Pill "Generar bitácora del día" */}
-      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-[#252636]/60 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-          <Sparkles className="w-4 h-4 text-[#00F0FF]" />
-          <span>
-            {isProxyMode
-              ? 'Tus tareas quedan registradas con auto-guardado en la nube.'
-              : 'Genera el resumen listo para compartir por WhatsApp, correo o Teams.'}
-          </span>
-        </div>
-
+      {/* Action Area */}
+      <div className="mt-5 pt-3.5 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-end">
         {isProxyMode ? (
-          <div className="w-full sm:w-auto flex items-center gap-2.5 p-2.5 px-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed shadow-xs">
+          <div className="flex items-center gap-2 p-2 px-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold shadow-xs">
             <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
             <span>
-              <strong>Modo Apoyo:</strong> El cierre formal de jornada está reservado al titular ({proxyUserName || 'colaborador'}) o al auto-cierre nocturno del sistema.
+              <strong>Modo Apoyo:</strong> El cierre formal corresponde al titular ({proxyUserName || 'colaborador'}).
             </span>
           </div>
         ) : (
@@ -145,14 +133,14 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
             type="button"
             onClick={onSubmit}
             disabled={isSaving}
-            className="w-full sm:w-auto flex items-center justify-center gap-2.5 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-7 py-3 rounded-full text-xs sm:text-sm font-extrabold shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all cursor-pointer min-h-[42px]"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-6 py-2.5 rounded-full text-xs font-extrabold shadow-md shadow-purple-500/20 hover:shadow-purple-500/35 transition-all cursor-pointer min-h-[38px]"
           >
             {isSaving ? (
               <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
             ) : (
               <Play className="w-3.5 h-3.5 fill-current" />
             )}
-            <span>{isSaving ? 'Guardando en la nube...' : 'Generar bitácora del día'}</span>
+            <span>{isSaving ? 'Guardando...' : 'Generar Bitácora'}</span>
           </button>
         )}
       </div>

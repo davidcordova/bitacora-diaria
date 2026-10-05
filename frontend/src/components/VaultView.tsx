@@ -1187,20 +1187,15 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   return (
     <div className="space-y-6 pb-20 animate-fadeIn">
       {/* ================= CABECERA PRINCIPAL ================= */}
-      <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-2xl p-5 sm:p-6 shadow-sm">
+      <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500 dark:text-[#00F0FF] border border-cyan-500/20">
-                <KeyRound className="w-5 h-5" />
-              </span>
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-                Gestor de Accesos & Bóveda TI
-              </h1>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
-              Directorio de usuarios por plataforma, reseteo de claves y administración central de catálogos.
-            </p>
+          <div className="flex items-center gap-2.5">
+            <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500 dark:text-[#00F0FF] border border-cyan-500/20">
+              <KeyRound className="w-5 h-5" />
+            </span>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Accesos & Bóveda
+            </h1>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -1212,7 +1207,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 title="Configurar catálogos de Empresas, Marcas, Plataformas y Cargos"
               >
                 <Settings className="w-4 h-4 text-purple-500" />
-                <span>Gestionar Catálogos TI</span>
+                <span>Catálogos</span>
               </button>
             )}
 
@@ -1224,48 +1219,48 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 setIsGenModalOpen(true);
               }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold transition-all cursor-pointer shadow-xs"
-              title="Generar contraseñas seguras para crear nuevas cuentas en plataformas"
+              title="Generar contraseñas seguras"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Generador de Claves</span>
+              <span>Generar Clave</span>
             </button>
 
             {/* Toggle de las 3 Pestañas */}
             <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 overflow-x-auto max-w-full">
               <button
                 onClick={() => setActiveTab('users')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'users'
                     ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Cuentas por Plataforma ({platformUsers.length})</span>
+                <span>Cuentas ({platformUsers.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('vault')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'vault'
                     ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <Shield className="w-3.5 h-3.5" />
-                <span>Bóveda Maestra IT ({credentials.length})</span>
+                <span>Bóveda ({credentials.length})</span>
               </button>
 
               <button
                 onClick={() => setActiveTab('links')}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'links'
                     ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span>Accesos Directos ({links.length})</span>
+                <span>Accesos ({links.length})</span>
               </button>
             </div>
           </div>

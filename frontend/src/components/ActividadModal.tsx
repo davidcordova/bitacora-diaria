@@ -282,14 +282,9 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
               <Sparkles className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                {editIndex !== null ? 'Editar Actividad' : 'Nueva Actividad'}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Detalla el tiempo invertido, evidencias y asignación compartida en paralelo.
-              </p>
-            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              {editIndex !== null ? 'Editar Actividad' : 'Nueva Actividad'}
+            </h3>
           </div>
           <button
             type="button"
@@ -537,18 +532,13 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
           {/* Row 4: Descripción */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Descripción de la Actividad <span className="text-rose-500">*</span>
-              </label>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                Editor enriquecido HTML con formato y enlaces
-              </span>
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Descripción de la Actividad <span className="text-rose-500">*</span>
+            </label>
             <HtmlEditor
               value={descripcion}
               onChange={(newHtml) => setDescripcion(newHtml)}
-              placeholder="Describe lo realizado en esta actividad... (puedes dar formato en negrita, insertar viñetas, adjuntar enlaces o pegar imágenes aquí)"
+              placeholder="Describe lo realizado en esta actividad..."
               onAttachEvidence={(newEv) => {
                 setEvidencias((prev) => [...prev, newEv]);
               }}
@@ -557,17 +547,14 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
           {/* Row 4.5: Comentarios u Observaciones (Opcional) */}
           <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <MessageSquare className="w-3.5 h-3.5 text-cyan-500" />
-                <span>Comentarios</span>
-                <span className="text-[10px] text-slate-400 font-normal">(Opcional)</span>
-              </label>
-              <span className="text-[10px] text-slate-400 font-medium">Notas internas, observaciones o bloqueos</span>
-            </div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <MessageSquare className="w-3.5 h-3.5 text-cyan-500" />
+              <span>Comentarios</span>
+              <span className="text-[10px] text-slate-400 font-normal">(Opcional)</span>
+            </label>
             <textarea
               rows={2}
-              placeholder="Agrega notas o comentarios internos sobre esta actividad (ej: entregable enviado, esperando confirmación, etc.)..."
+              placeholder="Notas u observaciones internas..."
               value={comentarios}
               onChange={(e) => setComentarios(e.target.value)}
               className="w-full px-3.5 py-2 bg-slate-50 dark:bg-[#161722] text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-none transition-all resize-none"
@@ -575,20 +562,15 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
           </div>
 
           {/* Row 4.8: Vincular / Referenciar Actividades */}
-          <div className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-[#161722]/80 border border-slate-200/80 dark:border-[#252636] space-y-2.5">
+          <div className="p-3 rounded-2xl bg-slate-50/80 dark:bg-[#161722]/80 border border-slate-200/80 dark:border-[#252636] space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 rounded-lg bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] border border-[#00F0FF]/20">
                   <Link2 className="w-4 h-4" />
                 </div>
-                <div>
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Vincular / Referenciar Actividad
-                  </span>
-                  <p className="text-[11px] text-slate-400">
-                    Relaciona esta tarea con una actividad anterior (continuación, subtarea o bloqueo).
-                  </p>
-                </div>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  Vincular Actividad
+                </span>
               </div>
 
               {parentTaskId ? (
@@ -760,7 +742,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               className="flex items-center gap-1.5 px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-full shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all cursor-pointer min-h-[40px]"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{editIndex !== null ? 'Actualizar Actividad' : 'Guardar Actividad'}</span>
+              <span>{editIndex !== null ? 'Actualizar' : 'Guardar'}</span>
             </button>
           </div>
         </form>

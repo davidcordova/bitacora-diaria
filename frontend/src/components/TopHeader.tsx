@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Bell,
-  HelpCircle,
   User as UserIcon,
   Cloud,
   CloudOff,
@@ -28,7 +27,6 @@ interface TopHeaderProps {
   currentUser: User | null;
   bitacoraFecha?: string;
   activitiesCount?: number;
-  onOpenHelp?: () => void;
   onOpenProfile?: () => void;
   autoSaveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   onForceSyncCloud?: () => void;
@@ -46,7 +44,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   currentUser,
   bitacoraFecha,
   activitiesCount = 0,
-  onOpenHelp,
   onOpenProfile,
   autoSaveStatus = 'idle',
   onForceSyncCloud,
@@ -91,80 +88,71 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     return dateStr;
   };
 
-  // Metadatos por módulo activo
+  // Metadatos limpios y directos por módulo
   const getViewMeta = () => {
     switch (currentView) {
       case 'kanban':
         return {
-          title: 'Tablero de Actividades',
+          title: 'Actividades',
           icon: <Kanban className="w-4 h-4 text-blue-600 dark:text-blue-400" />,
-          subtitle: 'Flujo visual de tareas por estados',
-          badge: `${activitiesCount} en tablero`,
+          badge: activitiesCount > 0 ? `${activitiesCount} tareas` : null,
           badgeColor: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
         };
       case 'dashboard':
         return {
-          title: 'Dashboard de Rendimiento & KPIs',
+          title: 'Dashboard',
           icon: <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />,
-          subtitle: 'Analítica de productividad y horas invertidas',
-          badge: 'Métricas en Vivo',
-          badgeColor: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'equipo':
         return {
-          title: 'Supervisión de Equipo',
+          title: 'Seguimiento',
           icon: <Users className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />,
-          subtitle: 'Seguimiento de bitácoras y avance en tiempo real',
-          badge: 'Líder / Admin',
-          badgeColor: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#00F0FF] border-cyan-200 dark:border-cyan-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'gestion':
         return {
-          title: 'Administración del Sistema',
+          title: 'Gestión',
           icon: <Settings className="w-4 h-4 text-rose-600 dark:text-rose-400" />,
-          subtitle: 'Gestión centralizada de usuarios, equipos y ajustes',
-          badge: 'Panel Admin',
-          badgeColor: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'historial':
         return {
-          title: 'Historial de Bitácoras',
+          title: 'Historial',
           icon: <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
-          subtitle: 'Consultas de jornadas anteriores y registros',
-          badge: 'Archivo',
-          badgeColor: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'buzon':
         return {
-          title: 'Buzón de Sugerencias',
+          title: 'Buzón de Ideas',
           icon: <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />,
-          subtitle: 'Propuestas de mejora continua e innovación',
-          badge: 'Comunidad',
-          badgeColor: 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'vault':
         return {
-          title: 'Accesos Directos & Bóveda TI',
+          title: 'Bóveda TI',
           icon: <KeyRound className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />,
-          subtitle: 'Directorio de cuentas, credenciales AES-256 y enlaces',
-          badge: 'Gestor IT',
-          badgeColor: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-700 dark:text-[#00F0FF] border-cyan-200 dark:border-cyan-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'manual':
         return {
-          title: 'Manual de Procesos & Operaciones',
+          title: 'Manual & Guía',
           icon: <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
-          subtitle: 'Guía interactiva paso a paso para el uso integral del sistema',
-          badge: 'Guía Online',
-          badgeColor: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
+          badge: null,
+          badgeColor: '',
         };
       case 'lista':
       default:
         return {
-          title: 'Mi Bitácora Diaria',
+          title: 'Mi Bitácora',
           icon: <CalendarCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
-          subtitle: `Jornada laboral • ${currentUser?.team_name || 'Marketing Alterno'}`,
-          badge: bitacoraFecha ? `📅 ${formatHeaderDate(bitacoraFecha)}` : 'Hoy',
+          badge: bitacoraFecha ? formatHeaderDate(bitacoraFecha) : null,
           badgeColor: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60',
         };
     }
@@ -174,8 +162,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
   return (
     <header className="w-full px-3 sm:px-6 py-2 sm:py-2.5 border-b border-slate-200/80 dark:border-white/5 bg-white/90 dark:bg-[#0D0E15]/90 backdrop-blur-md flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30 select-none">
-      {/* Left Area: Mobile Hamburger Menu + Active Module Breadcrumb */}
-      <div className="flex items-center gap-2.5 sm:gap-3.5 flex-1 min-w-0">
+      {/* Left Area: Mobile Hamburger Menu + Active Module */}
+      <div className="flex items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
         {onToggleMobileMenu && (
           <button
             type="button"
@@ -187,25 +175,20 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           </button>
         )}
 
-        {/* Executive Module Indicator (Replaces redundant duplicate search input) */}
+        {/* Module Title */}
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 shrink-0 shadow-2xs">
             {meta.icon}
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                {meta.title}
-              </h1>
-              {meta.badge && (
-                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs hidden xs:inline-block ${meta.badgeColor}`}>
-                  {meta.badge}
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden md:block">
-              {meta.subtitle}
-            </p>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white tracking-tight truncate">
+              {meta.title}
+            </h1>
+            {meta.badge && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shadow-2xs hidden xs:inline-block ${meta.badgeColor}`}>
+                {meta.badge}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -263,18 +246,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             </span>
           )}
         </button>
-
-        {/* Help Circle (Desktop / Tablet) */}
-        {onOpenHelp && (
-          <button
-            type="button"
-            onClick={onOpenHelp}
-            title="Guía rápida y ayuda"
-            className="hidden sm:flex min-w-[38px] min-h-[38px] sm:min-w-[40px] sm:min-h-[40px] p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer items-center justify-center"
-          >
-            <HelpCircle className="w-4 h-4" />
-          </button>
-        )}
 
         {/* Context Selector / Modo Apoyo */}
         {(delegatedTargets.length > 0 || activeProxyUser || currentUser?.role === 'admin') && onSelectProxyUser && (

@@ -131,7 +131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Manual & Guía',
       icon: BookOpen,
       show: true,
-      badge: 'Guía',
+      badge: null,
     },
   ];
 
@@ -338,7 +338,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             {(!isCollapsed || isOpenMobile) && (
               <>
-                <span className="flex-1 text-left">Papelera (15 días)</span>
+                <span className="flex-1 text-left">Papelera</span>
                 {papeleraCount > 0 && (
                   <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
                     {papeleraCount}

@@ -308,31 +308,25 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
         <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500/10 dark:bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-10 w-48 h-48 bg-indigo-500/10 dark:bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-cyan-50 dark:bg-gradient-to-r dark:from-cyan-500/20 dark:to-indigo-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/30">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 animate-pulse" />
-              <span>Buzón de Sugerencias & Mejora Continua</span>
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-2xs">
+              <Lightbulb className="w-6 h-6" />
+            </span>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                Buzón de Ideas
+              </h1>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-2xs">
-                <Lightbulb className="w-7 h-7" />
-              </span>
-              Ideas que Transforman el Equipo
-            </h1>
-            <p className="text-sm md:text-base text-slate-600 dark:text-slate-400 max-w-2xl">
-              Comparte propuestas para optimizar procesos, sugerir herramientas o mejorar la dinámica laboral.
-              Vota por las ideas de tus compañeros y sigue su implementación en tiempo real.
-            </p>
           </div>
 
           <button
             id="btn-nueva-sugerencia"
             onClick={() => setIsModalOpen(true)}
-            className="self-start md:self-center inline-flex items-center gap-2 px-5 py-3 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 shadow-md shadow-cyan-500/20 active:scale-95 transition-all duration-200 border border-cyan-400/30 min-h-[44px]"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-xs text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 shadow-sm shadow-cyan-500/20 active:scale-95 transition-all duration-200 cursor-pointer min-h-[38px] self-start sm:self-auto"
           >
-            <Plus className="w-5 h-5" />
-            <span>Proponer una Idea</span>
+            <Plus className="w-4 h-4" />
+            <span>Proponer Idea</span>
           </button>
         </div>
 

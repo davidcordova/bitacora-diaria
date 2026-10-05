@@ -547,18 +547,15 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   return (
     <div className="space-y-6">
       {/* Top Controls Bar */}
-      <div className="saas-card p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="saas-card p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-mint-50 dark:bg-mint-950/40 text-[#00A88B] dark:text-[#00C9A7] flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-mint-50 dark:bg-mint-950/40 text-[#00A88B] dark:text-[#00C9A7] flex items-center justify-center shrink-0 border border-emerald-500/20">
             <Shield className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
-              Gestión de Usuarios y Equipos
+              Gestión del Sistema
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Administración de cuentas, roles, permisos y asignación de líderes de equipo
-            </p>
           </div>
         </div>
 

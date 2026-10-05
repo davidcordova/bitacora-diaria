@@ -440,62 +440,58 @@ export const ManualView: React.FC<ManualViewProps> = ({
 
   return (
     <div className="w-full max-w-[1600px] mx-auto space-y-6 animate-in fade-in duration-200">
-      {/* 1. Hero Banner Principal */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-[#12131C] to-slate-950 text-white p-6 sm:p-8 border border-white/10 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
-        <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
-              <Sparkles className="w-3.5 h-3.5" />
-              Manual Oficial de Operaciones • v2.2
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white font-heading">
-              Centro de Aprendizaje & Guía Interactiva
+      {/* 1. Header Compacto */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-[#12131C] to-slate-950 text-white p-5 sm:p-6 border border-white/10 shadow-lg">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1 max-w-xl">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white font-heading flex items-center gap-2.5">
+              <span className="p-2 rounded-xl bg-cyan-500/20 text-[#00F0FF] border border-cyan-500/30">
+                <BookOpen className="w-5 h-5" />
+              </span>
+              Manual de Operaciones
             </h1>
-            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              Consulta rápidamente cómo funciona cada proceso de la bitácora: cálculo de horas bidireccional, capturas directas con <kbd className="bg-white/20 px-1 py-0.5 rounded font-mono">Ctrl + V</kbd>, modo apoyo y protocolos de contingencia.
+            <p className="text-xs sm:text-sm text-slate-300">
+              Guía de consulta sobre procesos, atajos, registro de horas y contingencias.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 self-start md:self-center">
+          <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
             {onOpenHelpModal && (
               <button
                 type="button"
                 onClick={onOpenHelpModal}
-                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
               >
-                <HelpCircle className="w-4 h-4 text-cyan-400" />
-                Tutorial Rápido 3 Pasos
+                <HelpCircle className="w-3.5 h-3.5 text-cyan-400" />
+                Guía Rápida
               </button>
             )}
             <button
               type="button"
               onClick={() => onNavigateToView('lista')}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-[#00A3BF] hover:from-cyan-400 hover:to-[#00B4D8] text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-cyan-500/20"
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-[#00A3BF] hover:from-cyan-400 hover:to-[#00B4D8] text-slate-950 text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
             >
-              Ir a Mi Bitácora
-              <ArrowRight className="w-4 h-4" />
+              Mi Bitácora
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
         {/* Buscador Rápido Integrado */}
-        <div className="relative mt-6 max-w-2xl">
-          <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-400" />
+        <div className="relative mt-4 max-w-xl">
+          <Search className="w-4 h-4 absolute left-3.5 top-2.5 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar tema (ej: hora fin, capturas, modo apoyo, excel, whatsapp, sin conexion)..."
-            className="w-full pl-10 pr-4 py-2.5 bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/20 rounded-2xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+            placeholder="Buscar tema en el manual..."
+            className="w-full pl-9 pr-4 py-2 bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/20 rounded-xl text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-hidden focus:border-cyan-400 transition-all"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-3.5 top-2.5 text-xs text-slate-400 hover:text-white"
+              className="absolute right-3 top-2 text-xs text-slate-400 hover:text-white"
             >
               Limpiar
             </button>
@@ -508,13 +504,13 @@ export const ManualView: React.FC<ManualViewProps> = ({
         {/* Pills de categorías */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full text-xs font-semibold">
           {[
-            { id: 'todos', label: 'Todos los Temas' },
-            { id: 'inicio', label: '1. Inicio & Offline' },
-            { id: 'roles', label: '2. Roles & Permisos' },
-            { id: 'jornada', label: '3. Jornada & Horarios' },
-            { id: 'apoyo', label: '4. Modo Apoyo' },
-            { id: 'boveda', label: '5. Bóveda TI & Excel' },
-            { id: 'soporte', label: '6. Soporte & Errores' },
+            { id: 'todos', label: 'Todos' },
+            { id: 'inicio', label: 'Offline' },
+            { id: 'roles', label: 'Roles' },
+            { id: 'jornada', label: 'Horarios' },
+            { id: 'apoyo', label: 'Modo Apoyo' },
+            { id: 'boveda', label: 'Bóveda TI' },
+            { id: 'soporte', label: 'Soporte' },
           ].map((cat) => (
             <button
               key={cat.id}

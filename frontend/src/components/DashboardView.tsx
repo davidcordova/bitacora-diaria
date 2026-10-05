@@ -192,29 +192,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   return (
     <div className="space-y-6 max-w-[1700px] mx-auto pb-10">
-      {/* ================= BARRA SUPERIOR DE TELEMETRÍA ================= */}
-      <div className="saas-card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* ================= BARRA SUPERIOR DE DASHBOARD ================= */}
+      <div className="saas-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-[#00F0FF]/15 text-[#00F0FF] flex items-center justify-center shrink-0 shadow-xs border border-[#00F0FF]/25">
+          <div className="w-10 h-10 rounded-2xl bg-[#00F0FF]/15 text-[#00F0FF] flex items-center justify-center shrink-0 shadow-xs border border-[#00F0FF]/25">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
-                {isPersonalScope ? 'Mi Rendimiento & Telemetría' : 'Centro de Telemetría & Rendimiento'}
+                {isPersonalScope ? 'Mi Rendimiento' : 'Dashboard'}
               </h2>
               <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
                 <span className="w-2 h-2 rounded-full bg-[#00F0FF] beacon-pulse" />
                 <span>{isPersonalScope ? 'Personal' : 'En vivo'}</span>
               </div>
             </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {isPersonalScope
-                ? `Análisis individual de jornadas, horas y efectividad • ${currentUser?.team_name || 'Operaciones'}`
-                : currentUser?.role === 'admin'
-                ? 'Consola global de operaciones, horas y distribución de proyectos'
-                : `Supervisión de escuadrón: ${currentUser?.team_name || leaderTeam?.nombre || 'Mi Equipo'}`}
-            </p>
           </div>
         </div>
 

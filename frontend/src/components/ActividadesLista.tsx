@@ -304,23 +304,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 <ListChecks className="w-4 h-4" />
               </div>
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                Actividades del día
+                Actividades
               </h2>
             </div>
 
-            {/* En Jornada Badge */}
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-900 dark:text-[#00F0FF] border border-cyan-300 dark:border-[#00F0FF]/30">
-              <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-[#00F0FF] animate-pulse" />
-              <span>EN JORNADA</span>
-            </span>
-
-            {/* Unified Cloud Sync & Status Badge */}
-            {autoSaveStatus === 'saving' ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                <span>Guardando cambios...</span>
-              </span>
-            ) : autoSaveStatus === 'error' ? (
+            {/* Error de Conexión (solo visible en caso de fallo para reintento y reporte) */}
+            {autoSaveStatus === 'error' && (
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   type="button"
@@ -342,18 +331,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   </button>
                 )}
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onForceSyncCloud}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all cursor-pointer shadow-xs"
-                title="Toda tu información está guardada y segura en la nube. Clic si deseas sincronizar manualmente"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                <span>
-                  Al día en la nube{lastSavedTime ? ` (${String(lastSavedTime.getHours()).padStart(2, '0')}:${String(lastSavedTime.getMinutes()).padStart(2, '0')})` : ''}
-                </span>
-              </button>
             )}
 
             {/* Inline Date Navigator */}
@@ -430,10 +407,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             {/* Referential Start Time Pill */}
             <div
               className="flex items-center gap-1.5 text-xs bg-white dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full border border-slate-200/90 dark:border-[#252636] transition-colors"
-              title="Hora de inicio de la jornada (referencial, por defecto 08:30 am)"
+              title="Hora referencial de inicio"
             >
               <Clock className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
-              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Inicio ref:</span>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Inicio:</span>
               {onHoraInicioChange ? (
                 <input
                   type="time"
@@ -473,23 +450,23 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
       {/* Empty State */}
       {actividades.length === 0 ? (
-        <div className="text-center py-14 px-4 bg-slate-50/40 dark:bg-slate-900/30">
-          <div className="w-12 h-12 rounded-2xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center mx-auto mb-3">
-            <ListChecks className="w-6 h-6" />
+        <div className="text-center py-12 px-4 bg-slate-50/40 dark:bg-slate-900/30">
+          <div className="w-11 h-11 rounded-2xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center mx-auto mb-2.5">
+            <ListChecks className="w-5 h-5" />
           </div>
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">
-            No hay actividades registradas {isToday(fecha) ? 'hoy' : 'para esta fecha'}
+            Sin actividades {isToday(fecha) ? 'hoy' : 'para esta fecha'}
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-4">
-            Comienza agregando tu primera actividad individual o asigna colaboradores en paralelo para sincronizar el avance.
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-3.5">
+            Agrega una actividad para comenzar tu jornada.
           </p>
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-[#00F0FF] hover:bg-[#00D8E6] text-slate-950 rounded-full text-xs font-extrabold shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#00F0FF] hover:bg-[#00D8E6] text-slate-950 rounded-full text-xs font-extrabold shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)] transition-all cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[3]" />
-            <span>Crear primera actividad</span>
+            <Plus className="w-3.5 h-3.5 stroke-[3]" />
+            <span>Agregar actividad</span>
           </button>
         </div>
       ) : (
