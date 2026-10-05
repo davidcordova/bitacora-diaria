@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
-import { calculateHoraFin, calculateDuracionMin, getCurrentTimeStr } from '../utils/formatters';
+import { calculateHoraFin, calculateDuracionMin, getCurrentTimeStr, getRefrigerioMinutos } from '../utils/formatters';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { HtmlEditor } from './HtmlEditor';
 import { api } from '../services/api';
@@ -35,6 +35,7 @@ interface ActividadModalProps {
   onSave: (actividad: Actividad, editIndex: number | null) => void;
   users: User[];
   currentUser: User | null;
+  fecha?: string;
 }
 
 export const ActividadModal: React.FC<ActividadModalProps> = ({
@@ -45,6 +46,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   onSave,
   users,
   currentUser,
+  fecha,
 }) => {
   const [horaInicio, setHoraInicio] = useState('08:00');
   const [duracionMin, setDuracionMin] = useState<number>(30);
@@ -86,7 +88,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         const dMin = Number(actividadToEdit.duracion_min) || 0;
         setHoraInicio(hIni);
         setDuracionMin(dMin);
-        setHoraFin(actividadToEdit.hora_fin || calculateHoraFin(hIni, dMin));
+        setHoraFin(actividadToEdit.hora_fin || calculateHoraFin(hIni, dMin, fecha));
         setTipoTrabajo(actividadToEdit.tipo_trabajo || 'Desarrollo');
         setDescripcion(actividadToEdit.descripcion || '');
         setParaCliente(actividadToEdit.para_cliente || '');
@@ -105,7 +107,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         const hIni = `${hh}:${mm}`;
         setHoraInicio(hIni);
         setDuracionMin(30);
-        setHoraFin(calculateHoraFin(hIni, 30));
+        setHoraFin(calculateHoraFin(hIni, 30, fecha));
         setTipoTrabajo('Desarrollo');
         setDescripcion('');
         setParaCliente('');
@@ -171,7 +173,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const handleHoraInicioChange = (val: string) => {
     setHoraInicio(val);
     if (val && duracionMin > 0) {
-      setHoraFin(calculateHoraFin(val, duracionMin));
+      setHoraFin(calculateHoraFin(val, duracionMin, fecha));
     }
   };
 
@@ -179,14 +181,14 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     const mins = Math.max(0, val || 0);
     setDuracionMin(mins);
     if (horaInicio) {
-      setHoraFin(calculateHoraFin(horaInicio, mins));
+      setHoraFin(calculateHoraFin(horaInicio, mins, fecha));
     }
   };
 
   const handleHoraFinChange = (val: string) => {
     setHoraFin(val);
     if (horaInicio && val) {
-      const calculatedMins = calculateDuracionMin(horaInicio, val);
+      const calculatedMins = calculateDuracionMin(horaInicio, val, fecha);
       setDuracionMin(calculatedMins);
     }
   };
@@ -195,7 +197,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     const nowStr = getCurrentTimeStr();
     setHoraFin(nowStr);
     if (horaInicio) {
-      const calculatedMins = calculateDuracionMin(horaInicio, nowStr);
+      const calculatedMins = calculateDuracionMin(horaInicio, nowStr, fecha);
       setDuracionMin(calculatedMins);
     }
   };
@@ -204,7 +206,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     const nextDur = Math.max(0, (Number(duracionMin) || 0) + extra);
     setDuracionMin(nextDur);
     if (horaInicio) {
-      setHoraFin(calculateHoraFin(horaInicio, nextDur));
+      setHoraFin(calculateHoraFin(horaInicio, nextDur, fecha));
     }
   };
 
@@ -249,7 +251,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       ...(actividadToEdit || {}),
       id: actividadToEdit?.id,
       hora_inicio: horaInicio,
-      hora_fin: horaFin || calculateHoraFin(horaInicio, Number(duracionMin) || 0),
+      hora_fin: horaFin || calculateHoraFin(horaInicio, Number(duracionMin) || 0, fecha),
       duracion_min: Number(duracionMin) || 0,
       tipo_trabajo: tipoTrabajo,
       descripcion: descripcion.trim(),
@@ -309,8 +311,8 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
           {/* Row 1: Smart Time Engine (Inicio, Duración, Fin) & Estado */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
             {/* Hora Inicio */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+            <div className="min-w-0">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
                 Hora de Inicio
               </label>
               <div className="relative">
@@ -325,35 +327,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             </div>
 
             {/* Duración */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Duración</label>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleAddMinutes(15)}
-                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
-                    title="Añadir 15 minutos"
-                  >
-                    +15m
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddMinutes(30)}
-                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
-                    title="Añadir 30 minutos"
-                  >
-                    +30m
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAddMinutes(60)}
-                    className="text-[10px] px-1.5 py-0.5 font-medium bg-slate-100 dark:bg-[#161722] border border-slate-200/60 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-md transition-colors cursor-pointer"
-                    title="Añadir 1 hora"
-                  >
-                    +1h
-                  </button>
-                </div>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between mb-1.5 min-w-0">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                  Duración
+                </label>
               </div>
               <div className="relative">
                 <input
@@ -370,16 +348,45 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                   min
                 </span>
               </div>
+              {/* Píldoras rápidas debajo del input para evitar cualquier solapamiento responsive */}
+              <div className="grid grid-cols-3 gap-1 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleAddMinutes(15)}
+                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  title="Añadir 15 minutos"
+                >
+                  +15m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddMinutes(30)}
+                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  title="Añadir 30 minutos"
+                >
+                  +30m
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddMinutes(60)}
+                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  title="Añadir 1 hora"
+                >
+                  +1h
+                </button>
+              </div>
             </div>
 
             {/* Hora Fin (Reactiva & Botón Ahora) */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Hora Fin</label>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between mb-1.5 min-w-0 gap-1">
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                  Hora Fin
+                </label>
                 <button
                   type="button"
                   onClick={handleSetHoraFinNow}
-                  className="text-[10px] px-2 py-0.5 font-bold bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-0.5"
+                  className="text-[10px] px-2 py-0.5 font-bold bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-md hover:brightness-110 active:scale-95 transition-all cursor-pointer flex items-center gap-0.5 shrink-0"
                   title="Fijar la hora actual en Hora Fin y calcular minutos transcurridos"
                 >
                   <span>⚡ Ahora</span>
@@ -397,8 +404,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             </div>
 
             {/* Estado */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Estado</label>
+            <div className="min-w-0">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 truncate">
+                Estado
+              </label>
               <select
                 value={estado}
                 onChange={(e) => setEstado(e.target.value as EstadoActividad)}
@@ -411,6 +420,19 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               </select>
             </div>
           </div>
+
+          {/* Banner de refrigerio si la tarea cruza 1:00 PM - 2:00 PM */}
+          {getRefrigerioMinutos(horaInicio, horaFin, fecha) > 0 && (
+            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs animate-in fade-in duration-150">
+              <span className="text-base shrink-0">🍽️</span>
+              <div className="min-w-0 flex-1">
+                <span className="font-bold">Refrigerio laboral considerado (1:00 p.m. – 2:00 p.m.):</span>
+                <span className="ml-1 text-[11px] opacity-90">
+                  Esta actividad cruza el horario de almuerzo ({getRefrigerioMinutos(horaInicio, horaFin, fecha)} min). Este tiempo de refrigerio no consume horas efectivas de la tarea y la hora de fin se extendió automáticamente.
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Row 2: Tipo de Trabajo, Para/Cliente & Trabajo en Paralelo */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

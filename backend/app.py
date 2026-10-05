@@ -43,15 +43,42 @@ UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def calculate_hora_fin(hora_inicio, duracion_min):
+def is_dia_laborable(fecha_str=None):
+    if not fecha_str:
+        return True
+    try:
+        d = datetime.strptime(str(fecha_str).strip()[:10], '%Y-%m-%d')
+        return d.weekday() < 5
+    except Exception:
+        return True
+
+
+def calculate_hora_fin(hora_inicio, duracion_min, fecha=None):
     if not hora_inicio:
         return ''
     try:
-        parts = hora_inicio.strip().split(':')
+        parts = str(hora_inicio).strip().split(':')
         h = int(parts[0])
         m = int(parts[1])
         dur = int(duracion_min or 0)
-        total = h * 60 + m + max(0, dur)
+        start_min = h * 60 + m
+        refrig_inicio = 13 * 60  # 13:00 -> 780
+        refrig_fin = 14 * 60     # 14:00 -> 840
+        refrig_dur = 60
+
+        laborable = is_dia_laborable(fecha)
+        if not laborable or dur <= 0:
+            total = start_min + max(0, dur)
+        else:
+            effective_start = start_min
+            if effective_start < refrig_fin and effective_start >= refrig_inicio:
+                effective_start = refrig_fin
+
+            end_min = effective_start + dur
+            if start_min < refrig_inicio and end_min > refrig_inicio:
+                end_min += refrig_dur
+            total = end_min
+
         final_h = (total // 60) % 24
         final_m = total % 60
         return f"{final_h:02d}:{final_m:02d}"
@@ -59,10 +86,11 @@ def calculate_hora_fin(hora_inicio, duracion_min):
         return ''
 
 # Helper para normalizar evidencias y tareas compartidas en el diccionario de una actividad
-def format_actividad_dict(act_row, users_map=None):
+def format_actividad_dict(act_row, users_map=None, fecha=None):
     a_dict = dict(act_row)
+    act_fecha = fecha or a_dict.get('fecha')
     if not a_dict.get('hora_fin') and a_dict.get('hora_inicio'):
-        a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'))
+        a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'), act_fecha)
 
     ev_val = a_dict.get('evidencias')
     if isinstance(ev_val, str):
@@ -1453,7 +1481,7 @@ def get_bitacoras():
             WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
             ORDER BY a.orden ASC, a.id ASC
         ''', (b['id'],)).fetchall()
-        b_dict['actividades'] = [format_actividad_dict(a, users_map) for a in acts]
+        b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
         result.append(b_dict)
         
     conn.close()
@@ -1490,7 +1518,7 @@ def get_bitacora(bitacora_id):
         WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         ORDER BY a.orden ASC, a.id ASC
     ''', (bitacora_id,)).fetchall()
-    b_dict['actividades'] = [format_actividad_dict(a, users_map) for a in acts]
+    b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
     conn.close()
     return jsonify(b_dict)
 
@@ -1737,7 +1765,7 @@ def save_bitacora():
                 parent_task_id = None
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
-            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), act.get('duracion_min'))
+            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), act.get('duracion_min'), fecha)
 
             if target_act_id:
                 cursor.execute('''
@@ -1933,7 +1961,7 @@ def save_bitacora():
             WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0) 
             ORDER BY a.orden ASC, a.id ASC
         ''', (bitacora_id,)).fetchall()
-        b_dict['actividades'] = [format_actividad_dict(a, users_map) for a in acts]
+        b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
         
         conn.close()
         return jsonify({"message": "Bitácora guardada con éxito", "bitacora": b_dict}), 200

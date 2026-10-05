@@ -19,26 +19,80 @@ export const formatHoursClean = (totalMinutes: number): string => {
   return `${hours}h ${minutes}m`;
 };
 
+export const isDiaLaborable = (fechaStr?: string): boolean => {
+  if (!fechaStr) {
+    const day = new Date().getDay();
+    return day >= 1 && day <= 5;
+  }
+  try {
+    const [y, m, d] = fechaStr.split('-').map(Number);
+    if (!y || !m || !d) return true;
+    const date = new Date(y, m - 1, d);
+    const day = date.getDay();
+    return day >= 1 && day <= 5;
+  } catch {
+    return true;
+  }
+};
+
 /**
  * Calcula la hora fin a partir de una hora inicio (HH:MM) y duración en minutos.
+ * De lunes a viernes excluye el refrigerio de 1h (1:00 PM a 2:00 PM) para reflejar la jornada real.
  */
-export const calculateHoraFin = (horaInicio: string, duracionMin: number): string => {
+export const calculateHoraFin = (
+  horaInicio: string,
+  duracionMin: number,
+  fechaStr?: string,
+  aplicarRefrigerio = true
+): string => {
   if (!horaInicio) return '';
   const [hStr, mStr] = horaInicio.split(':');
   const h = parseInt(hStr, 10);
   const m = parseInt(mStr, 10);
   if (isNaN(h) || isNaN(m)) return '';
-  const totalMinutes = h * 60 + m + Math.max(0, duracionMin || 0);
-  const finalH = Math.floor(totalMinutes / 60) % 24;
-  const finalM = totalMinutes % 60;
+  
+  const dur = Math.max(0, duracionMin || 0);
+  const startMin = h * 60 + m;
+  
+  let endMin = startMin;
+  const esLaborable = isDiaLaborable(fechaStr);
+  
+  if (aplicarRefrigerio && esLaborable && dur > 0) {
+    const LUNCH_START = 13 * 60; // 13:00 (780 min)
+    const LUNCH_END = 14 * 60;   // 14:00 (840 min)
+    
+    if (startMin < LUNCH_START) {
+      const availBefore = LUNCH_START - startMin;
+      if (dur <= availBefore) {
+        endMin = startMin + dur;
+      } else {
+        const rem = dur - availBefore;
+        endMin = LUNCH_END + rem;
+      }
+    } else if (startMin < LUNCH_END) {
+      endMin = LUNCH_END + dur;
+    } else {
+      endMin = startMin + dur;
+    }
+  } else {
+    endMin = startMin + dur;
+  }
+  
+  const finalH = Math.floor(endMin / 60) % 24;
+  const finalM = endMin % 60;
   return `${String(finalH).padStart(2, '0')}:${String(finalM).padStart(2, '0')}`;
 };
 
 /**
- * Calcula los minutos transcurridos entre hora inicio y hora fin (HH:MM).
- * Soporta transiciones de medianoche automáticamente.
+ * Calcula los minutos transcurridos efectivos entre hora inicio y hora fin (HH:MM).
+ * De lunes a viernes descuenta automáticamente los minutos de refrigerio (1:00 PM a 2:00 PM).
  */
-export const calculateDuracionMin = (horaInicio: string, horaFin: string): number => {
+export const calculateDuracionMin = (
+  horaInicio: string,
+  horaFin: string,
+  fechaStr?: string,
+  aplicarRefrigerio = true
+): number => {
   if (!horaInicio || !horaFin) return 0;
   const [h1Str, m1Str] = horaInicio.split(':');
   const [h2Str, m2Str] = horaFin.split(':');
@@ -47,11 +101,54 @@ export const calculateDuracionMin = (horaInicio: string, horaFin: string): numbe
   const h2 = parseInt(h2Str, 10);
   const m2 = parseInt(m2Str, 10);
   if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
-  let diff = (h2 * 60 + m2) - (h1 * 60 + m1);
-  if (diff < 0) {
-    diff += 24 * 60; // Cruce de medianoche
+  
+  const s = h1 * 60 + m1;
+  let e = h2 * 60 + m2;
+  if (e < s) {
+    e += 24 * 60; // Cruce de medianoche
   }
-  return diff;
+  const total = e - s;
+  
+  const esLaborable = isDiaLaborable(fechaStr);
+  if (aplicarRefrigerio && esLaborable && total > 0) {
+    const LUNCH_START = 13 * 60; // 780
+    const LUNCH_END = 14 * 60;   // 840
+    
+    const overlapStart = Math.max(s, LUNCH_START);
+    const overlapEnd = Math.min(e, LUNCH_END);
+    const overlap = Math.max(0, overlapEnd - overlapStart);
+    
+    return Math.max(0, total - overlap);
+  }
+  
+  return total;
+};
+
+/**
+ * Retorna cuántos minutos de refrigerio (1:00 PM a 2:00 PM) solapa la tarea.
+ */
+export const getRefrigerioMinutos = (
+  horaInicio: string,
+  horaFin: string,
+  fechaStr?: string
+): number => {
+  if (!horaInicio || !horaFin) return 0;
+  if (!isDiaLaborable(fechaStr)) return 0;
+  const [h1Str, m1Str] = horaInicio.split(':');
+  const [h2Str, m2Str] = horaFin.split(':');
+  const h1 = parseInt(h1Str, 10);
+  const m1 = parseInt(m1Str, 10);
+  const h2 = parseInt(h2Str, 10);
+  const m2 = parseInt(m2Str, 10);
+  if (isNaN(h1) || isNaN(m1) || isNaN(h2) || isNaN(m2)) return 0;
+  
+  const s = h1 * 60 + m1;
+  let e = h2 * 60 + m2;
+  if (e < s) e += 24 * 60;
+  
+  const overlapStart = Math.max(s, 13 * 60);
+  const overlapEnd = Math.min(e, 14 * 60);
+  return Math.max(0, overlapEnd - overlapStart);
 };
 
 /**

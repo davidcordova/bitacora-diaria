@@ -34,6 +34,7 @@ interface ActividadDetalleModalProps {
   onEdit: (actividad: Actividad, index: number) => void;
   onUpdateEstado?: (index: number, nuevoEstado: EstadoActividad) => void;
   onNavigateToRef?: (targetRefId: number | string, tipoVinculo?: string) => void;
+  fecha?: string;
 }
 
 export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
@@ -44,6 +45,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   onEdit,
   onUpdateEstado,
   onNavigateToRef,
+  fecha,
 }) => {
   const [copied, setCopied] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -159,7 +161,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
                   <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                  <span>{actividad.hora_fin || calculateHoraFin(actividad.hora_inicio, actividad.duracion_min) || '--:--'}</span>
+                  <span>{actividad.hora_fin || calculateHoraFin(actividad.hora_inicio, actividad.duracion_min, fecha) || '--:--'}</span>
                 </div>
               </div>
 

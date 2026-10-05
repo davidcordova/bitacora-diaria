@@ -516,7 +516,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                           <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
                           <span>{act.hora_inicio || '--:--'}</span>
                           <span className="text-slate-400 dark:text-slate-500 font-normal">→</span>
-                          <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min) || '--:--'}</span>
+                          <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}</span>
                           <span className="text-slate-300 dark:text-slate-700 mx-0.5">•</span>
                           <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
                         </div>
@@ -728,7 +728,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         {index + 1}
                       </span>
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min) || '--:--'}
+                        {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
                       </span>
                       <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
                         {act.duracion_min}m
@@ -860,6 +860,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         onClose={() => setDetailModalOpen(false)}
         actividad={selectedDetailActividad}
         index={selectedDetailIndex}
+        fecha={fecha}
         onEdit={(act, idx) => {
           setDetailModalOpen(false);
           handleOpenEditModal(act, idx);
@@ -885,6 +886,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         onSave={handleSaveModal}
         users={users}
         currentUser={currentUser}
+        fecha={fecha}
       />
 
       {/* MODAL 3: Referenced Task Deep Inspection & Navigation */}
