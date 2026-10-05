@@ -22,8 +22,17 @@ import {
   Layers,
   Flame,
   Calendar,
+  Paperclip,
+  Image as ImageIcon,
+  Eye,
+  ExternalLink,
+  Download,
+  FileText,
+  UploadCloud,
+  Loader2,
+  Bug,
 } from 'lucide-react';
-import { Sugerencia, User, CategoriaSugerencia, ImpactoSugerencia, EstadoSugerencia } from '../types';
+import { Sugerencia, User, CategoriaSugerencia, ImpactoSugerencia, EstadoSugerencia, Evidencia } from '../types';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 
@@ -78,6 +87,13 @@ const CATEGORIAS_CONFIG: Record<
     bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10',
     border: 'border-fuchsia-200 dark:border-fuchsia-500/30',
   },
+  error_bug: {
+    label: 'Reporte de Error / Bug',
+    icon: '🐛',
+    color: 'text-rose-700 dark:text-rose-400',
+    bg: 'bg-rose-50 dark:bg-rose-500/10',
+    border: 'border-rose-200 dark:border-rose-500/30',
+  },
   otro: {
     label: 'Otra Idea',
     icon: '💡',
@@ -130,6 +146,18 @@ const IMPACTOS_CONFIG: Record<ImpactoSugerencia, { label: string; badge: string 
   estrategico: { label: 'Estratégico ★', badge: 'bg-amber-50 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 font-semibold' },
 };
 
+const formatFileSize = (bytes?: number) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const isImageFile = (urlOrName?: string) => {
+  if (!urlOrName) return false;
+  return /\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(urlOrName);
+};
+
 export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }) => {
   const [sugerencias, setSugerencias] = useState<Sugerencia[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -139,16 +167,27 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
   const [sortBy, setSortBy] = useState<'reciente' | 'popular'>('popular');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // Modal para proponer idea
+  // Modal para proponer idea / reporte
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    titulo: string;
+    descripcion: string;
+    categoria: CategoriaSugerencia;
+    impacto: ImpactoSugerencia;
+    es_anonimo: boolean;
+    evidencias: Evidencia[];
+  }>({
     titulo: '',
     descripcion: '',
-    categoria: 'mejora_proceso' as CategoriaSugerencia,
-    impacto: 'medio' as ImpactoSugerencia,
+    categoria: 'mejora_proceso',
+    impacto: 'medio',
     es_anonimo: false,
+    evidencias: [],
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [previewEvidencia, setPreviewEvidencia] = useState<Evidencia | null>(null);
 
   // Modal para responder / cambiar estado (Admin o Líder)
   const [respondModalSug, setRespondModalSug] = useState<Sugerencia | null>(null);
@@ -214,6 +253,70 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
     }
   };
 
+  // Interceptar pegado Ctrl+V de capturas de pantalla cuando el modal está abierto
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) {
+            try {
+              setIsUploading(true);
+              const uploaded = await api.uploadFile(file);
+              setFormData((prev) => ({
+                ...prev,
+                evidencias: [...prev.evidencias, uploaded],
+              }));
+              if (onShowToast) onShowToast('¡Captura pegada y adjuntada como prueba!', 'success');
+            } catch (err: any) {
+              console.error('Error al subir screenshot:', err);
+              if (onShowToast) onShowToast(err.message || 'Error al procesar captura', 'error');
+            } finally {
+              setIsUploading(false);
+            }
+          }
+          break;
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [isModalOpen, onShowToast]);
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    const newEvidencias: Evidencia[] = [];
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const uploaded = await api.uploadFile(file);
+        newEvidencias.push(uploaded);
+      }
+      setFormData((prev) => ({
+        ...prev,
+        evidencias: [...prev.evidencias, ...newEvidencias],
+      }));
+      if (onShowToast) onShowToast(`${newEvidencias.length} prueba(s) adjuntada(s) con éxito`, 'success');
+    } catch (err: any) {
+      console.error('Error al subir archivos:', err);
+      if (onShowToast) onShowToast(err.message || 'Error al subir archivo', 'error');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveEvidencia = (indexToRemove: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      evidencias: prev.evidencias.filter((_, idx) => idx !== indexToRemove),
+    }));
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.titulo.trim() || !formData.descripcion.trim()) {
@@ -230,8 +333,9 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
         titulo: formData.titulo.trim(),
         descripcion: formData.descripcion.trim(),
         impacto: formData.impacto,
+        evidencias: formData.evidencias,
       });
-      if (onShowToast) onShowToast('¡Tu propuesta ha sido enviada con éxito!', 'success');
+      if (onShowToast) onShowToast('¡Tu propuesta/reporte ha sido enviado con éxito!', 'success');
       setIsModalOpen(false);
       setFormData({
         titulo: '',
@@ -239,6 +343,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
         categoria: 'mejora_proceso',
         impacto: 'medio',
         es_anonimo: false,
+        evidencias: [],
       });
       fetchSugerencias();
     } catch (err: any) {
@@ -599,6 +704,64 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                     </p>
                   </div>
 
+                  {/* PRUEBAS / EVIDENCIAS ADJUNTAS */}
+                  {sug.evidencias && sug.evidencias.length > 0 && (
+                    <div className="pt-2">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                        <Paperclip className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                        <span>Pruebas y capturas adjuntas ({sug.evidencias.length}):</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2.5">
+                        {sug.evidencias.map((ev, evIdx) => {
+                          const isImg = isImageFile(ev.url) || isImageFile(ev.nombre);
+                          return (
+                            <div
+                              key={evIdx}
+                              className="group/ev relative flex items-center gap-2 p-1.5 pr-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 hover:bg-cyan-50/40 dark:hover:bg-cyan-500/10 transition-all cursor-pointer shadow-2xs max-w-xs"
+                              onClick={() => {
+                                if (isImg) {
+                                  setPreviewEvidencia(ev);
+                                } else {
+                                  window.open(ev.url, '_blank');
+                                }
+                              }}
+                              title={ev.nombre}
+                            >
+                              {isImg ? (
+                                <div className="w-10 h-10 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800 shrink-0 border border-slate-300 dark:border-slate-700 relative">
+                                  <img
+                                    src={ev.url}
+                                    alt={ev.nombre}
+                                    className="w-full h-full object-cover group-hover/ev:scale-105 transition-transform"
+                                  />
+                                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/ev:opacity-100 flex items-center justify-center transition-opacity text-white">
+                                    <Eye className="w-3.5 h-3.5" />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center shrink-0">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">
+                                  {ev.nombre}
+                                </p>
+                                <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                                  <span>{formatFileSize(ev.tamano)}</span>
+                                  <span className="text-cyan-600 dark:text-cyan-400 font-semibold flex items-center gap-0.5">
+                                    {isImg ? 'Ver prueba' : 'Descargar'}
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* METADATOS DEL AUTOR */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-white/5">
                     <div className="flex items-center gap-2">
@@ -753,6 +916,101 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                 />
               </div>
 
+              {/* PRUEBAS / CAPTURAS DE PANTALLA */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Pruebas / Capturas de pantalla
+                  </label>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                    Pega con <kbd className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 border border-slate-200 dark:border-white/10 text-[10px] font-mono">Ctrl + V</kbd> o sube archivos
+                  </span>
+                </div>
+
+                {/* Dropzone */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDragging(true);
+                  }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    handleFileUpload(e.dataTransfer.files);
+                  }}
+                  className={`relative border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+                    isDragging
+                      ? 'border-cyan-500 bg-cyan-50/40 dark:bg-cyan-500/10'
+                      : 'border-slate-200 dark:border-white/10 hover:border-cyan-500/40 bg-slate-50/60 dark:bg-white/2'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    id="buzon-file-input"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                  />
+                  <label
+                    htmlFor="buzon-file-input"
+                    className="flex flex-col items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <div className="p-2 rounded-full bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                      {isUploading ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <UploadCloud className="w-5 h-5" />
+                      )}
+                    </div>
+                    <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      {isUploading ? 'Subiendo prueba...' : 'Selecciona o arrastra capturas del error aquí'}
+                    </p>
+                    <p className="text-[11px] text-slate-400">
+                      Imágenes (PNG, JPG, WEBP), PDFs o documentos
+                    </p>
+                  </label>
+                </div>
+
+                {/* Lista de evidencias adjuntas */}
+                {formData.evidencias.length > 0 && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                    {formData.evidencias.map((ev, idx) => {
+                      const isImg = isImageFile(ev.url) || isImageFile(ev.nombre);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs"
+                        >
+                          {isImg ? (
+                            <img
+                              src={ev.url}
+                              alt={ev.nombre}
+                              className="w-8 h-8 rounded object-cover shrink-0 border border-slate-300 dark:border-slate-700"
+                            />
+                          ) : (
+                            <FileText className="w-6 h-6 text-indigo-500 shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{ev.nombre}</p>
+                            <p className="text-[10px] text-slate-400">{formatFileSize(ev.tamano)}</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEvidencia(idx)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                            title="Quitar prueba"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* CHECKBOX ANÓNIMO */}
               <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#181926]/80 border border-slate-200 dark:border-white/5">
                 <input
@@ -813,9 +1071,43 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
               </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-[#181926] p-3 rounded-xl border border-slate-200 dark:border-white/5">
+            <div className="bg-slate-50 dark:bg-[#181926] p-3 rounded-xl border border-slate-200 dark:border-white/5 space-y-2">
               <div className="text-xs font-bold text-slate-900 dark:text-white">{respondModalSug.titulo}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{respondModalSug.descripcion}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3">{respondModalSug.descripcion}</div>
+
+              {/* PRUEBAS ADJUNTAS EN EL MODAL DE EVALUACIÓN */}
+              {respondModalSug.evidencias && respondModalSug.evidencias.length > 0 && (
+                <div className="pt-2 border-t border-slate-200 dark:border-white/10">
+                  <div className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1 mb-1.5">
+                    <Paperclip className="w-3 h-3" />
+                    <span>Pruebas adjuntas por el colaborador ({respondModalSug.evidencias.length}):</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {respondModalSug.evidencias.map((ev, evIdx) => {
+                      const isImg = isImageFile(ev.url) || isImageFile(ev.nombre);
+                      return (
+                        <div
+                          key={evIdx}
+                          onClick={() => {
+                            if (isImg) setPreviewEvidencia(ev);
+                            else window.open(ev.url, '_blank');
+                          }}
+                          className="flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs cursor-pointer hover:border-cyan-500 transition-colors"
+                          title="Clic para ver o descargar"
+                        >
+                          {isImg ? (
+                            <img src={ev.url} alt={ev.nombre} className="w-5 h-5 rounded object-cover" />
+                          ) : (
+                            <FileText className="w-4 h-4 text-indigo-500" />
+                          )}
+                          <span className="truncate max-w-[140px] text-slate-700 dark:text-slate-300 font-medium">{ev.nombre}</span>
+                          <Eye className="w-3 h-3 text-slate-400 ml-1" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleUpdateStatusSubmit} className="space-y-4">
@@ -867,6 +1159,55 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL LIGHTBOX / VISOR DE CAPTURA A PANTALLA COMPLETA */}
+      {previewEvidencia && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in"
+          onClick={() => setPreviewEvidencia(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[92vh] flex flex-col bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-white/10 text-white">
+              <div className="flex items-center gap-2 min-w-0 pr-4">
+                <ImageIcon className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="text-sm font-semibold truncate">{previewEvidencia.nombre}</span>
+                {previewEvidencia.tamano && (
+                  <span className="text-xs text-slate-400 shrink-0">({formatFileSize(previewEvidencia.tamano)})</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={previewEvidencia.url}
+                  download={previewEvidencia.nombre}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  title="Abrir imagen original / descargar"
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+                <button
+                  onClick={() => setPreviewEvidencia(null)}
+                  className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500 text-white transition-colors"
+                  title="Cerrar visor"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="p-2 flex items-center justify-center overflow-auto max-h-[calc(92vh-60px)] bg-black/60">
+              <img
+                src={previewEvidencia.url}
+                alt={previewEvidencia.nombre}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-lg"
+              />
+            </div>
           </div>
         </div>
       )}

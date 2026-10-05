@@ -2821,6 +2821,21 @@ def get_actividades_referencias():
 
 # ==================== BUZÓN DE SUGERENCIAS & MEJORA CONTINUA ====================
 
+def serialize_sugerencia_dict(row_dict):
+    d = dict(row_dict)
+    if d.get('es_anonimo'):
+        d['colaborador'] = 'Colaborador Anónimo'
+        d['user_id'] = None
+    ev_val = d.get('evidencias')
+    if ev_val:
+        try:
+            d['evidencias'] = json.loads(ev_val) if isinstance(ev_val, str) else ev_val
+        except Exception:
+            d['evidencias'] = []
+    else:
+        d['evidencias'] = []
+    return d
+
 @app.route('/api/sugerencias', methods=['GET', 'POST', 'OPTIONS'])
 def handle_sugerencias():
     if request.method == 'OPTIONS':
@@ -2839,6 +2854,8 @@ def handle_sugerencias():
         titulo = (data.get('titulo') or '').strip()
         descripcion = (data.get('descripcion') or '').strip()
         impacto = data.get('impacto') or 'medio'
+        evidencias_raw = data.get('evidencias', [])
+        evidencias_json = json.dumps(evidencias_raw) if isinstance(evidencias_raw, (list, dict)) else (evidencias_raw or '[]')
 
         if not titulo or not descripcion:
             conn.close()
@@ -2847,9 +2864,9 @@ def handle_sugerencias():
         cursor.execute('''
             INSERT INTO buzon_sugerencias (
                 user_id, colaborador, es_anonimo, categoria,
-                titulo, descripcion, impacto, estado, votos, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', 0, ?, ?)
-        ''', (user_id, colaborador, es_anonimo, categoria, titulo, descripcion, impacto, now_peru, now_peru))
+                titulo, descripcion, impacto, estado, votos, evidencias, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', 0, ?, ?, ?)
+        ''', (user_id, colaborador, es_anonimo, categoria, titulo, descripcion, impacto, evidencias_json, now_peru, now_peru))
         sug_id = cursor.lastrowid
         conn.commit()
 
@@ -2867,7 +2884,7 @@ def handle_sugerencias():
 
         sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
         conn.close()
-        return jsonify({"message": "Sugerencia enviada exitosamente", "sugerencia": dict(sug)}), 201
+        return jsonify({"message": "Sugerencia enviada exitosamente", "sugerencia": serialize_sugerencia_dict(sug)}), 201
 
     # GET sugerencias
     categoria = request.args.get('categoria')
@@ -2901,13 +2918,7 @@ def handle_sugerencias():
         query += " ORDER BY s.created_at DESC, s.id DESC"
 
     rows = cursor.execute(query, params).fetchall()
-    results = []
-    for r in rows:
-        d = dict(r)
-        if d.get('es_anonimo'):
-            d['colaborador'] = 'Colaborador Anónimo'
-            d['user_id'] = None
-        results.append(d)
+    results = [serialize_sugerencia_dict(r) for r in rows]
 
     conn.close()
     return jsonify(results), 200
@@ -2993,7 +3004,7 @@ def update_sugerencia_status(sug_id):
 
     updated = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
     conn.close()
-    return jsonify({"success": True, "sugerencia": dict(updated)}), 200
+    return jsonify({"success": True, "sugerencia": serialize_sugerencia_dict(updated)}), 200
 
 @app.route('/api/sugerencias/<int:sug_id>', methods=['DELETE', 'OPTIONS'])
 def delete_sugerencia(sug_id):

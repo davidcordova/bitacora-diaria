@@ -211,11 +211,16 @@ def init_db():
             respondido_por TEXT,
             respondido_at DATETIME,
             votos INTEGER DEFAULT 0,
+            evidencias TEXT DEFAULT '[]',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE buzon_sugerencias ADD COLUMN evidencias TEXT DEFAULT '[]'")
+    except sqlite3.OperationalError:
+        pass
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_buzon_estado ON buzon_sugerencias(estado)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_buzon_user ON buzon_sugerencias(user_id)")
 

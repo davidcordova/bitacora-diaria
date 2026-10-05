@@ -572,6 +572,7 @@ export const api = {
     titulo: string;
     descripcion: string;
     impacto?: string;
+    evidencias?: Evidencia[];
   }): Promise<{ message: string; sugerencia: Sugerencia }> {
     const res = await fetch(`${API_BASE}/sugerencias`, {
       method: 'POST',

@@ -215,7 +215,7 @@ export interface SystemNotification {
   category?: 'actividad' | 'sistema' | 'sincronizacion' | 'seguridad';
 }
 
-export type CategoriaSugerencia = 'mejora_proceso' | 'herramienta_it' | 'bienestar_equipo' | 'innovacion' | 'comunicacion' | 'sistema' | 'otro';
+export type CategoriaSugerencia = 'mejora_proceso' | 'herramienta_it' | 'bienestar_equipo' | 'innovacion' | 'comunicacion' | 'sistema' | 'error_bug' | 'otro';
 export type ImpactoSugerencia = 'bajo' | 'medio' | 'alto' | 'estrategico';
 export type EstadoSugerencia = 'pendiente' | 'en_revision' | 'planificada' | 'implementada' | 'descartada';
 
@@ -229,6 +229,7 @@ export interface Sugerencia {
   descripcion: string;
   impacto: ImpactoSugerencia;
   estado: EstadoSugerencia;
+  evidencias?: Evidencia[];
   respuesta_admin?: string;
   respondido_por?: string;
   respondido_at?: string;
