@@ -9,6 +9,7 @@ import csv
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 try:
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -23,6 +24,7 @@ from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, g
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 
 @app.teardown_appcontext
 def close_open_connections(exception=None):
@@ -458,15 +460,20 @@ def upload_file():
         return jsonify({}), 200
         
     try:
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
         # Caso 1: Archivo enviado vía multipart/form-data (explorador o drag & drop)
         if 'file' in request.files:
             file = request.files['file']
             if not file or file.filename == '':
                 return jsonify({"error": "No se seleccionó ningún archivo"}), 400
                 
-            orig_filename = secure_filename(file.filename) or 'archivo'
+            orig_filename = file.filename or 'evidencia'
+            safe_name = secure_filename(orig_filename)
+            if not safe_name:
+                safe_name = f"evidencia_{int(time.time())}.png"
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            unique_name = f"{timestamp}_{orig_filename}"
+            unique_name = f"{timestamp}_{safe_name}"
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             file.save(filepath)
             
@@ -485,7 +492,9 @@ def upload_file():
         base64_data = data.get('base64')
         if base64_data:
             nombre = data.get('nombre') or 'captura_pantalla.png'
-            safe_nombre = secure_filename(nombre) or 'captura.png'
+            safe_nombre = secure_filename(nombre)
+            if not safe_nombre:
+                safe_nombre = f"captura_{int(time.time())}.png"
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             unique_name = f"{timestamp}_{safe_nombre}"
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
