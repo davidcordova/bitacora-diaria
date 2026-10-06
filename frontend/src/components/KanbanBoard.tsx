@@ -155,7 +155,23 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const handleSaveEdit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editingIndex !== null && onUpdateActividadDetalle) {
-      onUpdateActividadDetalle(editingIndex, editForm);
+      const desc = editForm.descripcion || '';
+      const cleanEvidencias = (editForm.evidencias || []).filter((ev, index, self) => {
+        if (!ev || !ev.url) return false;
+        const isFirst = self.findIndex((o) => (o.id && o.id === ev.id) || o.url === ev.url) === index;
+        if (!isFirst) return false;
+
+        const url = ev.url.trim();
+        const filename = url.split('/').pop()?.split('?')[0] || '';
+        if (url && desc.includes(url)) return false;
+        if (filename && desc.includes(filename)) return false;
+        return true;
+      });
+
+      onUpdateActividadDetalle(editingIndex, {
+        ...editForm,
+        evidencias: cleanEvidencias,
+      });
     }
     setEditingIndex(null);
   };
@@ -664,10 +680,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                   onChange={(val) => setEditForm({ ...editForm, descripcion: val })}
                   placeholder="Detalle de la tarea..."
                   minHeight="130px"
-                  onAttachEvidence={(newEv) => {
-                    const current = editForm.evidencias || [];
-                    setEditForm({ ...editForm, evidencias: [...current, newEv] });
-                  }}
                 />
               </div>
 

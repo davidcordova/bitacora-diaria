@@ -247,6 +247,19 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       return;
     }
 
+    // Filtrar evidencias para que no incluyan archivos o imágenes ya embebidos en el HTML de descripción
+    const cleanEvidencias = (evidencias || []).filter((ev, index, self) => {
+      if (!ev || !ev.url) return false;
+      const isFirst = self.findIndex((o) => (o.id && o.id === ev.id) || o.url === ev.url) === index;
+      if (!isFirst) return false;
+
+      const url = ev.url.trim();
+      const filename = url.split('/').pop()?.split('?')[0] || '';
+      if (url && descripcion.includes(url)) return false;
+      if (filename && descripcion.includes(filename)) return false;
+      return true;
+    });
+
     const actividadResult: Actividad = {
       ...(actividadToEdit || {}),
       id: actividadToEdit?.id,
@@ -258,7 +271,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       para_cliente: paraCliente.trim(),
       estado,
       shared_with: sharedWith,
-      evidencias,
+      evidencias: cleanEvidencias,
       shared_uuid: actividadToEdit?.shared_uuid,
       comentarios: comentarios.trim() || undefined,
       parent_task_id: parentTaskId || null,
@@ -561,9 +574,6 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               value={descripcion}
               onChange={(newHtml) => setDescripcion(newHtml)}
               placeholder="Describe lo realizado en esta actividad..."
-              onAttachEvidence={(newEv) => {
-                setEvidencias((prev) => [...prev, newEv]);
-              }}
             />
           </div>
 

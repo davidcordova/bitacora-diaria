@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   X,
   Clock,
@@ -50,6 +50,23 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  // Filtrar evidencias adjuntas para evitar mostrar dos veces imágenes/archivos que ya están embebidos en la descripción
+  const displayEvidencias = useMemo(() => {
+    if (!actividad || !actividad.evidencias) return [];
+    const desc = actividad.descripcion || '';
+    return actividad.evidencias.filter((ev, index, self) => {
+      if (!ev || !ev.url) return false;
+      const isFirst = self.findIndex((o) => (o.id && o.id === ev.id) || o.url === ev.url) === index;
+      if (!isFirst) return false;
+
+      const url = ev.url.trim();
+      const filename = url.split('/').pop()?.split('?')[0] || '';
+      if (url && desc.includes(url)) return false;
+      if (filename && desc.includes(filename)) return false;
+      return true;
+    });
+  }, [actividad?.evidencias, actividad?.descripcion]);
 
   if (!isOpen || !actividad) return null;
 
@@ -344,17 +361,17 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
               <div className="flex items-center gap-2 mb-2">
                 <Paperclip className="w-4 h-4 text-slate-500 dark:text-slate-400" />
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Evidencias Adjuntas ({actividad.evidencias?.length || 0})
+                  Evidencias Adjuntas ({displayEvidencias.length})
                 </label>
               </div>
 
-              {!actividad.evidencias || actividad.evidencias.length === 0 ? (
+              {displayEvidencias.length === 0 ? (
                 <div className="p-4 bg-slate-50/60 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 text-center">
                   No hay archivos o capturas adjuntas en esta actividad.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {actividad.evidencias.map((ev, evIdx) => (
+                  {displayEvidencias.map((ev, evIdx) => (
                     <button
                       key={ev.id || evIdx}
                       type="button"
@@ -436,7 +453,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
       <EvidenceViewerModal
         isOpen={viewerOpen}
         onClose={() => setViewerOpen(false)}
-        evidencias={actividad.evidencias || []}
+        evidencias={displayEvidencias}
         initialIndex={viewerIndex}
       />
     </>

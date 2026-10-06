@@ -142,10 +142,8 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
     try {
       const evidencia = await api.uploadFile(file);
 
-      // Notificar al componente padre para que se agregue a la lista de evidencias
-      if (onAttachEvidence) {
-        onAttachEvidence(evidencia);
-      }
+      // Se inserta exclusivamente en el cuerpo enriquecido de la descripción
+      // para evitar duplicidad de archivos con el contenedor de evidencias adjuntas.
 
       // Insertar visualmente en el editor
       if (editorRef.current && !isRawHtml) {

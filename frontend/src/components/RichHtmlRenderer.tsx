@@ -79,10 +79,21 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
       }
     : undefined;
 
+  const handleImageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target && target.tagName === 'IMG') {
+      const src = (target as HTMLImageElement).src;
+      if (src) {
+        window.open(src, '_blank', 'noopener,noreferrer');
+      }
+    }
+  };
+
   return (
     <div
       style={clampStyle}
-      className={`prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200 break-words [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-100 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-[#00F0FF] [&_code]:font-mono [&_code]:text-[11px] [&_img]:max-h-48 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2 ${className}`}
+      onClick={handleImageClick}
+      className={`prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200 break-words [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-100 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-[#00F0FF] [&_code]:font-mono [&_code]:text-[11px] [&_img]:max-h-56 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2 [&_img]:cursor-pointer hover:[&_img]:opacity-90 [&_img]:transition-opacity ${className}`}
       dangerouslySetInnerHTML={{ __html: processedHtml }}
     />
   );

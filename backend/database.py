@@ -208,6 +208,37 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_stagnant ON actividades(estado, updated_at, last_stagnant_notified_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_creator ON actividades(created_by_user_id)")
 
+    # 4.1.1 Limpieza retroactiva de evidencias duplicadas ya embebidas en el cuerpo HTML de la descripción
+    try:
+        cursor.execute("SELECT id, descripcion, evidencias FROM actividades WHERE evidencias IS NOT NULL AND evidencias != '[]' AND (descripcion LIKE '%<img%' OR descripcion LIKE '%/uploads/%')")
+        dupe_rows = cursor.fetchall()
+        for row in dupe_rows:
+            r_id, r_desc, r_ev_json = row[0], row[1] or '', row[2] or '[]'
+            try:
+                ev_list = json.loads(r_ev_json)
+                if isinstance(ev_list, list) and len(ev_list) > 0:
+                    cleaned = []
+                    modified = False
+                    seen = set()
+                    for ev in ev_list:
+                        if isinstance(ev, dict) and ev.get('url'):
+                            url = ev['url'].strip()
+                            if url in seen:
+                                modified = True
+                                continue
+                            seen.add(url)
+                            fname = os.path.basename(url).split('?')[0]
+                            if (url and url in r_desc) or (fname and fname in r_desc):
+                                modified = True
+                                continue
+                        cleaned.append(ev)
+                    if modified:
+                        cursor.execute("UPDATE actividades SET evidencias = ? WHERE id = ?", (json.dumps(cleaned), r_id))
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[DB] Aviso al limpiar duplicados de evidencias: {e}")
+
     # 4.2. Crear tabla buzon_sugerencias y buzon_votos
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS buzon_sugerencias (

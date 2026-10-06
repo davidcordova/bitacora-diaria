@@ -86,6 +86,38 @@ def calculate_hora_fin(hora_inicio, duracion_min, fecha=None):
     except Exception:
         return ''
 
+def sanitize_evidencias(evidencias_input, descripcion):
+    """
+    Elimina evidencias duplicadas y filtra aquellas cuyas URLs o nombres de archivo
+    ya se encuentran incrustados en el HTML de la descripción (WYSIWYG inline).
+    """
+    if not evidencias_input:
+        return []
+    if isinstance(evidencias_input, str):
+        try:
+            evidencias_input = json.loads(evidencias_input)
+        except Exception:
+            return []
+    if not isinstance(evidencias_input, list):
+        return []
+
+    desc = descripcion or ''
+    cleaned = []
+    seen = set()
+    for ev in evidencias_input:
+        if not isinstance(ev, dict):
+            continue
+        url = (ev.get('url') or '').strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        filename = os.path.basename(url).split('?')[0]
+        # Si la imagen o archivo ya está incrustado en el cuerpo de la descripción, no se duplica en evidencias adjuntas
+        if (url and url in desc) or (filename and filename in desc):
+            continue
+        cleaned.append(ev)
+    return cleaned
+
 # Helper para normalizar evidencias y tareas compartidas en el diccionario de una actividad
 def format_actividad_dict(act_row, users_map=None, fecha=None):
     a_dict = dict(act_row)
@@ -93,16 +125,7 @@ def format_actividad_dict(act_row, users_map=None, fecha=None):
     if not a_dict.get('hora_fin') and a_dict.get('hora_inicio'):
         a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'), act_fecha)
 
-    ev_val = a_dict.get('evidencias')
-    if isinstance(ev_val, str):
-        try:
-            a_dict['evidencias'] = json.loads(ev_val)
-        except Exception:
-            a_dict['evidencias'] = []
-    elif isinstance(ev_val, list):
-        a_dict['evidencias'] = ev_val
-    else:
-        a_dict['evidencias'] = []
+    a_dict['evidencias'] = sanitize_evidencias(a_dict.get('evidencias'), a_dict.get('descripcion', ''))
 
     sw_val = a_dict.get('shared_with')
     if isinstance(sw_val, str):
@@ -1894,8 +1917,8 @@ def save_bitacora():
                     kept_ids.add(target_id)
 
         for idx, act in enumerate(actividades_data):
-            evidencias_val = act.get('evidencias', [])
-            evidencias_json = json.dumps(evidencias_val) if isinstance(evidencias_val, (list, dict)) else (evidencias_val or '[]')
+            evidencias_clean = sanitize_evidencias(act.get('evidencias', []), act.get('descripcion', ''))
+            evidencias_json = json.dumps(evidencias_clean)
             
             shared_with_val = act.get('shared_with', [])
             if not isinstance(shared_with_val, list):
@@ -2177,8 +2200,14 @@ def update_actividad_detalle(act_id):
     
     evidencias_json = None
     if 'evidencias' in data:
-        ev_val = data['evidencias']
-        evidencias_json = json.dumps(ev_val) if isinstance(ev_val, (list, dict)) else str(ev_val)
+        target_desc = data.get('descripcion')
+        if target_desc is None:
+            conn_temp = get_db()
+            c_desc = conn_temp.execute("SELECT descripcion FROM actividades WHERE id = ?", (act_id,)).fetchone()
+            target_desc = c_desc['descripcion'] if (c_desc and 'descripcion' in c_desc.keys()) else ''
+            conn_temp.close()
+        ev_clean = sanitize_evidencias(data['evidencias'], target_desc)
+        evidencias_json = json.dumps(ev_clean)
         
     conn = get_db()
     cursor = conn.cursor()
