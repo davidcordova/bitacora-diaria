@@ -115,6 +115,13 @@ def sanitize_evidencias(evidencias_input, descripcion):
         # Si la imagen o archivo ya está incrustado en el cuerpo de la descripción, no se duplica en evidencias adjuntas
         if (url and url in desc) or (filename and filename in desc):
             continue
+        # Descartar imagen duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
+        if '_' in filename:
+            parts = filename.split('_')
+            if len(parts) >= 2 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                ts_prefix = f"{parts[0]}_{parts[1]}"
+                if ts_prefix in desc:
+                    continue
         cleaned.append(ev)
     return cleaned
 

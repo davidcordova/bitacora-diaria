@@ -176,6 +176,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
           const file = items[i].getAsFile();
           if (file) {
             e.preventDefault();
+            e.stopPropagation();
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const renamedFile = new File([file], `captura-${timestamp}.png`, { type: file.type });
             processUploadFile(renamedFile, true);

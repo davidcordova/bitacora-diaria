@@ -165,6 +165,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         const filename = url.split('/').pop()?.split('?')[0] || '';
         if (url && desc.includes(url)) return false;
         if (filename && desc.includes(filename)) return false;
+
+        // Descartar imagen/captura duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
+        const tsMatch = filename.match(/^(\d{8}_\d{6})/);
+        if (tsMatch && desc.includes(tsMatch[1])) return false;
+
         return true;
       });
 

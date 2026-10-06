@@ -64,6 +64,11 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
       const filename = url.split('/').pop()?.split('?')[0] || '';
       if (url && desc.includes(url)) return false;
       if (filename && desc.includes(filename)) return false;
+
+      // Descartar captura/image.png duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
+      const tsMatch = filename.match(/^(\d{8}_\d{6})/);
+      if (tsMatch && desc.includes(tsMatch[1])) return false;
+
       return true;
     });
   }, [actividad?.evidencias, actividad?.descripcion]);

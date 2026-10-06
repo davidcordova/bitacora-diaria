@@ -231,6 +231,13 @@ def init_db():
                             if (url and url in r_desc) or (fname and fname in r_desc):
                                 modified = True
                                 continue
+                            if '_' in fname:
+                                parts = fname.split('_')
+                                if len(parts) >= 2 and len(parts[0]) == 8 and len(parts[1]) == 6:
+                                    ts_prefix = f"{parts[0]}_{parts[1]}"
+                                    if ts_prefix in r_desc:
+                                        modified = True
+                                        continue
                         cleaned.append(ev)
                     if modified:
                         cursor.execute("UPDATE actividades SET evidencias = ? WHERE id = ?", (json.dumps(cleaned), r_id))

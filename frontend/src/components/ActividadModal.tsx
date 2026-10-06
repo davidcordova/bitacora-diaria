@@ -136,10 +136,24 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Interceptar Ctrl+V global en el modal para capturas de pantalla
+  // Interceptar Ctrl+V global en el modal para capturas de pantalla (solo fuera de campos de texto y del editor)
   useEffect(() => {
     if (!isOpen) return;
     const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.isContentEditable ||
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.closest('[contenteditable="true"]') ||
+          target.closest('.prose') ||
+          target.closest('.html-editor'))
+      ) {
+        // Dejar que el editor correspondiente o campo maneje el pegado sin duplicar en evidencias
+        return;
+      }
+
       const items = e.clipboardData?.items;
       if (!items) return;
       for (let i = 0; i < items.length; i++) {
@@ -257,6 +271,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       const filename = url.split('/').pop()?.split('?')[0] || '';
       if (url && descripcion.includes(url)) return false;
       if (filename && descripcion.includes(filename)) return false;
+
+      // Descartar imagen/captura duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
+      const tsMatch = filename.match(/^(\d{8}_\d{6})/);
+      if (tsMatch && descripcion.includes(tsMatch[1])) return false;
+
       return true;
     });
 
