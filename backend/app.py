@@ -128,7 +128,7 @@ def format_actividad_dict(act_row, users_map=None, fecha=None):
             a_dict['updated_by_name'] = users_map[updater_id]
 
     # Cálculo preciso de días transcurridos sin cambios / estancamiento
-    now_dt = get_peru_now()
+    now_dt = get_peru_now().replace(tzinfo=None)
     last_touch_str = a_dict.get('updated_at') or a_dict.get('created_at') or (f"{act_fecha} 12:00:00" if act_fecha else None)
     days_inactive = 0
     if last_touch_str and a_dict.get('estado') != 'completada':
@@ -162,7 +162,7 @@ def check_and_notify_stagnant_activities(user_id=None, cursor=None, conn=None):
             should_close = True
         cursor = conn.cursor()
 
-    now_dt = get_peru_now()
+    now_dt = get_peru_now().replace(tzinfo=None)
     now_peru_str = get_peru_now_str()
 
     query = '''
