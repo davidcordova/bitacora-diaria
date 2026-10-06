@@ -48,11 +48,9 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
 
   const handleCopy = async () => {
     const text = generateSummaryText(bitacora);
-    const ok = await copyToClipboard(text);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
+    await copyToClipboard(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const handleWhatsApp = () => {

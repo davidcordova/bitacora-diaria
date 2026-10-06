@@ -77,11 +77,9 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
 
   const handleCopyDescription = async () => {
     const text = stripHtml(actividad.descripcion);
-    const ok = await copyToClipboard(text);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+    await copyToClipboard(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleOpenEvidence = (idx: number) => {

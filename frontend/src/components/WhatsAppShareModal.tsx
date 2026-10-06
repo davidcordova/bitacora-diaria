@@ -111,19 +111,15 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
 
   const handleCopyLink = async () => {
     if (!whatsappUrl) return;
-    const ok = await copyToClipboard(whatsappUrl);
-    if (ok) {
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 2500);
-    }
+    await copyToClipboard(whatsappUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   const handleCopyMessage = async () => {
-    const ok = await copyToClipboard(messageText);
-    if (ok) {
-      setCopiedText(true);
-      setTimeout(() => setCopiedText(false), 2500);
-    }
+    await copyToClipboard(messageText);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2500);
   };
 
   return (
