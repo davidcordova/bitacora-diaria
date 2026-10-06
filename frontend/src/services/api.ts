@@ -339,6 +339,19 @@ export const api = {
     return [];
   },
 
+  async getStagnantActividades(userId?: number): Promise<{ success: boolean; stagnant_count: number; notified_count: number; items: Actividad[] }> {
+    try {
+      const q = userId ? `?user_id=${userId}` : '';
+      const res = await fetch(`${API_BASE}/actividades/stagnant${q}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('API get stagnant actividades error', e);
+    }
+    return { success: false, stagnant_count: 0, notified_count: 0, items: [] };
+  },
+
   async importarActividadesPendientes(
     colaborador: string,
     userId?: number,

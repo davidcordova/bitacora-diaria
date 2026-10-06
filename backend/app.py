@@ -6,6 +6,7 @@ import threading
 import time
 import io
 import csv
+import re
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -125,7 +126,155 @@ def format_actividad_dict(act_row, users_map=None, fecha=None):
         updater_id = a_dict.get('updated_by_user_id')
         if updater_id and updater_id in users_map:
             a_dict['updated_by_name'] = users_map[updater_id]
+
+    # Cálculo preciso de días transcurridos sin cambios / estancamiento
+    now_dt = get_peru_now()
+    last_touch_str = a_dict.get('updated_at') or a_dict.get('created_at') or (f"{act_fecha} 12:00:00" if act_fecha else None)
+    days_inactive = 0
+    if last_touch_str and a_dict.get('estado') != 'completada':
+        try:
+            clean_ts = str(last_touch_str).strip()
+            if 'T' in clean_ts:
+                clean_ts = clean_ts.replace('T', ' ').split('.')[0].split('+')[0]
+            else:
+                clean_ts = clean_ts.split('.')[0]
+            if len(clean_ts) == 10:
+                clean_ts += ' 12:00:00'
+            dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
+            days_inactive = max(0, (now_dt - dt).days)
+        except Exception:
+            days_inactive = 0
+
+    a_dict['dias_sin_cambio'] = days_inactive
+    a_dict['is_stagnant'] = bool(days_inactive >= 7 and a_dict.get('estado') != 'completada')
     return a_dict
+
+
+def check_and_notify_stagnant_activities(user_id=None, cursor=None, conn=None):
+    """
+    Detecta actividades sin avance/cambio en estado != 'completada' durante >= 7 días.
+    Emite una notificación de advertencia al cumplir 7 días y de forma recurrente cada 7 días mientras no cambie de estado.
+    """
+    should_close = False
+    if not cursor:
+        if not conn:
+            conn = get_db()
+            should_close = True
+        cursor = conn.cursor()
+
+    now_dt = get_peru_now()
+    now_peru_str = get_peru_now_str()
+
+    query = '''
+        SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.created_at, a.updated_at,
+               a.last_stagnant_notified_at, a.created_by_user_id,
+               b.user_id as bitacora_user_id, b.colaborador, b.fecha as bitacora_fecha
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.estado != 'completada'
+          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+    '''
+    params = []
+    if user_id:
+        query += ' AND (b.user_id = ? OR a.created_by_user_id = ?)'
+        params.extend([user_id, user_id])
+
+    query += ' ORDER BY a.id ASC'
+    rows = cursor.execute(query, params).fetchall()
+
+    notified_items = []
+    stagnant_items = []
+
+    for r in rows:
+        act = dict(r)
+        last_touch_str = act.get('updated_at') or act.get('created_at')
+        if not last_touch_str and act.get('bitacora_fecha'):
+            last_touch_str = f"{act['bitacora_fecha']} 12:00:00"
+
+        last_touch_dt = None
+        if last_touch_str:
+            try:
+                clean_ts = str(last_touch_str).strip()
+                if 'T' in clean_ts:
+                    clean_ts = clean_ts.replace('T', ' ').split('.')[0].split('+')[0]
+                else:
+                    clean_ts = clean_ts.split('.')[0]
+                if len(clean_ts) == 10:
+                    clean_ts += ' 12:00:00'
+                last_touch_dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                pass
+
+        if not last_touch_dt:
+            continue
+
+        days_inactive = (now_dt - last_touch_dt).days
+        if days_inactive >= 7:
+            act['dias_estancada'] = days_inactive
+            stagnant_items.append(act)
+
+            # Verificar si corresponde notificar hoy (notificación inicial a los 7 días y recurrente cada 7 días)
+            last_notif_str = act.get('last_stagnant_notified_at')
+            should_notify = False
+
+            if not last_notif_str:
+                should_notify = True
+            else:
+                try:
+                    clean_n = str(last_notif_str).strip().split('.')[0]
+                    last_notif_dt = datetime.strptime(clean_n[:19], '%Y-%m-%d %H:%M:%S')
+                    days_since_notif = (now_dt - last_notif_dt).days
+                    if days_since_notif >= 7:
+                        should_notify = True
+                except Exception:
+                    should_notify = True
+
+            if should_notify:
+                target_user = act.get('created_by_user_id') or act.get('bitacora_user_id')
+                if target_user:
+                    raw_desc = act.get('descripcion') or 'Actividad sin descripción'
+                    clean_desc = re.sub(r'<[^>]+>', '', raw_desc).strip()
+                    if len(clean_desc) > 80:
+                        clean_desc = clean_desc[:77] + '...'
+
+                    st_label = act.get('estado', 'pendiente').replace('_', ' ').capitalize()
+                    notif_title = f"⚠️ Tarea pendiente sin cambios ({days_inactive} días)"
+                    notif_msg = (
+                        f'La actividad "{clean_desc}" se encuentra en estado "{st_label}" '
+                        f'desde hace {days_inactive} días sin registrar avances ni modificaciones. '
+                        f'Por favor, actualiza su avance o cambia su estado.'
+                    )
+
+                    cursor.execute('''
+                        INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                        VALUES (?, ?, ?, 'warning', 0, ?)
+                    ''', (target_user, notif_title, notif_msg, now_peru_str))
+
+                    cursor.execute('''
+                        UPDATE actividades SET last_stagnant_notified_at = ? WHERE id = ?
+                    ''', (now_peru_str, act['id']))
+
+                    notified_items.append({
+                        'actividad_id': act['id'],
+                        'user_id': target_user,
+                        'dias_inactiva': days_inactive,
+                        'title': notif_title
+                    })
+
+    if conn:
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        if should_close:
+            conn.close()
+
+    return {
+        'stagnant_count': len(stagnant_items),
+        'notified_count': len(notified_items),
+        'stagnant_activities': stagnant_items,
+        'notified': notified_items
+    }
 
 # Configuración de CORS manual y limpia
 @app.after_request
@@ -1777,7 +1926,8 @@ def save_bitacora():
                         comentarios = ?, parent_task_id = ?, tipo_vinculo = ?,
                         created_by_user_id = COALESCE(created_by_user_id, ?),
                         updated_by_user_id = ?,
-                        updated_at = ?
+                        updated_at = ?,
+                        last_stagnant_notified_at = NULL
                     WHERE id = ?
                 ''', (
                     idx,
@@ -2056,7 +2206,8 @@ def update_actividad_detalle(act_id):
                 comentarios = COALESCE(?, comentarios),
                 parent_task_id = COALESCE(?, parent_task_id),
                 tipo_vinculo = COALESCE(?, tipo_vinculo),
-                updated_at = ?
+                updated_at = ?,
+                last_stagnant_notified_at = NULL
             WHERE shared_uuid = ?
         ''', (
             data.get('hora_inicio'),
@@ -2087,7 +2238,8 @@ def update_actividad_detalle(act_id):
                 comentarios = COALESCE(?, comentarios),
                 parent_task_id = COALESCE(?, parent_task_id),
                 tipo_vinculo = COALESCE(?, tipo_vinculo),
-                updated_at = ?
+                updated_at = ?,
+                last_stagnant_notified_at = NULL
             WHERE id = ?
         ''', (
             data.get('hora_inicio'),
@@ -2153,6 +2305,25 @@ def get_actividades_pendientes():
     acts = cursor.execute(query, params).fetchall()
     conn.close()
     return jsonify([format_actividad_dict(a) for a in acts])
+
+
+@app.route('/api/actividades/stagnant', methods=['GET', 'OPTIONS'])
+def get_stagnant_actividades():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    user_id = request.args.get('user_id')
+    user_id_int = int(user_id) if user_id and str(user_id).isdigit() else None
+
+    conn = get_db()
+    cursor = conn.cursor()
+    res = check_and_notify_stagnant_activities(user_id=user_id_int, cursor=cursor, conn=conn)
+    conn.close()
+    return jsonify({
+        "success": True,
+        "stagnant_count": res['stagnant_count'],
+        "notified_count": res['notified_count'],
+        "items": res['stagnant_activities']
+    })
 
 @app.route('/api/bitacoras/<int:bitacora_id>', methods=['DELETE', 'OPTIONS'])
 def delete_bitacora(bitacora_id):
@@ -3074,6 +3245,12 @@ def handle_notifications():
         if not user_id:
             conn.close()
             return jsonify([]), 200
+        try:
+            uid_num = int(user_id) if str(user_id).isdigit() else None
+            check_and_notify_stagnant_activities(user_id=uid_num, cursor=cursor, conn=conn)
+        except Exception as se:
+            print("[Stagnant notification check error]:", se)
+
         rows = cursor.execute('''
             SELECT id, user_id, title, message, type, is_read, created_at as timestamp
             FROM notifications

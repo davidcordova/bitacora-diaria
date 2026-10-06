@@ -43,6 +43,9 @@ export interface Actividad {
   updated_by_name?: string;
   is_deleted?: number;
   deleted_at?: string;
+  dias_sin_cambio?: number;
+  is_stagnant?: boolean;
+  last_stagnant_notified_at?: string;
 }
 
 export interface ActividadReferencia {

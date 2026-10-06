@@ -17,8 +17,9 @@ import {
   Users,
   LayoutList,
   LayoutGrid,
+  AlertTriangle,
 } from 'lucide-react';
-import { Bitacora, User } from '../types';
+import { Bitacora, User, Actividad } from '../types';
 import {
   formatDuration,
   formatDateDisplay,
@@ -53,6 +54,20 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   const [displayMode, setDisplayMode] = useState<'list' | 'grid'>('list');
   const [loading, setLoading] = useState(false);
   const [liveHistorial, setLiveHistorial] = useState<Bitacora[]>(historial || []);
+  const [filtroActividades, setFiltroActividades] = useState<'activas' | 'todas' | 'estancadas'>('activas');
+
+  const isActividadInactiva = (act: Actividad, bitacoraFecha?: string): boolean => {
+    if (act.estado === 'completada') return false;
+    if (act.is_stagnant) return true;
+    if (typeof act.dias_sin_cambio === 'number' && act.dias_sin_cambio >= 7) return true;
+    const dateStr = act.updated_at || act.created_at || (bitacoraFecha ? `${bitacoraFecha} 12:00:00` : null);
+    if (!dateStr) return false;
+    const cleanStr = dateStr.includes('T') ? dateStr : dateStr.replace(' ', 'T');
+    const ts = new Date(cleanStr).getTime();
+    if (isNaN(ts)) return false;
+    const days = Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+    return days >= 7;
+  };
 
   const todayStr = useMemo(() => getTodayLocalDateStr(), []);
   const yesterdayStr = useMemo(() => getYesterdayLocalDateStr(), []);
@@ -144,6 +159,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
     setColaboradorFilter('');
   };
 
+  const totalStagnantTasks = useMemo(() => {
+    let count = 0;
+    roleFilteredHistorial.forEach((b) => {
+      count += (b.actividades || []).filter((a) => isActividadInactiva(a, b.fecha)).length;
+    });
+    return count;
+  }, [roleFilteredHistorial]);
+
   const filtered = useMemo(() => {
     return roleFilteredHistorial.filter((b) => {
       // Filter by specific date
@@ -172,12 +195,44 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
           return false;
         }
       }
+      // Si el filtro de actividades es 'estancadas', mostrar solo bitácoras que tengan al menos una tarea estancada
+      if (filtroActividades === 'estancadas') {
+        const hasStagnant = (b.actividades || []).some((a) => isActividadInactiva(a, b.fecha));
+        if (!hasStagnant) {
+          return false;
+        }
+      }
       return true;
     });
-  }, [roleFilteredHistorial, dateFilter, colaboradorFilter, searchTerm, isAnalyst, users]);
+  }, [roleFilteredHistorial, dateFilter, colaboradorFilter, searchTerm, isAnalyst, users, filtroActividades]);
 
   return (
     <div className="space-y-4">
+      {/* Alerta Destacada de Tareas Estancadas (+7 días) */}
+      {totalStagnantTasks > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">
+                {totalStagnantTasks} actividad{totalStagnantTasks === 1 ? '' : 'es'} sin cambios desde hace más de 7 días
+              </span>
+              <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
+                Se han ocultado del historial principal para mantener limpias tus jornadas pasadas. Recibirás recordatorios automáticos cada 7 días hasta que cambien de estado.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltroActividades((prev) => (prev === 'estancadas' ? 'activas' : 'estancadas'))}
+            className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-sm text-xs shrink-0 self-end sm:self-auto"
+          >
+            {filtroActividades === 'estancadas' ? 'Ver Historial Normal' : 'Revisar Tareas Estancadas'}
+          </button>
+        </div>
+      )}
 
       {/* Search and filter controls bar */}
       <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 space-y-3.5 shadow-sm transition-all duration-200">
@@ -258,6 +313,33 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               <UserIcon className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
             </div>
           )}
+
+          {/* 3.2 Activity Stagnancy Filter */}
+          <div className="relative min-w-[195px]">
+            <select
+              value={filtroActividades}
+              onChange={(e) => setFiltroActividades(e.target.value as any)}
+              className={`w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
+                filtroActividades === 'estancadas'
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40'
+                  : filtroActividades === 'todas'
+                  ? 'bg-slate-50 dark:bg-[#161722] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-[#252636]'
+                  : 'bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/40'
+              }`}
+              title="Filtrar visibilidad de actividades en el historial"
+            >
+              <option value="activas" className="bg-white dark:bg-[#161722]">
+                Ocultar inactivas (Recomendado)
+              </option>
+              <option value="todas" className="bg-white dark:bg-[#161722]">
+                Mostrar todas las tareas
+              </option>
+              <option value="estancadas" className="bg-white dark:bg-[#161722]">
+                ⚠️ Solo estancadas (+7 días)
+              </option>
+            </select>
+            <Filter className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+          </div>
 
           {/* 3.1 Refresh Button */}
           <button
@@ -455,20 +537,50 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                     {/* Col 4: Tareas Registradas */}
                     <div className="col-span-3 pr-2">
                       <div className="space-y-1">
-                        {item.actividades.slice(0, 2).map((act, aIdx) => (
-                          <div key={aIdx} className="text-xs text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
-                            <span className="truncate">{stripHtml(act.descripcion)}</span>
-                          </div>
-                        ))}
-                        {item.actividades.length > 2 && (
-                          <div className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold">
-                            +{item.actividades.length - 2} tareas más...
-                          </div>
-                        )}
-                        {item.actividades.length === 0 && (
-                          <span className="text-xs text-slate-400 dark:text-slate-500 italic">Sin actividades detalladas</span>
-                        )}
+                        {(() => {
+                          const actsToShow = (item.actividades || []).filter((act) => {
+                            if (filtroActividades === 'todas') return true;
+                            if (filtroActividades === 'estancadas') return isActividadInactiva(act, item.fecha);
+                            return !isActividadInactiva(act, item.fecha);
+                          });
+                          const hiddenCount = (item.actividades || []).length - actsToShow.length;
+
+                          if (actsToShow.length === 0) {
+                            return (
+                              <div className="text-xs text-slate-400 dark:text-slate-500 italic flex items-center gap-1.5 flex-wrap">
+                                <span>Sin actividades activas</span>
+                                {hiddenCount > 0 && (
+                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/60 font-semibold">
+                                    ({hiddenCount} inactiva{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''})
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {actsToShow.slice(0, 2).map((act, aIdx) => (
+                                <div key={aIdx} className="text-xs text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
+                                  <span className="truncate">{stripHtml(act.descripcion)}</span>
+                                </div>
+                              ))}
+                              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                                {actsToShow.length > 2 && (
+                                  <span className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold">
+                                    +{actsToShow.length - 2} tareas más...
+                                  </span>
+                                )}
+                                {hiddenCount > 0 && (
+                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/60 font-semibold">
+                                    +{hiddenCount} inactiva{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
 
@@ -655,17 +767,50 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                   {/* Actividades preview */}
                   <div className="bg-slate-50/80 dark:bg-[#161722] rounded-xl p-3 mb-4 space-y-1.5 max-h-36 overflow-y-auto border border-slate-200/60 dark:border-[#252636]/60">
-                    {item.actividades.slice(0, 3).map((act, aIdx) => (
-                      <div key={aIdx} className="text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
-                        <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">•</span>
-                        <span className="truncate flex-1">{stripHtml(act.descripcion)}</span>
-                      </div>
-                    ))}
-                    {item.actividades.length > 3 && (
-                      <div className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold pt-1">
-                        +{item.actividades.length - 3} actividades más...
-                      </div>
-                    )}
+                    {(() => {
+                      const actsToShow = (item.actividades || []).filter((act) => {
+                        if (filtroActividades === 'todas') return true;
+                        if (filtroActividades === 'estancadas') return isActividadInactiva(act, item.fecha);
+                        return !isActividadInactiva(act, item.fecha);
+                      });
+                      const hiddenCount = (item.actividades || []).length - actsToShow.length;
+
+                      if (actsToShow.length === 0) {
+                        return (
+                          <div className="text-xs text-slate-400 dark:text-slate-500 italic flex items-center gap-1.5 flex-wrap">
+                            <span>Sin actividades activas</span>
+                            {hiddenCount > 0 && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/60 font-semibold">
+                                ({hiddenCount} inactiva{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <>
+                          {actsToShow.slice(0, 3).map((act, aIdx) => (
+                            <div key={aIdx} className="text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
+                              <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">•</span>
+                              <span className="truncate flex-1">{stripHtml(act.descripcion)}</span>
+                            </div>
+                          ))}
+                          <div className="flex items-center gap-2 flex-wrap pt-1">
+                            {actsToShow.length > 3 && (
+                              <span className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold">
+                                +{actsToShow.length - 3} actividades más...
+                              </span>
+                            )}
+                            {hiddenCount > 0 && (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/60 font-semibold">
+                                +{hiddenCount} inactiva{hiddenCount > 1 ? 's' : ''} oculta{hiddenCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 

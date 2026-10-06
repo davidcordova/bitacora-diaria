@@ -22,6 +22,16 @@ def get_peru_now_str():
 def get_peru_today_str():
     return get_peru_now().strftime('%Y-%m-%d')
 
+def is_production_mode():
+    return bool(
+        os.environ.get('COOLIFY_CONTAINER_NAME') or
+        os.environ.get('COOLIFY_URL') or
+        os.environ.get('COOLIFY_RESOURCE_UUID') or
+        os.environ.get('FLASK_ENV') == 'production' or
+        os.environ.get('ENV') == 'production' or
+        os.environ.get('APP_ENV') == 'production'
+    )
+
 DB_PATH = os.environ.get('DATABASE_PATH') or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'bitacora.db'
 )
@@ -184,6 +194,8 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN updated_by_user_id INTEGER REFERENCES users(id)")
     if 'hora_fin' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN hora_fin TEXT")
+    if 'last_stagnant_notified_at' not in act_columns:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN last_stagnant_notified_at DATETIME")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
@@ -193,6 +205,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_shared ON actividades(shared_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_estado ON actividades(estado)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_deleted ON actividades(is_deleted, deleted_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_stagnant ON actividades(estado, updated_at, last_stagnant_notified_at)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_creator ON actividades(created_by_user_id)")
 
     # 4.2. Crear tabla buzon_sugerencias y buzon_votos
@@ -424,7 +437,7 @@ def init_db():
     ''')
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_it_audit_cred ON it_credential_audit(credential_id, created_at)")
 
-    # 6.7 Datos Iniciales de Prueba para Empresas, Marcas y Credenciales IT
+    # 6.7 Datos Iniciales para Empresas y Marcas IT
     cursor.execute("SELECT COUNT(*) FROM it_empresas")
     if cursor.fetchone()[0] == 0:
         cursor.execute("INSERT INTO it_empresas (nombre, color) VALUES ('Marketing Alterno Perú', '#00F0FF')")
@@ -445,42 +458,66 @@ def init_db():
         admin_u = cursor.fetchone()
         admin_uid = admin_u[0] if admin_u else 1
 
-        # Credenciales de ejemplo IT
-        initial_creds = [
-            (emp1_id, m1_id, 'Zimbra Mail', 'Correo Corporativo', 'https://mail.marketingalterno.pe', 'admin@marketingalterno.pe', 'Z1mbr4#Mkt2026!', 'Panel de administración Zimbra 9 Network Edition', 'admin', admin_uid),
-            (emp1_id, m2_id, 'Odoo ERP', 'ERP / Finanzas', 'https://odoo.marketingalterno.pe', 'soporte.sistemas', '0d00_P3ru#4829', 'Base de datos principal de producción v16', 'operativa', admin_uid),
-            (emp1_id, m1_id, 'Synology NAS IT', 'Storage / Servidor', 'https://nas.marketingalterno.pe:5001', 'root_nas', 'N@s_B4ckup#992', 'Almacenamiento de backups y repositorios de diseño', 'master', admin_uid),
-            (emp1_id, m1_id, 'Office 365 Admin', 'Cloud / Correo', 'https://admin.microsoft.com', 'itadmin@marketingalterno.pe', 'M365#AdminSec_26', 'Portal Tenant M365 Business Standard', 'admin', admin_uid),
-            (emp2_id, m3_id, 'Zoom Enterprise', 'Comunicaciones', 'https://zoom.us/signin', 'comunicaciones@retailgroup.pe', 'Z00m#Corp_4411', 'Licencia Business para reuniones corporativas', 'operativa', admin_uid),
-        ]
-        for c in initial_creds:
-            cursor.execute('''
-                INSERT INTO it_credentials 
-                (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso, usuario_login, password_secret, notas, tipo_cuenta, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', c)
-            new_cred_id = cursor.lastrowid
-            # Permiso automático completo para el admin
-            cursor.execute('''
-                INSERT INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
-                VALUES (?, ?, 1, 1, ?)
-            ''', (new_cred_id, admin_uid, admin_uid))
+        # En entorno LOCAL únicamente: insertar credenciales de ejemplo y accesos directos de prueba
+        if not is_production_mode():
+            initial_creds = [
+                (emp1_id, m1_id, 'Zimbra Mail', 'Correo Corporativo', 'https://mail.marketingalterno.pe', 'admin@marketingalterno.pe', 'Z1mbr4#Mkt2026!', 'Panel de administración Zimbra 9 Network Edition', 'admin', admin_uid),
+                (emp1_id, m2_id, 'Odoo ERP', 'ERP / Finanzas', 'https://odoo.marketingalterno.pe', 'soporte.sistemas', '0d00_P3ru#4829', 'Base de datos principal de producción v16', 'operativa', admin_uid),
+                (emp1_id, m1_id, 'Synology NAS IT', 'Storage / Servidor', 'https://nas.marketingalterno.pe:5001', 'root_nas', 'N@s_B4ckup#992', 'Almacenamiento de backups y repositorios de diseño', 'master', admin_uid),
+                (emp1_id, m1_id, 'Office 365 Admin', 'Cloud / Correo', 'https://admin.microsoft.com', 'itadmin@marketingalterno.pe', 'M365#AdminSec_26', 'Portal Tenant M365 Business Standard', 'admin', admin_uid),
+                (emp2_id, m3_id, 'Zoom Enterprise', 'Comunicaciones', 'https://zoom.us/signin', 'comunicaciones@retailgroup.pe', 'Z00m#Corp_4411', 'Licencia Business para reuniones corporativas', 'operativa', admin_uid),
+            ]
+            for c in initial_creds:
+                cursor.execute('''
+                    INSERT INTO it_credentials 
+                    (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso, usuario_login, password_secret, notas, tipo_cuenta, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', c)
+                new_cred_id = cursor.lastrowid
+                # Permiso automático completo para el admin
+                cursor.execute('''
+                    INSERT INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
+                    VALUES (?, ?, 1, 1, ?)
+                ''', (new_cred_id, admin_uid, admin_uid))
 
-        # Accesos directos de ejemplo
-        cursor.execute("SELECT COUNT(*) FROM quick_links")
-        if cursor.fetchone()[0] == 0:
-            cursor.execute('''
-                INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
-                VALUES (?, 'Google Workspace', 'https://workspace.google.com', 'Herramientas', 'Suite de productividad y correo corporativo', 'Mail', '#00F0FF', 'global')
-            ''', (admin_uid,))
-            cursor.execute('''
-                INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
-                VALUES (?, 'Portal Zimbra Webmail', 'https://mail.marketingalterno.pe', 'Comunicaciones', 'Acceso directo al correo corporativo Zimbra', 'Mail', '#3B82F6', 'global')
-            ''', (admin_uid,))
-            cursor.execute('''
-                INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
-                VALUES (?, 'Panel de Servidores AWS', 'https://aws.amazon.com/console', 'Sistemas', 'Consola de nube AWS para gestión de instancias', 'Server', '#F59E0B', 'equipo')
-            ''', (admin_uid,))
+            # Accesos directos de ejemplo (solo local)
+            cursor.execute("SELECT COUNT(*) FROM quick_links")
+            if cursor.fetchone()[0] == 0:
+                cursor.execute('''
+                    INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
+                    VALUES (?, 'Google Workspace', 'https://workspace.google.com', 'Herramientas', 'Suite de productividad y correo corporativo', 'Mail', '#00F0FF', 'global')
+                ''', (admin_uid,))
+                cursor.execute('''
+                    INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
+                    VALUES (?, 'Portal Zimbra Webmail', 'https://mail.marketingalterno.pe', 'Comunicaciones', 'Acceso directo al correo corporativo Zimbra', 'Mail', '#3B82F6', 'global')
+                ''', (admin_uid,))
+                cursor.execute('''
+                    INSERT INTO quick_links (user_id, titulo, url, categoria, descripcion, icono, color, visibilidad)
+                    VALUES (?, 'Panel de Servidores AWS', 'https://aws.amazon.com/console', 'Sistemas', 'Consola de nube AWS para gestión de instancias', 'Server', '#F59E0B', 'equipo')
+                ''', (admin_uid,))
+
+    # Si estamos en PRODUCCIÓN: Limpiar quirúrgicamente datos semilla de prueba si existen en la base de datos
+    if is_production_mode():
+        sample_cred_logins = [
+            'admin@marketingalterno.pe', 'soporte.sistemas', 'root_nas',
+            'itadmin@marketingalterno.pe', 'comunicaciones@retailgroup.pe'
+        ]
+        q_marks = ','.join(['?'] * len(sample_cred_logins))
+        cursor.execute(f"DELETE FROM it_credential_permissions WHERE credential_id IN (SELECT id FROM it_credentials WHERE usuario_login IN ({q_marks}))", sample_cred_logins)
+        cursor.execute(f"DELETE FROM it_credentials WHERE usuario_login IN ({q_marks})", sample_cred_logins)
+
+        sample_links = ['Google Workspace', 'Portal Zimbra Webmail', 'Panel de Servidores AWS']
+        l_marks = ','.join(['?'] * len(sample_links))
+        cursor.execute(f"DELETE FROM quick_links WHERE titulo IN ({l_marks})", sample_links)
+
+        sample_colabs = [
+            'Carlos Mendoza Vargas', 'Lucía Torres Paredes', 'Diego Rivas Chávez',
+            'Mariana Quispe Benítez', 'Jorge Herrera Silva', 'Ana Sofía Morales',
+            'Rodrigo Gómez Flores', 'Álvaro Castillo Wong', 'Valeria Paz Soldán',
+            'Fernando Cáceres Luna', 'Patricia Ramos Vega', 'Nuevo Colaborador TI'
+        ]
+        c_marks = ','.join(['?'] * len(sample_colabs))
+        cursor.execute(f"DELETE FROM it_platform_users WHERE colaborador_nombre IN ({c_marks})", sample_colabs)
 
     # 6.8 Bóveda IT: Directorio de Cuentas de Usuarios por Plataforma (Soporte y Reseteo)
     cursor.execute('''
@@ -513,9 +550,9 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_platform_users_colab ON it_platform_users(colaborador_nombre)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_platform_users_login ON it_platform_users(usuario_login)")
 
-    # 6.9 Datos Semilla para Cuentas de Usuarios por Plataforma
+    # 6.9 Datos Semilla para Cuentas de Usuarios por Plataforma (SOLO en entorno local)
     cursor.execute("SELECT COUNT(*) FROM it_platform_users")
-    if cursor.fetchone()[0] == 0:
+    if not is_production_mode() and cursor.fetchone()[0] == 0:
         cursor.execute("SELECT id FROM it_empresas ORDER BY id ASC LIMIT 2")
         emp_rows = cursor.fetchall()
         e1_id = emp_rows[0][0] if len(emp_rows) > 0 else 1
