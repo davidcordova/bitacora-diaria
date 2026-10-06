@@ -19,6 +19,7 @@ import {
   formatDateDisplay,
   getEstadoBadgeInfo,
   generateSummaryText,
+  copyToClipboard,
 } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
@@ -47,12 +48,10 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
 
   const handleCopy = async () => {
     const text = generateSummaryText(bitacora);
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch (e) {
-      console.error('Error al copiar al portapapeles', e);
     }
   };
 

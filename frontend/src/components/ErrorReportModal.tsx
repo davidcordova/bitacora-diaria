@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { User, Evidencia } from '../types';
 import { api } from '../services/api';
+import { copyToClipboard } from '../utils/formatters';
 
 interface ErrorReportModalProps {
   isOpen: boolean;
@@ -93,12 +94,8 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
 =====================================`;
 
   const handleCopyReport = async () => {
-    try {
-      await navigator.clipboard.writeText(technicalReportText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    } catch {
-      // Fallback
+    const ok = await copyToClipboard(technicalReportText);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     }

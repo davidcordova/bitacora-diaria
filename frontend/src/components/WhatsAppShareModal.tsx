@@ -13,7 +13,7 @@ import {
   Send,
 } from 'lucide-react';
 import { Bitacora, User, Team } from '../types';
-import { generateSummaryText } from '../utils/formatters';
+import { generateSummaryText, copyToClipboard } from '../utils/formatters';
 
 interface WhatsAppShareModalProps {
   isOpen: boolean;
@@ -111,22 +111,18 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
 
   const handleCopyLink = async () => {
     if (!whatsappUrl) return;
-    try {
-      await navigator.clipboard.writeText(whatsappUrl);
+    const ok = await copyToClipboard(whatsappUrl);
+    if (ok) {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2500);
-    } catch (e) {
-      console.error('Error al copiar enlace', e);
     }
   };
 
   const handleCopyMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(messageText);
+    const ok = await copyToClipboard(messageText);
+    if (ok) {
       setCopiedText(true);
       setTimeout(() => setCopiedText(false), 2500);
-    } catch (e) {
-      console.error('Error al copiar mensaje', e);
     }
   };
 
@@ -335,16 +331,23 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
         {/* Footer Actions */}
         <div className="p-4 sm:p-5 bg-slate-50 dark:bg-[#161722] border-t border-slate-200/80 dark:border-[#252636] space-y-2.5">
           {/* Main WhatsApp Open Button */}
-          <button
-            type="button"
-            disabled={!isValidPhone}
-            onClick={handleOpenWhatsApp}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 disabled:opacity-50 disabled:pointer-events-none text-slate-950 py-3.5 px-5 rounded-full text-sm font-bold shadow-lg shadow-[#00F0FF]/20 transition-all cursor-pointer"
+          <a
+            href={isValidPhone ? whatsappUrl : undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => {
+              if (!isValidPhone) {
+                e.preventDefault();
+              }
+            }}
+            className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 ${
+              !isValidPhone ? 'opacity-50 pointer-events-none' : ''
+            } text-slate-950 py-3.5 px-5 rounded-full text-sm font-bold shadow-lg shadow-[#00F0FF]/20 transition-all cursor-pointer`}
           >
             <Send className="w-4 h-4" />
             <span>Enviar por WhatsApp a {activeRecipient.name}</span>
             <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-          </button>
+          </a>
 
           {/* Secondary Copy buttons */}
           <div className="grid grid-cols-2 gap-2">

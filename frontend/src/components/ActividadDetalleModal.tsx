@@ -22,7 +22,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
-import { formatDuration, getTimeInStatusInfo, stripHtml, calculateHoraFin } from '../utils/formatters';
+import { formatDuration, getTimeInStatusInfo, stripHtml, calculateHoraFin, copyToClipboard } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 
@@ -75,10 +75,13 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
 
   if (!isOpen || !actividad) return null;
 
-  const handleCopyDescription = () => {
-    navigator.clipboard.writeText(stripHtml(actividad.descripcion));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyDescription = async () => {
+    const text = stripHtml(actividad.descripcion);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleOpenEvidence = (idx: number) => {

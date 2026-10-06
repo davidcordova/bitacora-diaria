@@ -22,7 +22,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { Bitacora, Actividad, EstadoActividad, Evidencia, User, Team } from '../types';
-import { formatDateLong, formatDateDisplay, formatDuration, stripHtml } from '../utils/formatters';
+import { formatDateLong, formatDateDisplay, formatDuration, stripHtml, copyToClipboard } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
@@ -61,7 +61,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
     0
   );
 
-  const handleCopySummary = () => {
+  const handleCopySummary = async () => {
     let text = `📋 BITÁCORA DIARIA DE ACTIVIDADES\n`;
     text += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
     text += `📅 Fecha: ${formatDateLong(bitacora.fecha)}\n`;
@@ -95,9 +95,11 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
       text += `• Prioridad siguiente día: ${bitacora.prioridad_siguiente}\n`;
     }
 
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
   };
 
   const handleOpenEvidenceViewer = (evList: Evidencia[], idx: number) => {

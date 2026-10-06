@@ -63,6 +63,7 @@ import {
   User as UserType
 } from '../types';
 import { api } from '../services/api';
+import { copyToClipboard } from '../utils/formatters';
 import {
   generateCorporateEmail,
   generateCorporatePassword,
@@ -510,8 +511,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       registerRevealAuditAndRateLimit();
     }
 
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyToClipboard(text);
+    if (ok) {
       const key = `${credId || 'gen'}-${label}`;
       setCopiedId(key);
       setTimeout(() => setCopiedId(null), 2500);
@@ -519,11 +520,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       if (isPassword) {
         if (onShowToast) onShowToast(`📋 ${label} copiada. Se eliminará del portapapeles en 30 segundos`, 'success');
         setTimeout(async () => {
-          try {
-            await navigator.clipboard.writeText('');
-          } catch (e) {
-            // Ignorar si la pestaña perdió foco
-          }
+          await copyToClipboard('');
         }, 30000);
       } else {
         if (onShowToast) onShowToast(`${label} copiado al portapapeles`, 'success');
@@ -532,8 +529,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       if (credId && isPassword && currentUser?.id) {
         api.auditItCredential(credId, currentUser.id, 'copy_password');
       }
-    } catch (e) {
-      if (onShowToast) onShowToast('No se pudo copiar al portapapeles', 'error');
+    } else {
+      if (onShowToast) onShowToast(`Error al copiar ${label} al portapapeles`, 'error');
     }
   };
 

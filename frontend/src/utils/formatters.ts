@@ -437,3 +437,6 @@ export const exportActivitiesToCSV = (
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+export { copyToClipboard } from './clipboard';
+
