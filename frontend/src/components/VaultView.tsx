@@ -63,6 +63,14 @@ import {
   User as UserType
 } from '../types';
 import { api } from '../services/api';
+import {
+  generateCorporateEmail,
+  generateCorporatePassword,
+  generateStrongPlatformPassword,
+  isMailPlatform,
+  detectCorporateEntity,
+  CorporateEntity,
+} from '../utils/itAccountHelpers';
 
 interface VaultViewProps {
   currentUser?: UserType | null;
@@ -151,10 +159,11 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   const [filterPreviewStatus, setFilterPreviewStatus] = useState<'todos' | 'ready' | 'update' | 'invalid'>('todos');
 
   // Formulario de Usuario en Plataforma
+  const [selectedCorporateEntity, setSelectedCorporateEntity] = useState<CorporateEntity>('marketing_alterno');
   const [userFormData, setUserFormData] = useState({
     empresa_id: 0,
     marca_id: 0,
-    plataforma: 'Zimbra Mail',
+    plataforma: 'Zimbra',
     colaborador_nombre: '',
     colaborador_cargo: '',
     colaborador_email: '',
@@ -684,6 +693,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
     if (user) {
       setEditingPlatformUser(user);
+      const userEmp = empresas.find((e) => e.id === user.empresa_id);
+      setSelectedCorporateEntity(detectCorporateEntity(userEmp?.nombre));
       setUserFormData({
         empresa_id: user.empresa_id,
         marca_id: user.marca_id || 0,
@@ -699,14 +710,27 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       });
     } else {
       setEditingPlatformUser(null);
-      const defaultEmp = empresas[0];
-      const autoPass = generatePassword(14);
-      const defaultPlat = plataformasCatalog.length > 0 ? plataformasCatalog[0].nombre : 'Zimbra Mail';
+      // Empresa por defecto: Buscar "Marketing Alterno Perú" o que contenga "marketing"
+      const mktEmp = empresas.find((e) => /marketing\s*alterno/i.test(e.nombre));
+      const defaultEmp = mktEmp || empresas[0];
+
+      // Plataforma por defecto: "Zimbra"
+      const zimbraPlat = plataformasCatalog.find((p) => /zimbra/i.test(p.nombre));
+      const defaultPlat = selectedUserPlataforma !== 'todas'
+        ? selectedUserPlataforma
+        : (zimbraPlat ? zimbraPlat.nombre : 'Zimbra');
+
+      const initialEntity = detectCorporateEntity(defaultEmp?.nombre);
+      setSelectedCorporateEntity(initialEntity);
+
+      const autoPass = isMailPlatform(defaultPlat)
+        ? generateCorporatePassword('')
+        : generateStrongPlatformPassword(14);
 
       setUserFormData({
         empresa_id: defaultEmp.id,
         marca_id: defaultEmp.marcas && defaultEmp.marcas.length > 0 ? defaultEmp.marcas[0].id : 0,
-        plataforma: selectedUserPlataforma !== 'todas' ? selectedUserPlataforma : defaultPlat,
+        plataforma: defaultPlat,
         colaborador_nombre: '',
         colaborador_cargo: cargosCatalog.length > 0 ? cargosCatalog[0].nombre : '',
         colaborador_email: '',
@@ -718,6 +742,70 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       });
     }
     setIsUserModalOpen(true);
+  };
+
+  const handleColaboradorNameChange = (name: string) => {
+    const isMail = isMailPlatform(userFormData.plataforma);
+    if (isMail) {
+      const generatedEmail = generateCorporateEmail(name, selectedCorporateEntity);
+      const generatedPass = generateCorporatePassword(name);
+      setUserFormData((prev) => ({
+        ...prev,
+        colaborador_nombre: name,
+        usuario_login: generatedEmail,
+        colaborador_email: generatedEmail,
+        password_actual: generatedPass,
+      }));
+    } else {
+      setUserFormData((prev) => ({
+        ...prev,
+        colaborador_nombre: name,
+      }));
+    }
+  };
+
+  const handleSelectCorporateEntity = (entity: CorporateEntity) => {
+    setSelectedCorporateEntity(entity);
+    if (userFormData.colaborador_nombre) {
+      const mail = generateCorporateEmail(userFormData.colaborador_nombre, entity);
+      setUserFormData((prev) => ({
+        ...prev,
+        usuario_login: mail,
+        colaborador_email: mail,
+      }));
+      if (onShowToast) {
+        const label = entity === 'solopromo' ? 'Soporte Promocional' : entity === 'hp' ? 'HP' : 'Marketing Alterno';
+        onShowToast(`Formato de correo actualizado para ${label}`, 'info');
+      }
+    }
+  };
+
+  const handlePlataformaInputChange = (newPlat: string) => {
+    const isMail = isMailPlatform(newPlat);
+    const wasMail = isMailPlatform(userFormData.plataforma);
+
+    let newLogin = userFormData.usuario_login;
+    let newEmail = userFormData.colaborador_email;
+    let newPass = userFormData.password_actual;
+
+    if (isMail && (!wasMail || !newLogin)) {
+      if (userFormData.colaborador_nombre) {
+        const mail = generateCorporateEmail(userFormData.colaborador_nombre, selectedCorporateEntity);
+        newLogin = mail;
+        newEmail = mail;
+        newPass = generateCorporatePassword(userFormData.colaborador_nombre);
+      }
+    } else if (!isMail && wasMail) {
+      newPass = generateStrongPlatformPassword(14);
+    }
+
+    setUserFormData((prev) => ({
+      ...prev,
+      plataforma: newPlat,
+      usuario_login: newLogin,
+      colaborador_email: newEmail,
+      password_actual: newPass,
+    }));
   };
 
   const handleSaveUser = async (e: React.FormEvent) => {
@@ -764,7 +852,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
   const handleOpenResetModal = (user: ItPlatformUser) => {
     setSelectedUserForReset(user);
-    const newPass = generatePassword(14);
+    const newPass = isMailPlatform(user.plataforma)
+      ? generateCorporatePassword(user.colaborador_nombre)
+      : generateStrongPlatformPassword(14);
     setResetGeneratedPass(newPass);
 
     const empName = user.empresa_nombre || 'la Empresa';
@@ -2839,10 +2929,23 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     onChange={(e) => {
                       const newEmpId = Number(e.target.value);
                       const emp = empresas.find((x) => x.id === newEmpId);
+                      const newEntity = detectCorporateEntity(emp?.nombre);
+                      setSelectedCorporateEntity(newEntity);
+
+                      let newLogin = userFormData.usuario_login;
+                      let newEmail = userFormData.colaborador_email;
+                      if (isMailPlatform(userFormData.plataforma) && userFormData.colaborador_nombre) {
+                        const gen = generateCorporateEmail(userFormData.colaborador_nombre, newEntity);
+                        newLogin = gen;
+                        newEmail = gen;
+                      }
+
                       setUserFormData({
                         ...userFormData,
                         empresa_id: newEmpId,
                         marca_id: emp?.marcas && emp.marcas.length > 0 ? emp.marcas[0].id : 0,
+                        usuario_login: newLogin,
+                        colaborador_email: newEmail,
                       });
                     }}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
@@ -2871,9 +2974,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     type="text"
                     required
                     list="plat-options"
-                    placeholder="Selecciona o escribe..."
+                    placeholder="Zimbra Mail, Active Directory..."
                     value={userFormData.plataforma}
-                    onChange={(e) => setUserFormData({ ...userFormData, plataforma: e.target.value })}
+                    onChange={(e) => handlePlataformaInputChange(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                   />
                   <datalist id="plat-options">
@@ -2891,9 +2994,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 <input
                   type="text"
                   required
-                  placeholder="ej. Carlos Mendoza Vargas"
+                  placeholder="ej. Luis Cordova Lopez o Carlos Mendoza Vargas"
                   value={userFormData.colaborador_nombre}
-                  onChange={(e) => setUserFormData({ ...userFormData, colaborador_nombre: e.target.value })}
+                  onChange={(e) => handleColaboradorNameChange(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
                 />
               </div>
@@ -2945,34 +3048,122 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Usuario / Email de Inicio *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-medium text-slate-700 dark:text-slate-300">
+                      Usuario / Email de Inicio *
+                    </label>
+                    {isMailPlatform(userFormData.plataforma) && (
+                      <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-semibold">
+                        Algoritmo {selectedCorporateEntity === 'solopromo' ? 'Solopromo' : selectedCorporateEntity === 'hp' ? 'HP' : 'Marketing'}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="text"
                     required
-                    placeholder="ej. carlos.mendoza"
+                    placeholder="ej. lcordova@marketing-alterno.com"
                     value={userFormData.usuario_login}
-                    onChange={(e) => setUserFormData({ ...userFormData, usuario_login: e.target.value })}
+                    onChange={(e) => setUserFormData({ ...userFormData, usuario_login: e.target.value, colaborador_email: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-xs"
                   />
+
+                  {/* Selector rápido de formato corporativo según entidad */}
+                  {isMailPlatform(userFormData.plataforma) && (
+                    <div className="mt-1.5 space-y-1">
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Formato por entidad:</span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCorporateEntity('marketing_alterno')}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                            selectedCorporateEntity === 'marketing_alterno'
+                              ? 'bg-cyan-500 text-white border-cyan-500 shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                          }`}
+                          title="[Inicial][Apellido]@marketing-alterno.com (ej. lcordova@marketing-alterno.com)"
+                        >
+                          🏢 Marketing Alterno
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCorporateEntity('solopromo')}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                            selectedCorporateEntity === 'solopromo'
+                              ? 'bg-purple-600 text-white border-purple-600 shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                          }`}
+                          title="[Primer Nombre].[Apellido]@solopromo.net (ej. luis.cordova@solopromo.net)"
+                        >
+                          🏷️ Solopromo
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleSelectCorporateEntity('hp')}
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border transition-all cursor-pointer ${
+                            selectedCorporateEntity === 'hp'
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                          }`}
+                          title="[Inicial][Apellido].hp@marketing-alterno.com (ej. lcordova.hp@marketing-alterno.com)"
+                        >
+                          💻 HP
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="font-medium text-slate-700 dark:text-slate-300">Contraseña *</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const pass = generatePassword(14);
-                        setUserFormData({ ...userFormData, password_actual: pass });
-                        if (onShowToast) onShowToast('Contraseña segura generada', 'info');
-                      }}
-                      className="text-cyan-500 hover:text-cyan-400 text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
-                    >
-                      <Sparkles className="w-3 h-3" />
-                      <span>Generar</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {isMailPlatform(userFormData.plataforma) ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const pass = generateCorporatePassword(userFormData.colaborador_nombre);
+                              setUserFormData({ ...userFormData, password_actual: pass });
+                              if (onShowToast) onShowToast('Contraseña corporativa generada (ej. Lu1s2026@)', 'info');
+                            }}
+                            className="text-cyan-600 dark:text-cyan-400 hover:underline text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                            title="Generar contraseña corporativa: Inicial mayúscula + vocales en leet + números + símbolo (@, #, $, !), de 8 a 12 caracteres"
+                          >
+                            <Sparkles className="w-3 h-3 text-cyan-500" />
+                            <span>✨ Corp (Leet)</span>
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">•</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const pass = generateStrongPlatformPassword(14);
+                              setUserFormData({ ...userFormData, password_actual: pass });
+                              if (onShowToast) onShowToast('Contraseña segura aleatoria generada', 'info');
+                            }}
+                            className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[11px] font-medium cursor-pointer"
+                            title="Generar contraseña aleatoria de 14 caracteres"
+                          >
+                            🎲 Aleatoria
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const pass = generateStrongPlatformPassword(14);
+                            setUserFormData({ ...userFormData, password_actual: pass });
+                            if (onShowToast) onShowToast('Contraseña segura de plataforma generada', 'info');
+                          }}
+                          className="text-cyan-600 dark:text-cyan-400 hover:underline text-[11px] font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Generar clave segura de alta entropía (14 caracteres) para plataformas de software"
+                        >
+                          <Sparkles className="w-3 h-3 text-cyan-500" />
+                          <span>✨ Clave Segura</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <input
                     type="text"
@@ -2982,6 +3173,15 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     onChange={(e) => setUserFormData({ ...userFormData, password_actual: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-xs"
                   />
+                  {isMailPlatform(userFormData.plataforma) ? (
+                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                      💡 Regla: <span className="font-semibold text-slate-700 dark:text-slate-300">[Inicial][Nombre leet][Números][@#$!]</span> (8-12 chars, ej. <span className="font-mono text-cyan-700 dark:text-cyan-300 font-bold">Lu1s2026@</span>).
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
+                      🔒 Clave segura de alta entropía generada para software interno (sin creación de correo).
+                    </p>
+                  )}
                 </div>
               </div>
 

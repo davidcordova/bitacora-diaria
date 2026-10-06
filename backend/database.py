@@ -611,6 +611,9 @@ def init_db():
         for p in default_platforms:
             cursor.execute("INSERT OR IGNORE INTO it_plataformas (nombre, tipo_servicio, color) VALUES (?, ?, ?)", p)
 
+    # Asegurar que 'Zimbra' siempre esté presente
+    cursor.execute("INSERT OR IGNORE INTO it_plataformas (nombre, tipo_servicio, color) VALUES ('Zimbra', 'Correo Corporativo', '#00F0FF')")
+
     # 6.11 Bóveda IT: Catálogo Maestro de Cargos / Áreas
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS it_cargos (

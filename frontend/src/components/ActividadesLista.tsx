@@ -670,14 +670,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       {/* Acciones */}
                       <td className="py-3 px-2.5 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDetailModal(act, index)}
-                            className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
-                            title="Ver detalle completo y evidencias"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
 
                           <button
                             type="button"
@@ -751,14 +743,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenDetailModal(act, index)}
-                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
-                        title="Ver detalle"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(act, index)}
