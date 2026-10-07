@@ -833,8 +833,8 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
       {/* MODAL CREAR PROPUESTA */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">
@@ -1051,8 +1051,8 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
       {/* MODAL RESPUESTA ADMIN / LÍDER */}
       {respondModalSug && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">
@@ -1166,14 +1166,14 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       {/* MODAL LIGHTBOX / VISOR DE CAPTURA A PANTALLA COMPLETA */}
       {previewEvidencia && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto"
           onClick={() => setPreviewEvidencia(null)}
         >
           <div
-            className="relative max-w-4xl max-h-[92vh] flex flex-col bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            className="relative max-w-4xl w-full my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh] flex flex-col bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-white/10 text-white">
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-white/10 text-white shrink-0">
               <div className="flex items-center gap-2 min-w-0 pr-4">
                 <ImageIcon className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span className="text-sm font-semibold truncate">{previewEvidencia.nombre}</span>
@@ -1201,7 +1201,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                 </button>
               </div>
             </div>
-            <div className="p-2 flex items-center justify-center overflow-auto max-h-[calc(92vh-60px)] bg-black/60">
+            <div className="p-2 flex-1 min-h-0 flex items-center justify-center overflow-auto bg-black/60">
               <img
                 src={previewEvidencia.url}
                 alt={previewEvidencia.nombre}

@@ -136,16 +136,16 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
   const StatusIcon = statusInfo.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden flex flex-col max-h-[92dvh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-4 bg-slate-50/90 dark:bg-[#161722]/90 border-b border-slate-100 dark:border-[#252636] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/60 dark:border-[#00F0FF]/30">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50/90 dark:bg-[#161722]/90 border-b border-slate-100 dark:border-[#252636] shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/60 dark:border-[#00F0FF]/30 shrink-0">
               <Link2 className="w-4 h-4" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                   Actividad Referenciada #{refId}
                 </h3>
@@ -161,7 +161,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C1D2A] rounded-full transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C1D2A] rounded-full transition-colors cursor-pointer shrink-0"
             title="Cerrar (Esc)"
           >
             <X className="w-5 h-5" />
@@ -169,7 +169,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1 space-y-3.5 sm:space-y-4">
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500 dark:text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin text-cyan-600 dark:text-[#00F0FF]" />
@@ -285,7 +285,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 bg-slate-50/90 dark:bg-[#161722]/90 border-t border-slate-100 dark:border-[#252636] shrink-0 gap-3">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-50/90 dark:bg-[#161722]/90 border-t border-slate-100 dark:border-[#252636] shrink-0 gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={onClose}

@@ -157,24 +157,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#252636] flex flex-col max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722]/80 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-md shadow-[#00F0FF]/20 text-sm font-heading">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722]/80 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-md shadow-[#00F0FF]/20 text-xs sm:text-sm font-heading shrink-0">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0)}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white font-heading">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white font-heading">
                   Mi Perfil & Cuenta
                 </h3>
                 <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border uppercase tracking-wider ${roleColor}`}>
                   {roleLabel}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Gestiona tus datos personales y credenciales de acceso
               </p>
             </div>
@@ -182,7 +182,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[36px] min-h-[36px] flex items-center justify-center"
+            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0"
             title="Cerrar modal"
           >
             <X className="w-5 h-5" />
@@ -190,7 +190,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Scrollable Form Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
+        <form id="user-profile-form" onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Feedback Alerts */}
           {errorMsg && (
             <div className="flex items-center gap-2.5 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 animate-in fade-in">
@@ -394,23 +394,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </form>
 
         {/* Sticky Action Footer */}
-        <div className="shrink-0 px-6 py-3.5 border-t border-slate-100 dark:border-[#252636] bg-slate-50/90 dark:bg-[#161722]/90 backdrop-blur-md flex items-center justify-between gap-3">
+        <div className="shrink-0 px-4 sm:px-6 py-3 border-t border-slate-100 dark:border-[#252636] bg-slate-50/90 dark:bg-[#161722]/90 backdrop-blur-md flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1A1C29] rounded-xl transition-colors cursor-pointer min-h-[40px]"
+            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1A1C29] rounded-xl transition-colors cursor-pointer min-h-[38px]"
           >
             Cancelar
           </button>
 
           <button
             type="button"
-            onClick={(e) => {
-              const form = document.querySelector('form');
+            onClick={() => {
+              const form = document.getElementById('user-profile-form') as HTMLFormElement;
               if (form) form.requestSubmit();
             }}
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-[#00F0FF]/25 cursor-pointer min-h-[40px]"
+            className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-[#00F0FF]/25 cursor-pointer min-h-[38px]"
           >
             <Save className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Guardando...' : 'Guardar Cambios'}</span>

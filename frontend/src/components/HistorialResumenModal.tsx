@@ -144,17 +144,17 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="relative w-full max-w-3xl bg-white dark:bg-[#13141F] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#252636] overflow-hidden my-6 max-h-[90vh] flex flex-col">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+        <div className="relative w-full max-w-3xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-200 dark:border-[#252636] shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black shadow-sm shadow-[#00F0FF]/20">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-200 dark:border-[#252636] shrink-0">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black shadow-sm shadow-[#00F0FF]/20 shrink-0">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
+                  <h3 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100">
                     Resumen Detallado de Bitácora
                   </h3>
                   <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
@@ -164,7 +164,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                     {bitacora.estado || 'Generada'}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Inspección completa de actividades, tiempos, evidencias y cierre de jornada.
                 </p>
               </div>
@@ -173,7 +173,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-lg transition-colors cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-lg transition-colors cursor-pointer shrink-0"
               title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -181,7 +181,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
           </div>
 
           {/* Modal Body - Scrollable */}
-          <div className="p-6 space-y-6 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636]">
               <div>
@@ -387,7 +387,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 bg-slate-50 dark:bg-[#161722] border-t border-slate-200 dark:border-[#252636] shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-6 py-3 bg-slate-50 dark:bg-[#161722] border-t border-slate-200 dark:border-[#252636] shrink-0">
             <div className="flex items-center gap-2">
               <button
                 type="button"

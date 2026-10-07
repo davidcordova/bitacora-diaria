@@ -171,14 +171,14 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/70 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 select-none overflow-y-auto">
       <div
-        className="relative w-full max-w-4xl max-h-[90vh] bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col overflow-hidden"
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-xs border border-rose-200 dark:border-rose-900/40">
               <Trash2 className="w-5 h-5" />
@@ -215,7 +215,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         </div>
 
         {/* Notice Banner */}
-        <div className="bg-amber-50/90 dark:bg-amber-950/30 border-b border-amber-200/80 dark:border-amber-800/40 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-300">
+        <div className="bg-amber-50/90 dark:bg-amber-950/30 border-b border-amber-200/80 dark:border-amber-800/40 px-4 sm:px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-300 shrink-0">
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span>
@@ -234,7 +234,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
 
         {/* Confirm vaciar warning */}
         {confirmVaciar && (
-          <div className="bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/40 px-6 py-3 flex items-center justify-between text-xs text-rose-900 dark:text-rose-300 animate-in slide-in-from-top-2">
+          <div className="bg-rose-50 dark:bg-rose-950/40 border-b border-rose-200 dark:border-rose-900/40 px-4 sm:px-6 py-3 flex items-center justify-between text-xs text-rose-900 dark:text-rose-300 animate-in slide-in-from-top-2 shrink-0">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
               <span>¿Confirmas que deseas purgar de forma permanente todas las actividades de la papelera?</span>
@@ -260,7 +260,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         {/* Feedback Message */}
         {feedbackMsg && (
           <div
-            className={`px-6 py-2.5 text-xs flex items-center justify-between border-b ${
+            className={`px-4 sm:px-6 py-2.5 text-xs flex items-center justify-between border-b shrink-0 ${
               feedbackMsg.type === 'success'
                 ? 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/40'
                 : 'bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900/40'
@@ -284,7 +284,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         )}
 
         {/* Search Bar */}
-        <div className="p-4 border-b border-slate-100 dark:border-[#252636] flex items-center gap-3 bg-slate-50/50 dark:bg-[#161722]/50">
+        <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-[#252636] flex items-center gap-3 bg-slate-50/50 dark:bg-[#161722]/50 shrink-0">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -298,7 +298,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         </div>
 
         {/* Content list */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-3">
           {loading && items.length === 0 ? (
             <div className="py-16 text-center text-slate-400 dark:text-slate-500">
               <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-slate-300 dark:text-slate-600" />

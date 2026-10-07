@@ -137,19 +137,19 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] max-h-[92dvh] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/75 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
+      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 bg-rose-500/10 border-b border-rose-500/20">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-rose-500/10 border-b border-rose-500/20 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-600 dark:text-rose-400 shrink-0">
               <AlertTriangle className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
                 Diagnóstico de Error y Soporte
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                 Tus datos locales están protegidos contra pérdida.
               </p>
             </div>
@@ -157,14 +157,14 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto min-h-0 flex-1">
           {/* Contingency Banner */}
           <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300/60 dark:border-emerald-700/50 rounded-2xl flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
@@ -269,7 +269,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 bg-slate-50/80 dark:bg-[#161722]/80 border-t border-slate-100 dark:border-[#252636] flex items-center justify-between gap-2.5 flex-wrap">
+        <div className="px-4 sm:px-6 py-3 bg-slate-50/80 dark:bg-[#161722]/80 border-t border-slate-100 dark:border-[#252636] flex items-center justify-between gap-2.5 flex-wrap shrink-0">
           <button
             type="button"
             onClick={onRetrySync}

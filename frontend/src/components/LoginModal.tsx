@@ -41,8 +41,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl border border-slate-200/90 dark:border-[#252636] relative">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in">
+      <div className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-md w-full p-5 sm:p-8 shadow-2xl border border-slate-200/90 dark:border-[#252636] relative my-auto max-h-[calc(100dvh-1.5rem)] overflow-y-auto">
         <div className="text-center mb-6">
           {systemSettings?.logo_url ? (
             <div className="flex items-center justify-center mb-3">

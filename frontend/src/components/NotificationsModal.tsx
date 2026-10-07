@@ -207,7 +207,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Notifications List Body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-2.5">
           {filteredNotifications.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-slate-500">
               <div className="w-14 h-14 rounded-3xl bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] flex items-center justify-center mb-3 text-slate-300 dark:text-slate-600">

@@ -37,18 +37,18 @@ export const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ isOpen, onClose 
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-      <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-[#252636] mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+      <div className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-hidden">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-[#252636] mb-3 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+            <div className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 shrink-0">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
                 Guía Rápida de Bitácora
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">
                 Aprende el flujo de trabajo en 30 segundos
               </p>
             </div>
@@ -56,18 +56,18 @@ export const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ isOpen, onClose 
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-[#1C1D2A] transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-[#1C1D2A] transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="space-y-4 my-2">
+        <div className="space-y-3 sm:space-y-4 my-2 overflow-y-auto min-h-0 flex-1 pr-1">
           {steps.map((st) => {
             return (
               <div
                 key={st.number}
-                className="flex items-start gap-3.5 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-[#161722] border border-slate-200/70 dark:border-[#252636]"
+                className="flex items-start gap-3.5 p-3 sm:p-3.5 rounded-2xl bg-slate-50/70 dark:bg-[#161722] border border-slate-200/70 dark:border-[#252636]"
               >
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center font-extrabold text-xs shrink-0 shadow-xs">
                   {st.number}
@@ -86,11 +86,11 @@ export const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ isOpen, onClose 
           })}
         </div>
 
-        <div className="pt-4 border-t border-slate-200/80 dark:border-[#252636] mt-2 flex justify-end">
+        <div className="pt-3 border-t border-slate-200/80 dark:border-[#252636] mt-2 flex justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-7 py-3 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 rounded-full text-xs font-bold shadow-md shadow-[#00F0FF]/20 transition-all cursor-pointer min-h-[44px]"
+            className="w-full sm:w-auto px-6 py-2.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 rounded-full text-xs font-bold shadow-md shadow-[#00F0FF]/20 transition-all cursor-pointer min-h-[40px]"
           >
             ¡Entendido, comenzar!
           </button>

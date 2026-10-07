@@ -59,12 +59,12 @@ export const SummaryDrawer: React.FC<SummaryDrawerProps> = ({
       />
 
       {/* Slide-over panel (Right docked on desktop, bottom/full on mobile) */}
-      <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+      <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
         <div className="w-screen max-w-lg md:max-w-xl bg-white dark:bg-[#13141F] border-l border-slate-200/80 dark:border-[#252636] shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right">
           {/* Header Bar */}
-          <div className="px-5 py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-200/80 dark:border-[#252636] flex items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center shadow-sm shadow-[#00F0FF]/20 shrink-0">
+          <div className="px-4 sm:px-5 py-3.5 sm:py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-200/80 dark:border-[#252636] flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center shadow-sm shadow-[#00F0FF]/20 shrink-0">
                 <FileText className="w-5 h-5 font-bold" />
               </div>
               <div>
@@ -87,7 +87,7 @@ export const SummaryDrawer: React.FC<SummaryDrawerProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer"
+                className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer shrink-0"
                 title="Cerrar panel de resumen"
               >
                 <X className="w-5 h-5" />
@@ -96,7 +96,7 @@ export const SummaryDrawer: React.FC<SummaryDrawerProps> = ({
           </div>
 
           {/* Scrollable Content Body */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
             <ResumenPreview
               bitacora={bitacora}
               isGenerated={isGenerated}

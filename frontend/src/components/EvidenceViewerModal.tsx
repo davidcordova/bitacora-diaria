@@ -65,16 +65,16 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
       onClick={onClose}
       id="evidence-modal-backdrop"
     >
       <div
-        className="relative max-w-4xl w-full bg-[#13141F] border border-[#252636] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="relative max-w-4xl w-full bg-[#13141F] border border-[#252636] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 bg-[#161722] border-b border-[#252636]">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 bg-[#161722] border-b border-[#252636] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <span className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 flex items-center justify-center">
               <Paperclip className="w-4 h-4" />
@@ -141,7 +141,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
         </div>
 
         {/* Modal Body / Preview */}
-        <div className="relative flex-1 bg-black/60 flex items-center justify-center p-4 min-h-[340px] max-h-[68vh] overflow-auto select-none">
+        <div className="relative flex-1 bg-black/60 flex items-center justify-center p-3 sm:p-4 min-h-0 max-h-[calc(100dvh-7rem)] overflow-auto select-none">
           {isImage ? (
             <img
               src={current.url}

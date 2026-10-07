@@ -1735,8 +1735,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL ASIGNAR USUARIOS DE APOYO (SOPORTE MÚLTIPLE) */}
       {showDelegationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[92vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-lg w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF]">
@@ -1982,8 +1982,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL CONFIRMAR REVOCAR APOYO INDIVIDUAL */}
       {showDeleteDelegationModal && delegationToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-4 sm:p-6 shadow-2xl relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
@@ -2028,8 +2028,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL CONFIRMAR REVOCAR TODAS LAS ASIGNACIONES DE UN USUARIO */}
       {showRevokeAllModal && delegateToRevokeAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-6 shadow-2xl relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-sm w-full border border-rose-500/30 p-4 sm:p-6 shadow-2xl relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
@@ -2074,8 +2074,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL USUARIO */}
       {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                 {editingUserId ? 'Editar Usuario' : 'Nuevo Usuario'}
@@ -2222,8 +2222,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL EQUIPO */}
       {showTeamModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm">
                 {editingTeamId ? 'Editar Equipo' : 'Nuevo Equipo'}
@@ -2384,8 +2384,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR DATOS DE PRUEBA */}
       {showCleanConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-4 sm:p-6 shadow-2xl relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />
@@ -2440,8 +2440,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR O DESACTIVAR USUARIO */}
       {showDeleteUserModal && userToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in select-none">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto bg-slate-950/70 backdrop-blur-xs animate-in fade-in select-none">
+          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full border border-rose-500/30 p-4 sm:p-6 shadow-2xl relative my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center gap-3.5 mb-4 text-rose-500">
               <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 shrink-0">
                 <AlertTriangle className="w-6 h-6 text-rose-500" />

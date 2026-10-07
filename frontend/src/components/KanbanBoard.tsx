@@ -620,8 +620,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
       {/* MODAL EDICIÓN DE ACTIVIDAD DIRECTA DESDE KANBAN */}
       {editingIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
+          <div className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
                 <Edit2 className="w-4 h-4 text-[#00F0FF]" />

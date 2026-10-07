@@ -54,7 +54,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
 
   return (
     <div
-      className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden font-sans select-none ${
+      className={`min-h-dvh flex flex-col justify-between p-4 sm:p-6 relative overflow-y-auto overflow-x-hidden font-sans select-none ${
         isImageBg ? 'bg-slate-950' : 'bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950'
       }`}
       style={

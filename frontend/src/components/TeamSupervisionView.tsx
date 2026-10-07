@@ -1238,9 +1238,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           />
           <div className="relative bg-white dark:bg-[#13141F] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-[#252636] z-10 animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#252636] flex items-center justify-between bg-slate-50/70 dark:bg-[#161722]">
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#252636] flex items-center justify-between bg-slate-50/70 dark:bg-[#161722] shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-xs">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-xs shrink-0">
                   {drawerWorkload.member.full_name.charAt(0)}
                 </div>
                 <div>
@@ -1268,14 +1268,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <button
                 type="button"
                 onClick={() => setDrawerMemberId(null)}
-                className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer"
+                className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
               {/* Daily metrics summary */}
               <div className="bg-slate-50 dark:bg-[#161722] rounded-2xl p-3.5 border border-slate-200/70 dark:border-[#252636] space-y-2">
                 <div className="flex items-center justify-between text-xs">
@@ -1405,7 +1405,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722] flex items-center justify-between gap-3">
+            <div className="p-4 border-t border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722] flex items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => {
