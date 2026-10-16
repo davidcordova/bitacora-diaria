@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   KeyRound,
   ExternalLink,
@@ -62,7 +62,7 @@ import {
   ItCargo,
   User as UserType
 } from '../types';
-import { api } from '../services/api';
+import { api, getVaultToken, clearVaultToken } from '../services/api';
 import { copyToClipboard } from '../utils/formatters';
 import {
   generateCorporateEmail,
@@ -72,6 +72,7 @@ import {
   detectCorporateEntity,
   CorporateEntity,
 } from '../utils/itAccountHelpers';
+import { confirmDialog } from './DialogHost';
 
 interface VaultViewProps {
   currentUser?: UserType | null;
@@ -255,10 +256,23 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   const [savingPin, setSavingPin] = useState<boolean>(false);
   const [pinConfigError, setPinConfigError] = useState<string>('');
 
-  // Contador de revelaciones por minuto (Anti-exfiltración masiva)
+  // Contador de revelaciones por minuto (alerta de consultas masivas)
   const [recentRevealsTimestamps, setRecentRevealsTimestamps] = useState<number[]>([]);
 
   const isAdminOrLeader = currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader;
+
+  // Las contraseñas solo llegan del servidor con un token de desbloqueo vigente. Este ref guarda la
+  // última respuesta para que copiar/revelar/compartir lean el valor recién descargado tras desbloquear
+  // (las acciones pendientes se crearon en un render anterior y verían datos viejos).
+  const latestDataRef = useRef<{ users: ItPlatformUser[]; creds: ItCredential[]; links: QuickLink[] }>({
+    users: [],
+    creds: [],
+    links: [],
+  });
+  const isUnlockedNow = () => Boolean(getVaultToken());
+  const getUserPw = (id: number) => latestDataRef.current.users.find((x) => x.id === id)?.password_actual || '';
+  const getCredPw = (id: number) => latestDataRef.current.creds.find((x) => x.id === id)?.password_secret || '';
+  const getLinkPw = (id: number) => latestDataRef.current.links.find((x) => x.id === id)?.password || '';
 
   // ================= CARGA DE CATÁLOGOS =================
   const loadCatalogs = async () => {
@@ -285,6 +299,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         estado: selectedUserEstado === 'todos' ? undefined : selectedUserEstado,
         search: userSearch,
       });
+      latestDataRef.current.users = res || [];
       setPlatformUsers(res || []);
     } catch (err: any) {
       console.error('Error fetching platform users:', err);
@@ -301,6 +316,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         categoria: linkCategoria === 'Todas' ? undefined : linkCategoria,
         search: linkSearch,
       });
+      latestDataRef.current.links = res || [];
       setLinks(res || []);
     } catch (err: any) {
       console.error('Error fetching quick links:', err);
@@ -319,6 +335,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         tipo_servicio: selectedTipoServicio === 'Todos' ? undefined : selectedTipoServicio,
         search: vaultSearch,
       });
+      latestDataRef.current.creds = credsRes || [];
       setCredentials(credsRes || []);
     } catch (err: any) {
       console.error('Error fetching vault data:', err);
@@ -377,6 +394,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
           setRevealedUserPwIds({});
           setRevealedCredPwIds({});
           setRevealedLinkPwIds({});
+          purgeSecretsFromMemory();
           if (onShowToast) onShowToast('🔒 La sesión segura de la bóveda ha expirado', 'info');
           return 0;
         }
@@ -392,26 +410,56 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  // Olvida el token y borra de memoria las contraseñas ya descargadas
+  const purgeSecretsFromMemory = () => {
+    clearVaultToken();
+    latestDataRef.current = {
+      users: latestDataRef.current.users.map((u) => ({ ...u, password_actual: null, password_anterior: null })),
+      creds: latestDataRef.current.creds.map((c) => ({ ...c, password_secret: null })),
+      links: latestDataRef.current.links.map((l) => ({ ...l, password: l.password ? null : l.password })),
+    };
+    setPlatformUsers(latestDataRef.current.users);
+    setCredentials(latestDataRef.current.creds);
+    setLinks(latestDataRef.current.links);
+  };
+
+  // Al salir de la vista, la bóveda vuelve a quedar bloqueada
+  useEffect(() => {
+    return () => clearVaultToken();
+  }, []);
+
   const handleLockVaultNow = () => {
     setIsVaultUnlocked(false);
     setUnlockRemainingSeconds(0);
     setRevealedUserPwIds({});
     setRevealedCredPwIds({});
     setRevealedLinkPwIds({});
+    purgeSecretsFromMemory();
     if (onShowToast) onShowToast('🔒 Bóveda bloqueada', 'info');
   };
 
+  // Renovar exige volver a validar el PIN/contraseña (el servidor fija la expiración del token)
   const handleExtendSession = () => {
-    setUnlockRemainingSeconds((prev) => Math.min(prev + 300, 900));
-    if (onShowToast) onShowToast('⏱️ Sesión extendida (+5 min)', 'success');
+    setPendingAction(null);
+    setUnlockError('');
+    setUnlockPinInput('');
+    setUnlockPasswordInput('');
+    setIsUnlockModalOpen(true);
   };
 
+  const UNLOCK_WINDOW_SECONDS = 900;
   const unlockProgressPercent = isVaultUnlocked
-    ? Math.min(100, Math.max(0, (unlockRemainingSeconds / 300) * 100))
+    ? Math.min(100, Math.max(0, (unlockRemainingSeconds / UNLOCK_WINDOW_SECONDS) * 100))
     : 0;
 
+  const refetchActiveTab = async () => {
+    if (activeTab === 'users') await fetchPlatformUsers();
+    else if (activeTab === 'vault') await fetchVaultData();
+    else if (activeTab === 'links') await fetchLinks();
+  };
+
   const requireVaultUnlock = (action: () => void): boolean => {
-    if (!isVaultUnlocked) {
+    if (!isUnlockedNow()) {
       setPendingAction(() => action);
       setUnlockError('');
       setUnlockPinInput('');
@@ -440,15 +488,18 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       const creds = unlockMode === 'pin' ? { pin: unlockPinInput } : { password: unlockPasswordInput };
       const res = await api.verifyVaultUnlock(currentUser.id, creds);
       setIsVaultUnlocked(true);
-      setUnlockRemainingSeconds(res.expires_in || 300);
+      setUnlockRemainingSeconds(res.expires_in || UNLOCK_WINDOW_SECONDS);
       setIsUnlockModalOpen(false);
       setUnlockPinInput('');
       setUnlockPasswordInput('');
-      if (onShowToast) onShowToast('🔓 Bóveda desbloqueada por 5 minutos', 'success');
-      
+      if (onShowToast) onShowToast(`🔓 Bóveda desbloqueada por ${Math.round((res.expires_in || UNLOCK_WINDOW_SECONDS) / 60)} minutos`, 'success');
+
+      // Descargar las contraseñas (ahora autorizadas) antes de ejecutar la acción pendiente
+      await refetchActiveTab();
       if (pendingAction) {
-        pendingAction();
+        const action = pendingAction;
         setPendingAction(null);
+        action();
       }
     } catch (err: any) {
       setUnlockError(err.message || 'Credencial de desbloqueo incorrecta');
@@ -501,14 +552,22 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     return pass;
   };
 
-  const handleCopyText = async (text: string, label: string, credId?: number, isPassword = false) => {
-    if (!text) return;
-
+  const handleCopyText = async (
+    textOrGetter: string | null | undefined | (() => string),
+    label: string,
+    credId?: number,
+    isPassword = false
+  ) => {
     if (isPassword) {
-      if (!requireVaultUnlock(() => handleCopyText(text, label, credId, isPassword))) {
+      if (!requireVaultUnlock(() => handleCopyText(textOrGetter, label, credId, isPassword))) {
         return;
       }
       registerRevealAuditAndRateLimit();
+    }
+    const text = typeof textOrGetter === 'function' ? textOrGetter() : textOrGetter;
+    if (!text) {
+      if (isPassword && onShowToast) onShowToast('Este registro no tiene contraseña guardada', 'info');
+      return;
     }
 
     const ok = await copyToClipboard(text);
@@ -594,7 +653,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeletePlataforma = async (id: number) => {
-    if (!confirm('¿Eliminar esta plataforma del catálogo maestro?')) return;
+    if (!(await confirmDialog('¿Eliminar esta plataforma del catálogo maestro?'))) return;
     try {
       await api.deleteItPlataforma(id);
       if (onShowToast) onShowToast('Plataforma eliminada', 'info');
@@ -618,7 +677,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteCargo = async (id: number) => {
-    if (!confirm('¿Eliminar este cargo del catálogo maestro?')) return;
+    if (!(await confirmDialog('¿Eliminar este cargo del catálogo maestro?'))) return;
     try {
       await api.deleteItCargo(id);
       if (onShowToast) onShowToast('Cargo eliminado', 'info');
@@ -642,7 +701,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteEmpresa = async (id: number) => {
-    if (!confirm('¿Eliminar esta empresa y todas sus marcas asociadas?')) return;
+    if (!(await confirmDialog('¿Eliminar esta empresa y todas sus marcas asociadas?'))) return;
     try {
       await api.deleteItEmpresa(id);
       if (onShowToast) onShowToast('Empresa eliminada', 'info');
@@ -669,7 +728,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteMarca = async (id: number) => {
-    if (!confirm('¿Eliminar esta marca?')) return;
+    if (!(await confirmDialog('¿Eliminar esta marca?'))) return;
     try {
       await api.deleteItMarca(id);
       if (onShowToast) onShowToast('Marca eliminada', 'info');
@@ -701,7 +760,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         colaborador_email: user.colaborador_email || '',
         colaborador_telefono: user.colaborador_telefono || '',
         usuario_login: user.usuario_login,
-        password_actual: user.password_actual,
+        password_actual: user.password_actual || '',
         estado: user.estado || 'activo',
         notas: user.notas || '',
       });
@@ -808,7 +867,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.id) return;
-    if (!userFormData.empresa_id || !userFormData.colaborador_nombre.trim() || !userFormData.usuario_login.trim() || !userFormData.password_actual.trim()) {
+    const passwordMissing = !editingPlatformUser && !(userFormData.password_actual || '').trim();
+    if (!userFormData.empresa_id || !userFormData.colaborador_nombre.trim() || !userFormData.usuario_login.trim() || passwordMissing) {
       if (onShowToast) onShowToast('Empresa, Colaborador, Usuario y Contraseña son obligatorios', 'error');
       return;
     }
@@ -837,7 +897,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!confirm('¿Estás seguro de eliminar esta cuenta de usuario del directorio?')) return;
+    if (!(await confirmDialog('¿Estás seguro de eliminar esta cuenta de usuario del directorio?'))) return;
     try {
       await api.deleteItPlatformUser(userId);
       if (onShowToast) onShowToast('Cuenta de usuario eliminada', 'info');
@@ -903,6 +963,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleExportAccounts = async () => {
+    if (!requireVaultUnlock(() => handleExportAccounts())) return;
     try {
       setIsExportingAccounts(true);
       await api.exportItPlatformUsers({
@@ -996,7 +1057,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         tipo_servicio: cred.tipo_servicio || 'Correo Corporativo',
         url_acceso: cred.url_acceso || '',
         usuario_login: cred.usuario_login,
-        password_secret: cred.password_secret,
+        password_secret: cred.password_secret || '',
         notas: cred.notas || '',
         tipo_cuenta: cred.tipo_cuenta || 'operativa',
       });
@@ -1045,7 +1106,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteCred = async (id: number) => {
-    if (!confirm('¿Eliminar esta credencial maestra?')) return;
+    if (!(await confirmDialog('¿Eliminar esta credencial maestra?'))) return;
     try {
       await api.deleteItCredential(id);
       if (onShowToast) onShowToast('Credencial eliminada', 'info');
@@ -1159,7 +1220,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteLink = async (id: number) => {
-    if (!confirm('¿Eliminar este acceso directo?')) return;
+    if (!(await confirmDialog('¿Eliminar este acceso directo?'))) return;
     try {
       await api.deleteQuickLink(id);
       if (onShowToast) onShowToast('Acceso directo eliminado', 'info');
@@ -1378,7 +1439,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800/60'
                 : 'bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/50'
             }`}>
-              AES-256 Fernet
+              Cifrado Fernet
             </span>
             {isVaultUnlocked && (
               <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
@@ -1394,9 +1455,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 <button
                   onClick={handleExtendSession}
                   className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold border border-slate-200 dark:border-slate-700 cursor-pointer transition-colors shadow-2xs"
-                  title="Extender 5 minutos más de sesión"
+                  title="Renovar la sesión segura (pide tu PIN)"
                 >
-                  +5 min
+                  Renovar
                 </button>
                 <button
                   onClick={handleLockVaultNow}
@@ -1486,14 +1547,14 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     </span>
 
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800/50">
-                      AES-256 Fernet
+                      Cifrado Fernet
                     </span>
                   </div>
 
                   <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 max-w-2xl leading-relaxed">
                     {isVaultUnlocked
                       ? 'Las contraseñas maestras y de plataformas pueden consultarse y copiarse. Por política de seguridad, la bóveda se bloqueará automáticamente al expirar el tiempo de sesión.'
-                      : 'Las contraseñas están ofuscadas bajo cifrado Fernet. Desbloquea con tu PIN o contraseña de usuario para habilitar la visualización y copia segura.'}
+                      : 'Las contraseñas se guardan cifradas y el servidor no las entrega hasta que desbloquees con tu PIN o tu contraseña. Cada consulta queda registrada.'}
                   </p>
                 </div>
               </div>
@@ -1509,9 +1570,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     <button
                       onClick={handleExtendSession}
                       className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
-                      title="Extender sesión 5 minutos adicionales"
+                      title="Renovar la sesión segura (pide tu PIN)"
                     >
-                      +5 min
+                      Renovar
                     </button>
 
                     <button
@@ -1595,7 +1656,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
               <div className="flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Cifrado Fernet HMAC SHA-256</span>
+                  <span>Cifrado Fernet (AES-128 + HMAC-SHA256)</span>
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-cyan-500" />
@@ -1605,7 +1666,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Anti-exfiltración (máx 12 revelaciones/min)</span>
+                  <span>Cada consulta queda auditada</span>
                 </span>
               </div>
 
@@ -1718,7 +1779,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>+ Registrar Cuenta</span>
+                  <span>Registrar Cuenta</span>
                 </button>
               </div>
             </div>
@@ -2021,7 +2082,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                                 {isPwRev ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                               </button>
                               <button
-                                onClick={() => handleCopyText(u.password_actual, 'Contraseña', u.id, true)}
+                                onClick={() => handleCopyText(() => getUserPw(u.id), 'Contraseña', u.id, true)}
                                 title="Copiar clave"
                                 className="text-slate-400 hover:text-cyan-500 p-0.5 cursor-pointer"
                               >
@@ -2074,8 +2135,11 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                               {u.colaborador_telefono && (
                                 <button
                                   onClick={() => {
-                                    const msg = `Hola ${u.colaborador_nombre}, tus credenciales de ${u.plataforma} son:\nUsuario: ${u.usuario_login}\nClave: ${u.password_actual}`;
-                                    handleSendWhatsApp(u.colaborador_telefono, msg);
+                                    const send = () => {
+                                      const msg = `Hola ${u.colaborador_nombre}, tus credenciales de ${u.plataforma} son:\nUsuario: ${u.usuario_login}\nClave: ${getUserPw(u.id)}`;
+                                      handleSendWhatsApp(u.colaborador_telefono, msg);
+                                    };
+                                    if (requireVaultUnlock(send)) send();
                                   }}
                                   className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-500/10 border border-emerald-500/20 transition-colors cursor-pointer"
                                   title="Enviar datos por WhatsApp"
@@ -2350,7 +2414,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                             <button onClick={() => handleToggleRevealCred(cred.id)} title={isPwRevealed ? 'Ocultar' : 'Ver por 10s'} className="text-slate-400 hover:text-amber-400 p-1 cursor-pointer">
                               {isPwRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                             </button>
-                            <button onClick={() => handleCopyText(cred.password_secret, 'Contraseña', cred.id, true)} title="Copiar" className="text-slate-400 hover:text-cyan-400 p-1 cursor-pointer">
+                            <button onClick={() => handleCopyText(() => getCredPw(cred.id), 'Contraseña', cred.id, true)} title="Copiar" className="text-slate-400 hover:text-cyan-400 p-1 cursor-pointer">
                               {copiedId === `${cred.id}-Contraseña` ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                             </button>
                           </div>
@@ -2564,7 +2628,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                         <p className="text-xs text-slate-600 dark:text-slate-400 mb-3 line-clamp-2">{link.descripcion}</p>
                       )}
 
-                      {(link.usuario || link.password) && (
+                      {(link.usuario || link.password || link.has_password) && (
                         <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-700/50 mb-3 space-y-1.5 text-xs font-mono">
                           {link.usuario && (
                             <div className="flex items-center justify-between gap-2">
@@ -2578,7 +2642,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                             </div>
                           )}
 
-                          {link.password && (
+                          {(link.password || link.has_password) && (
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-slate-400 text-[11px]">Pass:</span>
                               <div className="flex items-center gap-1.5 flex-1 justify-end truncate">
@@ -2586,7 +2650,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                                 <button onClick={() => handleToggleRevealLinkPw(link.id)} title={isPwRevealed ? 'Ocultar' : 'Ver por 10s'} className="text-slate-400 hover:text-cyan-500 p-1 cursor-pointer">
                                   {isPwRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                 </button>
-                                <button onClick={() => handleCopyText(link.password!, 'Contraseña', link.id, true)} title="Copiar" className="text-slate-400 hover:text-cyan-500 p-1 cursor-pointer">
+                                <button onClick={() => handleCopyText(() => getLinkPw(link.id), 'Contraseña', link.id, true)} title="Copiar" className="text-slate-400 hover:text-cyan-500 p-1 cursor-pointer">
                                   {copiedId === `${link.id}-Contraseña` ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                                 </button>
                               </div>
@@ -3164,9 +3228,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   </div>
                   <input
                     type="text"
-                    required
-                    placeholder="Clave"
-                    value={userFormData.password_actual}
+                    required={!editingPlatformUser}
+                    placeholder={editingPlatformUser ? 'Dejar vacío para conservar la clave actual' : 'Clave'}
+                    value={userFormData.password_actual || ''}
                     onChange={(e) => setUserFormData({ ...userFormData, password_actual: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-xs"
                   />
@@ -3693,7 +3757,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
               <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
                 <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                <span>Cifrado militar automático AES-256 en todas las contraseñas cargadas.</span>
+                <span>Las contraseñas se guardan cifradas (Fernet: AES-128 + HMAC-SHA256).</span>
               </div>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -3965,9 +4029,9 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   </div>
                   <input
                     type="text"
-                    required
-                    placeholder="Contraseña"
-                    value={credFormData.password_secret}
+                    required={!editingCred}
+                    placeholder={editingCred ? 'Dejar vacío para conservar la contraseña actual' : 'Contraseña'}
+                    value={credFormData.password_secret || ''}
                     onChange={(e) => setCredFormData({ ...credFormData, password_secret: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-xs"
                   />
@@ -4182,8 +4246,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   />
                   <input
                     type="text"
-                    placeholder="Contraseña"
-                    value={linkFormData.password}
+                    placeholder={editingLink ? 'Dejar vacío para conservar la contraseña actual' : 'Contraseña'}
+                    value={linkFormData.password || ''}
                     onChange={(e) => setLinkFormData({ ...linkFormData, password: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 text-xs"
                   />
@@ -4313,8 +4377,8 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
               )}
 
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>Sesión activa por 5 minutos</span>
-                <span className="font-mono">AES-256</span>
+                <span>La sesión segura dura 15 minutos</span>
+                <span className="font-mono">5 intentos / 15 min</span>
               </div>
 
               <div className="pt-2 flex items-center justify-end gap-2">

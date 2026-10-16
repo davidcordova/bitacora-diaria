@@ -825,7 +825,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                               )}
                               <span className="text-[11px] text-slate-400 font-mono flex items-center gap-1">
                                 <Clock className="w-3 h-3" />
-                                {act.hora_inicio || '08:30'} ({formatDuration(act.duracion_min || 0)})
+                                <span>{act.hora_inicio || '08:30'}</span>
+                                <span>·</span>
+                                <span className="font-semibold text-slate-600 dark:text-slate-300">{formatDuration(act.duracion_min || 0)}</span>
                               </span>
                             </div>
 
@@ -1365,7 +1367,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-[#252636]">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
-                              {act.hora_inicio || '08:30'} ({act.duracion_min || 0} min)
+                              <span>{act.hora_inicio || '08:30'} · {act.duracion_min || 0} min</span>
                             </span>
 
                             {/* Quick 1-click Approval/Reject */}

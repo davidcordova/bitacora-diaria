@@ -35,6 +35,7 @@ import {
 import { Sugerencia, User, CategoriaSugerencia, ImpactoSugerencia, EstadoSugerencia, Evidencia } from '../types';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
+import { confirmDialog } from './DialogHost';
 
 interface BuzonViewProps {
   currentUser?: User | null;
@@ -374,7 +375,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
   };
 
   const handleDeleteSug = async (sugId: number) => {
-    if (!window.confirm('¿Seguro que deseas eliminar esta propuesta del buzón?')) return;
+    if (!(await confirmDialog('¿Seguro que deseas eliminar esta propuesta del buzón?'))) return;
     try {
       await api.deleteSugerencia(sugId, currentUser?.id || 0, currentUser?.role);
       if (onShowToast) onShowToast('Propuesta eliminada', 'info');

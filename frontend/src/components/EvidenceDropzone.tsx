@@ -3,6 +3,7 @@ import { Paperclip, Image as ImageIcon, FileText, Loader2, X, ChevronUp, Chevron
 import { Evidencia } from '../types';
 import { api } from '../services/api';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
+import { alertDialog } from './DialogHost';
 
 interface EvidenceDropzoneProps {
   evidencias?: Evidencia[];
@@ -39,7 +40,7 @@ export const EvidenceDropzone: React.FC<EvidenceDropzoneProps> = ({
       setIsExpanded(true); // Auto-expand to show new attachments
     } catch (err) {
       console.error('Error al subir archivos:', err);
-      alert('Error al subir uno o más archivos adjuntos');
+      void alertDialog('Error al subir uno o más archivos adjuntos');
     } finally {
       setIsUploading(false);
     }

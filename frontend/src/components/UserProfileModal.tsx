@@ -106,8 +106,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         setErrorMsg('Debes ingresar tu contraseña actual para confirmar el cambio.');
         return;
       }
-      if (newPassword.length < 4) {
-        setErrorMsg('La nueva contraseña debe tener al menos 4 caracteres.');
+      if (newPassword.length < 8) {
+        setErrorMsg('La nueva contraseña debe tener al menos 8 caracteres.');
         return;
       }
       if (newPassword !== confirmPassword) {
@@ -361,7 +361,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         type={showPasswords ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        placeholder="Mínimo 4 caracteres"
+                        placeholder="Mínimo 8 caracteres"
                         className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-[#1A1C29] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
                       />
                       <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />

@@ -7,6 +7,8 @@ import time
 import io
 import csv
 import re
+import logging
+import secrets
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -19,18 +21,41 @@ try:
 except ImportError:
     openpyxl = None
     _HAS_OPENPYXL = False
-    print("[Excel WARNING] 'openpyxl' no está instalado. Ejecute 'pip install openpyxl' para soporte nativo de hojas de cálculo .xlsx.")
+    logging.getLogger('bitacora').warning("openpyxl no está instalado: la exportación .xlsx no estará disponible")
 
-from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
+from database import (
+    get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str,
+    MIN_PASSWORD_LENGTH, WEAK_DEFAULT_PASSWORDS, get_schema_version,
+)
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 from security import (
     register_security, issue_token, login_is_throttled,
     register_login_failure, clear_login_failures,
+    issue_vault_token, vault_unlocked, VAULT_UNLOCK_SECONDS, VAULT_MAX_FAILED_UNLOCKS,
 )
+
+logging.basicConfig(
+    level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
+logger = logging.getLogger('bitacora')
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 register_security(app)
+
+
+def validate_new_password(password):
+    """Devuelve un mensaje de error si la contraseña no cumple la política mínima, o None."""
+    if not password or len(password) < MIN_PASSWORD_LENGTH:
+        return f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres"
+    if password in WEAK_DEFAULT_PASSWORDS or password.lower() in ('12345678', '123456789', 'password', 'contraseña'):
+        return "Esa contraseña es demasiado común. Elige otra"
+    return None
+
+
+def generate_temp_password():
+    return 'Tmp-' + secrets.token_urlsafe(8)
 
 @app.teardown_appcontext
 def close_open_connections(exception=None):
@@ -339,16 +364,40 @@ def get_default_hora_inicio(cursor=None):
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
+    """Usado por el monitor de disponibilidad: verifica también que la base de datos responda."""
     now_dt = get_peru_now()
-    return jsonify({
-        "status": "ok",
+    db_ok = True
+    try:
+        conn = get_db()
+        conn.execute("SELECT 1").fetchone()
+    except Exception as e:
+        logger.error("[Health] Base de datos no disponible: %s", e)
+        db_ok = False
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "database": "ok" if db_ok else "error",
+        "schema_version": get_schema_version() if db_ok else None,
         "service": "Bitácora API",
-        "version": "2.2.0",
+        "version": "2.3.0",
         "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
         "peru_date": get_peru_today_str(),
         "timezone": "America/Lima (UTC-5)",
-        "env_tz": os.environ.get('TZ', 'not_set')
-    })
+    }
+    return jsonify(payload), (200 if db_ok else 503)
+
+
+def _mask_vault_secrets(item, fields, unlocked):
+    """Descifra los secretos solo si la bóveda está desbloqueada; si no, los oculta.
+
+    `has_<campo>` indica al cliente si existe un valor guardado aunque esté oculto.
+    """
+    item['secret_locked'] = not unlocked
+    for f in fields:
+        raw = item.get(f)
+        item[f'has_{f}'] = bool(raw)
+        if not raw:
+            continue
+        item[f] = decrypt_vault_secret(raw) if unlocked else None
 
 
 # ==================== CONFIGURACIONES GLOBALES (SETTINGS) ====================
@@ -399,204 +448,14 @@ def handle_settings():
     conn.close()
     return jsonify(settings), 200
 
-@app.route('/api/admin/diagnose-db', methods=['GET'])
-def diagnose_db():
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        all_acts = [dict(r) for r in cursor.execute("""
-            SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.is_deleted, a.deleted_at, a.created_at,
-                   b.colaborador, b.fecha, b.user_id
-            FROM actividades a
-            LEFT JOIN bitacoras b ON a.bitacora_id = b.id
-            ORDER BY a.id DESC
-        """).fetchall()]
-        
-        all_b = [dict(r) for r in cursor.execute("SELECT * FROM bitacoras ORDER BY id DESC").fetchall()]
-        tables = [r[0] for r in cursor.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-        
-        db_dir = os.path.dirname(os.path.abspath(DB_PATH))
-        db_files = []
-        try:
-            db_files = [f for f in os.listdir(db_dir) if any(ext in f for ext in ['db', 'sqlite', 'wal', 'bak'])]
-        except Exception:
-            pass
-            
-        import re
-        raw_matches = []
-        for fname in ['bitacora.db', 'bitacora.db-wal']:
-            fpath = os.path.join(db_dir, fname)
-            if os.path.exists(fpath):
-                try:
-                    with open(fpath, 'rb') as fp:
-                        raw_bytes = fp.read()
-                    raw_strs = re.findall(b'[\x20-\x7E\xC0-\xFF]{6,}', raw_bytes)
-                    for s in raw_strs:
-                        try:
-                            txt = s.decode('latin1')
-                            if any(k in txt.lower() for k in ['masivo', 'rh', 'chamba', 'ayala', 'ticket', 'wifi', 'switch', 'vpn', 'incidente', 'odoo']):
-                                raw_matches.append(f"[{fname}] {txt}")
-                        except Exception:
-                            pass
-                except Exception as e:
-                    raw_matches.append(f"Error reading {fname}: {str(e)}")
-
-        conn.close()
-        return jsonify({
-            "db_path": DB_PATH,
-            "db_files": db_files,
-            "tables": tables,
-            "total_actividades": len(all_acts),
-            "actividades": all_acts,
-            "bitacoras": all_b,
-            "raw_matches_count": len(raw_matches),
-            "raw_matches": list(set(raw_matches))[:200]
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-def cleanup_synthetic_historical_data():
-    """
-    Elimina bitácoras y actividades sintéticas/falsas inyectadas por scripts antiguos
-    para la fecha 2026-09-23 creadas a las 19:40:16 UTC que confunden al usuario administrador.
-    """
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Eliminar actividades asociadas a bitácoras sintéticas del 2026-09-23 creadas a las 19:40 UTC
-        cursor.execute("""
-            DELETE FROM actividades 
-            WHERE bitacora_id IN (
-                SELECT id FROM bitacoras 
-                WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:%'
-            )
-        """)
-        
-        # Eliminar las bitácoras sintéticas del 2026-09-23
-        cursor.execute("""
-            DELETE FROM bitacoras 
-            WHERE fecha = '2026-09-23' AND created_at LIKE '2026-09-24 19:40:%'
-        """)
-
-        
-        conn.commit()
-        conn.close()
-        print("[Cleanup] Bitácoras sintéticas del 2026-09-23 purgadas exitosamente.")
-    except Exception as e:
-        print("[Cleanup] Error en cleanup_synthetic_historical_data:", e)
-
-@app.route('/api/admin/clean-synthetic-history', methods=['POST', 'OPTIONS'])
-def clean_synthetic_history_endpoint():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
-        return jsonify({"error": "Endpoint de mantenimiento deshabilitado"}), 410
-    cleanup_synthetic_historical_data()
-    return jsonify({"success": True, "message": "Bitácoras sintéticas de prueba del 2026-09-23 purgadas correctamente."})
-
-def fix_mock_data_jayala():
-    """Limpia las actividades mock generadas por el script de sincronización para Josué Ayala y registra su actividad real 're rh masivo'"""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        now_peru = get_peru_now_str()
-        
-        b_jayala = cursor.execute("""
-            SELECT id FROM bitacoras 
-            WHERE (user_id = 5 OR LOWER(colaborador) = 'josue ayala') AND fecha = '2026-09-24'
-        """).fetchone()
-
-        
-        if b_jayala:
-            b_id = b_jayala['id']
-            # Desactivar actividades mock generadas automáticamente
-            mock_descriptions = [
-                'Test actividad de depuracion',
-                'Implementación de optimizaciones en endpoints API REST y validaciones de carga.',
-                'Pruebas integrales de flujo de bitácoras y resolución de inconsistencias de navegación.',
-                'Revisión técnica de incidencias y sincronización con el equipo de soporte.',
-                'Desarrollo de módulos interactivos de supervisión y gestión de estados de tareas.'
-            ]
-            for desc in mock_descriptions:
-                cursor.execute("""
-                    UPDATE actividades SET is_deleted = 1, deleted_at = ?
-                    WHERE bitacora_id = ? AND descripcion = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                """, (now_peru, b_id, desc))
-            
-            exact_description = """Se agregó soporte para Carné de Extranjería (CE) como tipo de documento alternativo al DNI en el módulo RH Masivo (mkt_rh_management): nuevo campo "Tipo de Documento" en las líneas de importación, con validaciones diferenciadas (DNI exige 8 dígitos y validación RENIEC; CE exige 9 dígitos con validación manual). Se mantienen intactas las validaciones de correo, celular, provincia, cargo y fechas para ambos tipos.
-
-Durante las pruebas en el sistema se detectaron y corrigieron 2 bugs relacionados:
-- Una restricción dura del DNI rompía la carga completa del Excel cuando una fila tenía el documento mal formateado, dejando un mensaje de error pegado en la cabecera de la planilla aunque la fila ya estuviera corregida. Se eliminó, dejando solo la validación que marca la fila puntual en rojo sin bloquear el resto de la carga.
-- La plantilla oficial de Excel tenía la columna N° Documento en formato numérico, por lo que Excel borraba los ceros a la izquierda de los Carné de Extranjería antes de guardarse. Se corrigió el formato de esa columna a Texto y se agregó un mensaje de error más claro para detectar este caso a futuro."""
-
-            # Actualizar o insertar con la descripción exacta y fidedigna
-            existing_real = cursor.execute("""
-                SELECT id FROM actividades 
-                WHERE bitacora_id = ? AND (LOWER(descripcion) LIKE '%rh masivo%' OR LOWER(descripcion) LIKE '%carné de extranjería%')
-                ORDER BY id DESC LIMIT 1
-            """, (b_id,)).fetchone()
-
-            if existing_real:
-                cursor.execute("""
-                    UPDATE actividades SET 
-                        descripcion = ?, duracion_min = 240, para_cliente = 'mkt_rh_management / RR.HH.',
-                        tipo_trabajo = 'Desarrollo', estado = 'completada', is_deleted = 0, deleted_at = NULL,
-                        updated_at = ?
-                    WHERE id = ?
-                """, (exact_description, now_peru, existing_real['id']))
-            else:
-                cursor.execute("""
-                    INSERT INTO actividades (
-                        bitacora_id, orden, hora_inicio, duracion_min,
-                        tipo_trabajo, descripcion, para_cliente, estado, evidencias,
-                        shared_with, created_at, updated_at
-                    ) VALUES (
-                        ?, 0, '08:30', 240,
-                        'Desarrollo', ?, 'mkt_rh_management / RR.HH.', 'completada', '[]',
-                        '[]', ?, ?
-                    )
-                """, (b_id, exact_description, now_peru, now_peru))
-            
-            cursor.execute("""
-                UPDATE bitacoras SET tiempo_total_min = (
-                    SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                ), updated_at = ? WHERE id = ?
-            """, (b_id, now_peru, b_id))
-
-            
-            conn.commit()
-        conn.close()
-    except Exception as e:
-        print("[Repair] Error in fix_mock_data_jayala:", e)
-
-@app.route('/api/admin/repair-mock-jayala', methods=['POST', 'OPTIONS'])
-def repair_mock_jayala_endpoint():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
-        return jsonify({"error": "Endpoint de mantenimiento deshabilitado"}), 410
-    fix_mock_data_jayala()
-    conn = get_db()
-    cursor = conn.cursor()
-    acts = cursor.execute("""
-        SELECT a.* FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        WHERE (b.user_id = 5 OR LOWER(b.colaborador) = 'josue ayala') AND b.fecha = '2026-09-24' AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-    """).fetchall()
-    conn.close()
-    return jsonify({
-        "success": True,
-        "message": "Datos mock de Josué Ayala limpiados y actividad real 're rh masivo' registrada con éxito",
-        "actividades": [dict(r) for r in acts]
-    }), 200
-
 @app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
 def clean_production_data():
     """Purga todas las bitácoras, actividades y usuarios de prueba dejando el sistema limpio en producción con sólo el admin"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
+        return jsonify({"error": "Acción deshabilitada en producción por seguridad (borra o inyecta datos masivamente). "
+                                 "Actívala temporalmente con ENABLE_MAINTENANCE_ENDPOINTS=1 y un respaldo previo."}), 410
         
     conn = get_db()
     cursor = conn.cursor()
@@ -643,6 +502,9 @@ def seed_demo_data():
     """Restaura los datos de prueba (usuarios, equipos y bitácoras de ejemplo) para modo demostración"""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
+        return jsonify({"error": "Acción deshabilitada en producción por seguridad (borra o inyecta datos masivamente). "
+                                 "Actívala temporalmente con ENABLE_MAINTENANCE_ENDPOINTS=1 y un respaldo previo."}), 410
         
     try:
         from seed_data import seed_team_and_activities
@@ -799,6 +661,7 @@ def login():
     cursor = conn.cursor()
     user = cursor.execute('''
         SELECT u.id, u.username, u.email, u.phone, u.password_hash, u.full_name, u.role, u.is_active, u.team_id,
+               COALESCE(u.must_change_password, 0) AS must_change_password,
                t.nombre as team_name, t.lider_id
         FROM users u
         LEFT JOIN teams t ON u.team_id = t.id
@@ -843,7 +706,8 @@ def login():
         "phone": user['phone'] if 'phone' in user.keys() else None,
         "team_id": user['team_id'],
         "team_name": user['team_name'],
-        "is_leader": is_leader
+        "is_leader": is_leader,
+        "must_change_password": bool(user['must_change_password'])
     }
     
     return jsonify({
@@ -866,8 +730,9 @@ def change_password():
     if not user_id:
         return jsonify({"error": "Identificador de usuario requerido"}), 400
         
-    if not new_password or len(new_password) < 4:
-        return jsonify({"error": "La nueva contraseña debe tener al menos 4 caracteres"}), 400
+    pw_error = validate_new_password(new_password)
+    if pw_error:
+        return jsonify({"error": pw_error}), 400
         
     conn = get_db()
     cursor = conn.cursor()
@@ -899,9 +764,14 @@ def change_password():
         if not password_matches:
             conn.close()
             return jsonify({"error": "La contraseña actual es incorrecta"}), 400
+        if current_password == new_password:
+            conn.close()
+            return jsonify({"error": "La nueva contraseña debe ser distinta de la actual"}), 400
             
     new_hash = generate_password_hash(new_password)
-    cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+    # Cambio propio: deja de ser temporal. Cambio hecho por un admin: es temporal, el usuario debe cambiarla.
+    cursor.execute("UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?",
+                   (new_hash, 0 if is_self_change else 1, user_id))
     conn.commit()
     conn.close()
     
@@ -943,9 +813,10 @@ def update_profile():
         
     # Si desea cambiar contraseña
     if new_password:
-        if len(new_password) < 4:
+        pw_error = validate_new_password(new_password)
+        if pw_error:
             conn.close()
-            return jsonify({"error": "La nueva contraseña debe tener al menos 4 caracteres"}), 400
+            return jsonify({"error": pw_error}), 400
         if not current_password:
             conn.close()
             return jsonify({"error": "Debes ingresar tu contraseña actual para establecer una nueva"}), 400
@@ -966,10 +837,11 @@ def update_profile():
         new_hash = generate_password_hash(new_password)
         cursor.execute("""
             UPDATE users 
-            SET full_name = ?, email = ?, phone = ?, password_hash = ?
+            SET full_name = ?, email = ?, phone = ?, password_hash = ?, must_change_password = 0
             WHERE id = ?
         """, (full_name, email, phone, new_hash, user_id))
     else:
+        new_hash = None
         cursor.execute("""
             UPDATE users 
             SET full_name = ?, email = ?, phone = ?
@@ -989,11 +861,15 @@ def update_profile():
     
     conn.close()
     
-    return jsonify({
+    resp = {
         "success": True,
         "message": "Perfil actualizado correctamente",
         "user": dict(updated_u)
-    }), 200
+    }
+    # Cambiar la contraseña invalida el token anterior: entregar uno nuevo para no cerrar la sesión
+    if new_hash:
+        resp["token"] = issue_token(user_id, new_hash)
+    return jsonify(resp), 200
 
 # ==================== USERS CRUD ====================
 
@@ -1038,7 +914,10 @@ def admin_users():
         full_name = (data.get('full_name') or '').strip()
         email = (data.get('email') or '').strip()
         phone = (data.get('phone') or '').strip()
-        password = data.get('password') or '123456'
+        password = (data.get('password') or '').strip()
+        temp_password = None
+        if not password:
+            temp_password = password = generate_temp_password()
         role = data.get('role') or 'analista'
         team_id = data.get('team_id') or None
         
@@ -1051,17 +930,26 @@ def admin_users():
             conn.close()
             return jsonify({"error": f"El nombre de usuario '{username}' ya existe"}), 400
             
+        pw_error = validate_new_password(password)
+        if pw_error:
+            conn.close()
+            return jsonify({"error": pw_error}), 400
+            
         p_hash = generate_password_hash(password)
+        # Toda contraseña asignada por un admin es temporal: el colaborador la cambia en su primer ingreso
         cursor.execute('''
-            INSERT INTO users (username, email, phone, password_hash, full_name, role, team_id, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+            INSERT INTO users (username, email, phone, password_hash, full_name, role, team_id, is_active, must_change_password, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
         ''', (username, email, phone, p_hash, full_name, role, team_id))
         user_id = cursor.lastrowid
         conn.commit()
         
         new_u = cursor.execute("SELECT id, username, email, phone, full_name, role, team_id FROM users WHERE id = ?", (user_id,)).fetchone()
         conn.close()
-        return jsonify({"message": "Usuario creado con éxito", "user": dict(new_u)}), 201
+        resp = {"message": "Usuario creado con éxito", "user": dict(new_u)}
+        if temp_password:
+            resp["temp_password"] = temp_password
+        return jsonify(resp), 201
 
 @app.route('/api/admin/users/<int:user_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
 def admin_user_detail(user_id):
@@ -1100,7 +988,14 @@ def admin_user_detail(user_id):
             target_username = raw_username
 
         if password and len(password.strip()) > 0:
+            pw_error = validate_new_password(password.strip())
+            if pw_error:
+                conn.close()
+                return jsonify({"error": pw_error}), 400
             p_hash = generate_password_hash(password.strip())
+            # Si el admin cambia la contraseña de otra persona, queda como temporal
+            acting = getattr(g, 'current_user', None) or {}
+            must_change = 0 if int(acting.get('id', -1)) == int(user_id) else 1
             cursor.execute('''
                 UPDATE users SET
                     username = ?,
@@ -1110,9 +1005,10 @@ def admin_user_detail(user_id):
                     role = COALESCE(?, role),
                     team_id = ?,
                     is_active = ?,
-                    password_hash = ?
+                    password_hash = ?,
+                    must_change_password = ?
                 WHERE id = ?
-            ''', (target_username, full_name, email, phone, role, team_id, is_active, p_hash, user_id))
+            ''', (target_username, full_name, email, phone, role, team_id, is_active, p_hash, must_change, user_id))
         else:
             cursor.execute('''
                 UPDATE users SET
@@ -2248,7 +2144,7 @@ def save_bitacora():
                 ''', (user_id, f"{del_name} ha registrado o actualizado actividades de apoyo en tu bitácora del {fecha}."))
                 conn.commit()
             except Exception as ne:
-                print("[Notif proxy error]:", ne)
+                logger.warning("[Notif proxy] %s", ne)
 
         users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
         b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
@@ -2916,13 +2812,13 @@ def get_dashboard_stats():
     '''
     colab_stats = cursor.execute(colab_query, params).fetchall()
     
-    # 5. Colaboradores que requieren apoyo / bloqueos activos
+    # 5. Colaboradores que requieren apoyo / bloqueos activos (últimos 7 días)
     apoyo_query = f'''
         SELECT b.id, b.fecha, b.colaborador, b.apoyo_detalle, b.pendientes, t.nombre as team_name
         FROM bitacoras b
         LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
         LEFT JOIN teams t ON u.team_id = t.id
-        {base_filter} AND b.necesita_apoyo = 'Si'
+        {base_filter} AND b.necesita_apoyo = 'Si' AND b.fecha >= date('now', '-7 days')
         ORDER BY b.fecha DESC, b.id DESC
         LIMIT 10
     '''
@@ -3084,7 +2980,7 @@ def execute_daily_rollover(today_str=None):
         conn.commit()
     except Exception as e:
         conn.rollback()
-        print("Error en execute_daily_rollover:", e)
+        logger.exception("[Rollover] Error en execute_daily_rollover: %s", e)
     finally:
         conn.close()
         
@@ -3263,7 +3159,7 @@ def handle_sugerencias():
             ''', (f'{author_label} propuso: "{titulo}"', now_peru))
             conn.commit()
         except Exception as e:
-            print("Error creating suggestion notification:", e)
+            logger.warning("[Buzón] Error creando notificación: %s", e)
 
         sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
         conn.close()
@@ -3433,7 +3329,7 @@ def handle_notifications():
             uid_num = int(user_id) if str(user_id).isdigit() else None
             check_and_notify_stagnant_activities(user_id=uid_num, cursor=cursor, conn=conn)
         except Exception as se:
-            print("[Stagnant notification check error]:", se)
+            logger.warning("[Estancadas] Error verificando tareas: %s", se)
 
         rows = cursor.execute('''
             SELECT id, user_id, title, message, type, is_read, created_at as timestamp
@@ -3486,7 +3382,6 @@ def report_support_error():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
     user_name = data.get('user_name', 'Usuario anónimo')
     error_message = data.get('error_message', 'Error no especificado')
     context = data.get('context', 'General')
@@ -3576,10 +3471,10 @@ def api_quick_links():
         cursor.execute(query, params)
         raw_links = cursor.fetchall()
         links = []
+        unlocked = vault_unlocked()
         for row in raw_links:
             item = dict(row)
-            if item.get('password'):
-                item['password'] = decrypt_vault_secret(item['password'])
+            _mask_vault_secrets(item, ('password',), unlocked)
             links.append(item)
         conn.close()
         return jsonify(links), 200
@@ -3682,7 +3577,13 @@ def api_quick_link_detail(link_id):
         usuario = data.get('usuario') if 'usuario' in data else link['usuario']
         if 'password' in data:
             raw_pass = (data.get('password') or '').strip()
-            password = encrypt_vault_secret(raw_pass) if raw_pass else ''
+            if raw_pass:
+                password = encrypt_vault_secret(raw_pass)
+            elif data.get('clear_password'):
+                password = ''
+            else:
+                # Campo vacío = conservar (el formulario pudo abrirse con la bóveda bloqueada)
+                password = link['password']
         else:
             password = link['password']
         visibilidad = data.get('visibilidad') or link['visibilidad']
@@ -3705,8 +3606,7 @@ def api_quick_link_detail(link_id):
             WHERE q.id = ?
         ''', (link_id,))
         updated_item = dict(cursor.fetchone())
-        if updated_item.get('password'):
-            updated_item['password'] = decrypt_vault_secret(updated_item['password'])
+        _mask_vault_secrets(updated_item, ('password',), vault_unlocked())
         conn.close()
         return jsonify(updated_item), 200
 
@@ -3842,10 +3742,10 @@ def api_it_credentials():
         rows = cursor.fetchall()
         
         results = []
+        unlocked = vault_unlocked()
         for r in rows:
             item = dict(r)
-            if item.get('password_secret'):
-                item['password_secret'] = decrypt_vault_secret(item['password_secret'])
+            _mask_vault_secrets(item, ('password_secret',), unlocked)
             # Si es admin o líder, tiene permisos completos
             if is_admin_or_leader or item['created_by'] == user_id:
                 item['can_view'] = True
@@ -3972,7 +3872,12 @@ def api_it_credential_detail(cred_id):
         usuario_login = (data.get('usuario_login') or cred['usuario_login']).strip()
         if 'password_secret' in data:
             raw_secret = (data.get('password_secret') or '').strip()
-            password_secret = encrypt_vault_secret(raw_secret) if raw_secret else ''
+            if raw_secret:
+                password_secret = encrypt_vault_secret(raw_secret)
+            elif data.get('clear_password'):
+                password_secret = ''
+            else:
+                password_secret = cred['password_secret']
         else:
             password_secret = cred['password_secret']
         notas = data.get('notas') if 'notas' in data else cred['notas']
@@ -4128,12 +4033,10 @@ def api_it_platform_users():
         cursor.execute(query, params)
         raw_users = cursor.fetchall()
         users_list = []
+        unlocked = vault_unlocked()
         for row in raw_users:
             item = dict(row)
-            if item.get('password_actual'):
-                item['password_actual'] = decrypt_vault_secret(item['password_actual'])
-            if item.get('password_anterior'):
-                item['password_anterior'] = decrypt_vault_secret(item['password_anterior'])
+            _mask_vault_secrets(item, ('password_actual', 'password_anterior'), unlocked)
             users_list.append(item)
         conn.close()
         return jsonify(users_list), 200
@@ -4216,7 +4119,11 @@ def api_it_platform_user_detail(user_id):
         usuario_login = (data.get('usuario_login') or existing['usuario_login']).strip()
         if 'password_actual' in data:
             raw_password = (data.get('password_actual') or '').strip()
-            password_actual = encrypt_vault_secret(raw_password) if raw_password else ''
+            if raw_password:
+                password_actual = encrypt_vault_secret(raw_password)
+            else:
+                # password_actual es obligatorio: un valor vacío nunca borra la contraseña guardada
+                password_actual = existing['password_actual']
         else:
             password_actual = existing['password_actual']
         estado = data.get('estado') or existing['estado']
@@ -4244,10 +4151,7 @@ def api_it_platform_user_detail(user_id):
             WHERE pu.id = ?
         ''', (user_id,))
         updated_row = dict(cursor.fetchone())
-        if updated_row.get('password_actual'):
-            updated_row['password_actual'] = decrypt_vault_secret(updated_row['password_actual'])
-        if updated_row.get('password_anterior'):
-            updated_row['password_anterior'] = decrypt_vault_secret(updated_row['password_anterior'])
+        _mask_vault_secrets(updated_row, ('password_actual', 'password_anterior'), vault_unlocked())
         conn.close()
         return jsonify(updated_row), 200
 
@@ -4518,7 +4422,7 @@ def api_it_platform_users_template():
     ws.row_dimensions[1].height = 32
 
     ws.merge_cells('A2:K2')
-    ws['A2'] = "Instrucciones: Complete los datos a partir de la fila 4. Las columnas con (*) son obligatorias. Las contraseñas serán cifradas automáticamente con AES-256."
+    ws['A2'] = "Instrucciones: Complete los datos a partir de la fila 4. Las columnas con (*) son obligatorias. Las contraseñas se guardarán cifradas (Fernet). Borre este archivo después de importarlo."
     ws['A2'].font = Font(name='Calibri', size=10, italic=True, color='475569')
     ws['A2'].fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
     ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
@@ -4640,6 +4544,11 @@ def api_it_platform_users_export():
     search = request.args.get('search', '').strip().lower()
     estado = request.args.get('estado', '').strip()
     include_passwords = request.args.get('include_passwords', '0') == '1'
+    if include_passwords and not vault_unlocked():
+        return jsonify({
+            "error": "Desbloquea la bóveda con tu PIN o contraseña para exportar contraseñas.",
+            "code": "vault_locked",
+        }), 403
 
     conn = get_db()
     cursor = conn.cursor()
@@ -5013,7 +4922,6 @@ def api_it_platform_users_import():
 
             if existing:
                 existing_id = existing[0]
-                old_pass = existing[1]
                 if modo == 'crear_o_actualizar':
                     cursor.execute('''
                         UPDATE it_platform_users SET
@@ -5246,7 +5154,7 @@ def api_it_vault_set_pin():
     user = cursor.fetchone()
     if not user or not check_password_hash(user['password_hash'], current_password):
         conn.close()
-        return jsonify({"error": "La contraseña de inicio de sesión actual es incorrecta"}), 401
+        return jsonify({"error": "La contraseña de inicio de sesión actual es incorrecta"}), 400
 
     pin_hash = generate_password_hash(new_pin)
     cursor.execute("UPDATE users SET security_pin_hash = ? WHERE id = ?", (pin_hash, user_id))
@@ -5283,6 +5191,18 @@ def api_it_vault_verify_unlock():
         conn.close()
         return jsonify({"error": "Usuario no encontrado o inactivo"}), 404
 
+    # Anti fuerza bruta: el PIN es corto, así que se limita el número de intentos fallidos
+    recent_failures = cursor.execute('''
+        SELECT COUNT(*) FROM it_credential_audit
+        WHERE user_id = ? AND action = 'failed_vault_unlock' AND created_at >= datetime('now', '-15 minutes')
+    ''', (user_id,)).fetchone()[0]
+    if recent_failures >= VAULT_MAX_FAILED_UNLOCKS:
+        conn.close()
+        return jsonify({
+            "error": "Demasiados intentos fallidos. Espera 15 minutos o desbloquea con tu contraseña más tarde.",
+            "success": False,
+        }), 429
+
     is_valid = False
     validation_method = None
 
@@ -5306,7 +5226,11 @@ def api_it_vault_verify_unlock():
         ''', (user_id, request.remote_addr))
         conn.commit()
         conn.close()
-        return jsonify({"error": "Credencial de desbloqueo incorrecta. Inténtalo de nuevo.", "success": False}), 401
+        remaining = max(0, VAULT_MAX_FAILED_UNLOCKS - recent_failures - 1)
+        return jsonify({
+            "error": f"Credencial de desbloqueo incorrecta. Intentos restantes: {remaining}.",
+            "success": False,
+        }), 400
 
     # Registrar desbloqueo exitoso
     cursor.execute('''
@@ -5316,9 +5240,11 @@ def api_it_vault_verify_unlock():
     conn.commit()
     conn.close()
 
+    # El servidor solo entrega contraseñas descifradas a peticiones que traigan este token (X-Vault-Token)
     return jsonify({
         "success": True,
-        "expires_in": 300,  # 5 minutos en segundos
+        "vault_token": issue_vault_token(user['id']),
+        "expires_in": VAULT_UNLOCK_SECONDS,
         "message": "Bóveda desbloqueada con éxito"
     }), 200
 
@@ -5354,10 +5280,10 @@ def ensure_daily_rollover(target_date=None, force=False):
             LAST_ROLLOVER_DATE = today_str
             if not claimed:
                 return
-            print(f"[Scheduler] Ejecutando rollover diario para {today_str}...")
+            logger.info("[Scheduler] Ejecutando rollover diario para %s", today_str)
             execute_daily_rollover(today_str)
         except Exception as e:
-            print("[Scheduler] Error en ensure_daily_rollover:", e)
+            logger.exception("[Scheduler] Error en ensure_daily_rollover: %s", e)
 
 def start_midnight_scheduler():
     """Inicia el hilo en background para ejecutar el rollover nocturno periódicamente."""
@@ -5368,7 +5294,7 @@ def start_midnight_scheduler():
             try:
                 ensure_daily_rollover()
             except Exception as e:
-                print("[Scheduler] Error en ciclo periódico:", e)
+                logger.exception("[Scheduler] Error en ciclo periódico: %s", e)
             time.sleep(60)
 
     t = threading.Thread(target=run_scheduler, daemon=True)
@@ -5392,10 +5318,11 @@ def _init_db_serialized():
 # Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
 try:
     _init_db_serialized()
-    start_midnight_scheduler()
+    if os.environ.get('BITACORA_DISABLE_SCHEDULER') != '1':
+        start_midnight_scheduler()
 except Exception as e:
-    print("[Startup] Error inicializando DB o scheduler:", e)
+    logger.exception("[Startup] Error inicializando DB o scheduler: %s", e)
 
 if __name__ == '__main__':
-    print("Iniciando servidor Flask de Bitácoras con soporte de Usuarios, Equipos, Dashboard y Rollover 00:00 en http://localhost:5000...")
+    logger.info("Servidor de desarrollo de Bitácora en http://localhost:5000")
     app.run(host='0.0.0.0', port=5000, debug=False)

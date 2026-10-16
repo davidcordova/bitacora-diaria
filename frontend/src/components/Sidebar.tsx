@@ -79,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'kanban' as ViewMode,
-      label: 'Actividades',
+      label: 'Tablero Kanban',
       icon: Kanban,
       show: true,
       badge: null,
@@ -93,7 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'equipo' as ViewMode,
-      label: 'Seguimiento',
+      label: 'Supervisión de Equipo',
       icon: Users,
       show: isLider,
       badge: null,

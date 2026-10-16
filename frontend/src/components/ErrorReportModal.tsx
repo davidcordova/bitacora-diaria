@@ -15,6 +15,7 @@ import {
 import { User, Evidencia } from '../types';
 import { api } from '../services/api';
 import { copyToClipboard } from '../utils/formatters';
+import { alertDialog } from './DialogHost';
 
 interface ErrorReportModalProps {
   isOpen: boolean;
@@ -114,7 +115,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
       setReportSuccess(true);
     } catch (err) {
       console.error('Error enviando reporte:', err);
-      alert('No se pudo enviar el reporte automáticamente. Puedes copiar el texto y enviarlo por chat.');
+      void alertDialog('No se pudo enviar el reporte automáticamente. Puedes copiar el texto y enviarlo por chat.');
     } finally {
       setSendingReport(false);
     }

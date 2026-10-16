@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Evidencia } from '../types';
+import { alertDialog } from './DialogHost';
 
 interface HtmlEditorProps {
   value: string;
@@ -159,7 +160,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
       }
     } catch (e: any) {
       console.error('Error al subir archivo en HtmlEditor:', e);
-      alert(`No se pudo subir el archivo: ${e.message || 'Error de conexión'}`);
+      void alertDialog(`No se pudo subir el archivo: ${e.message || 'Error de conexión'}`);
     } finally {
       setIsUploading(false);
     }

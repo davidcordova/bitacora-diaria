@@ -26,6 +26,11 @@ from database import get_db, DB_PATH
 TOKEN_MAX_AGE_SECONDS = 30 * 24 * 3600  # 30 días: compatible con el uso offline-first
 TOKEN_SALT = 'bitacora-session-v1'
 
+# Desbloqueo de la bóveda: token corto, firmado y ligado al usuario (enviado en X-Vault-Token)
+VAULT_TOKEN_SALT = 'bitacora-vault-unlock-v1'
+VAULT_UNLOCK_SECONDS = 15 * 60
+VAULT_MAX_FAILED_UNLOCKS = 5
+
 LOGIN_WINDOW_SECONDS = 15 * 60
 LOGIN_MAX_FAILURES_PER_USER = 8
 LOGIN_MAX_FAILURES_PER_IP = 25
@@ -90,7 +95,8 @@ def _load_user_from_token(token):
 
     conn = get_db()
     row = conn.execute('''
-        SELECT u.id, u.username, u.full_name, u.role, u.team_id, u.is_active, u.password_hash
+        SELECT u.id, u.username, u.full_name, u.role, u.team_id, u.is_active, u.password_hash,
+               COALESCE(u.must_change_password, 0) AS must_change_password
         FROM users u WHERE u.id = ?
     ''', (data.get('uid'),)).fetchone()
     if not row or not row['is_active']:
@@ -102,6 +108,26 @@ def _load_user_from_token(token):
     if user['role'] == 'operador':
         user['role'] = 'analista'
     return user, None
+
+
+# ==================== DESBLOQUEO DE BÓVEDA ====================
+
+def issue_vault_token(user_id):
+    s = URLSafeTimedSerializer(_get_secret_key(), salt=VAULT_TOKEN_SALT)
+    return s.dumps({'uid': int(user_id)})
+
+
+def vault_unlocked():
+    """True si la petición trae un token de desbloqueo vigente del mismo usuario autenticado."""
+    user = getattr(g, 'current_user', None)
+    token = request.headers.get('X-Vault-Token', '').strip()
+    if not user or not token:
+        return False
+    try:
+        data = URLSafeTimedSerializer(_get_secret_key(), salt=VAULT_TOKEN_SALT).loads(token, max_age=VAULT_UNLOCK_SECONDS)
+    except (BadSignature, SignatureExpired):
+        return False
+    return int(data.get('uid', -1)) == int(user['id'])
 
 
 # ==================== RATE LIMIT DE LOGIN (tabla login_attempts creada en init_db) ====================
@@ -261,6 +287,9 @@ def _ownership_denied(user):
     return False
 
 
+PASSWORD_CHANGE_ALLOWED_PATHS = ('/api/auth/change-password', '/api/auth/profile', '/api/support/report-error')
+
+
 def register_security(app):
     @app.before_request
     def _enforce_auth():
@@ -279,6 +308,14 @@ def register_security(app):
         if not user:
             return jsonify({'error': err, 'code': 'auth_invalid'}), 401
         g.current_user = user
+
+        # Contraseña temporal o por defecto: solo lectura hasta que el usuario la cambie
+        if user.get('must_change_password') and request.method not in ('GET', 'HEAD') \
+                and path not in PASSWORD_CHANGE_ALLOWED_PATHS:
+            return jsonify({
+                'error': 'Debes cambiar tu contraseña antes de continuar.',
+                'code': 'password_change_required',
+            }), 403
 
         if _is_admin_only(path, request.method) and user['role'] != 'admin':
             return jsonify({'error': 'Acción reservada a administradores'}), 403

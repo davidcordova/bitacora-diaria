@@ -1,19 +1,18 @@
-import sqlite3
-from datetime import datetime, timedelta
+from datetime import timedelta
 from werkzeug.security import generate_password_hash
 from database import get_db, get_peru_now, get_peru_today_str
 
 def seed_team_and_activities():
+    """Solo para entornos de demostración (el endpoint exige ENABLE_MAINTENANCE_ENDPOINTS=1)."""
     conn = get_db()
     cursor = conn.cursor()
     
     print("Inicializando datos de prueba para equipo y bitácoras...")
     
-    # 1. Asignar a todos los colaboradores primero (sin team_id aún para evitar conflicto de FK)
-    admin_hash = generate_password_hash('M1un1c4cl4v3')
+    # 1. Asignar a todos los colaboradores primero (sin team_id aún para evitar conflicto de FK).
+    #    La cuenta admin real NO se toca: antes se le reescribía la contraseña con una conocida.
     user_hash = generate_password_hash('123456')
     users_data = [
-        (1, 'admin', 'admin@marketingalterno.pe', admin_hash, 'Administrador Principal', 'admin', '51999888777'),
         (3, 'juan', 'juan.perez@marketingalterno.pe', user_hash, 'Juan Pérez García', 'lider', '51987654321'),
         (4, 'maria', 'maria.lopez@marketingalterno.pe', user_hash, 'María López', 'analista', '51912345678'),
         (5, 'carlos', 'carlos.mendoza@marketingalterno.pe', user_hash, 'Carlos Mendoza', 'analista', '51923456789'),
@@ -43,7 +42,6 @@ def seed_team_and_activities():
         
     peru_now = get_peru_now()
     today_str = get_peru_today_str()
-    yesterday_str = (peru_now - timedelta(days=1)).strftime('%Y-%m-%d')
     stalled_time = (peru_now - timedelta(hours=28)).strftime('%Y-%m-%d %H:%M:%S')
     recent_time = (peru_now - timedelta(minutes=45)).strftime('%Y-%m-%d %H:%M:%S')
     

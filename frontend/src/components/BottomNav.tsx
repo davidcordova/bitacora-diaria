@@ -48,7 +48,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <div className="relative">
           <Kanban className="w-5 h-5" />
         </div>
-        <span className="text-[10px] mt-0.5">Tareas</span>
+        <span className="text-[10px] mt-0.5">Tablero</span>
       </button>
 
       {/* 3. Seguimiento (si es líder/admin) o Historial */}

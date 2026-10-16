@@ -28,11 +28,30 @@ export const setAuthToken = (token: string | null) => {
 
 let authExpiredNotified = false;
 
+// Token de desbloqueo de la bóveda: solo en memoria (nunca en localStorage), expira en el servidor.
+let vaultToken: string | null = null;
+let vaultTokenExpiresAt = 0;
+
+export const getVaultToken = (): string | null => {
+  if (vaultToken && Date.now() < vaultTokenExpiresAt) return vaultToken;
+  vaultToken = null;
+  return null;
+};
+
+export const clearVaultToken = () => {
+  vaultToken = null;
+  vaultTokenExpiresAt = 0;
+};
+
 const authFetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
   const headers = new Headers(init.headers || {});
   const token = getAuthToken();
   if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
+  }
+  const vt = getVaultToken();
+  if (vt && input.includes('/it-vault') && !headers.has('X-Vault-Token')) {
+    headers.set('X-Vault-Token', vt);
   }
   const res = await fetch(input, { ...init, headers });
   if (res.status === 401 && !input.includes('/auth/login')) {
@@ -41,6 +60,13 @@ const authFetch = async (input: string, init: RequestInit = {}): Promise<Respons
       setTimeout(() => { authExpiredNotified = false; }, 3000);
       window.dispatchEvent(new CustomEvent('auth:expired'));
     }
+  } else if (res.status === 403) {
+    // Contraseña temporal o por defecto: el servidor solo permite lectura hasta cambiarla
+    res.clone().json().then((body) => {
+      if (body?.code === 'password_change_required') {
+        window.dispatchEvent(new CustomEvent('auth:password-change-required'));
+      }
+    }).catch(() => {});
   }
   return res;
 };
@@ -107,6 +133,7 @@ export const api = {
 
   logout() {
     setAuthToken(null);
+    clearVaultToken();
   },
 
   // ================= USERS =================
@@ -218,7 +245,7 @@ export const api = {
     phone?: string;
     current_password?: string;
     new_password?: string;
-  }): Promise<{ success: boolean; message: string; user: User }> {
+  }): Promise<{ success: boolean; message: string; user: User; token?: string }> {
     const res = await authFetch(`${API_BASE}/auth/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -228,7 +255,10 @@ export const api = {
       const err = await res.json().catch(() => ({ error: 'Error al actualizar perfil' }));
       throw new Error(err.error || 'Error al actualizar perfil');
     }
-    return await res.json();
+    const result = await res.json();
+    // Cambiar la contraseña invalida el token anterior: el servidor entrega uno nuevo
+    if (result?.token) setAuthToken(result.token);
+    return result;
   },
 
   // ================= TEAMS =================
@@ -982,7 +1012,10 @@ export const api = {
     if (params?.estado) q.set('estado', params.estado);
     if (params?.include_passwords) q.set('include_passwords', '1');
     const res = await authFetch(`${API_BASE}/it-vault/platform-users/export?${q.toString()}`);
-    if (!res.ok) throw new Error('Error al exportar cuentas de usuarios');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al exportar cuentas de usuarios' }));
+      throw new Error(err.error || 'Error al exportar cuentas de usuarios');
+    }
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1144,7 +1177,7 @@ export const api = {
     return res.json();
   },
 
-  async verifyVaultUnlock(userId: number, creds: { password?: string; pin?: string }): Promise<{ success: boolean; expires_in: number; message: string }> {
+  async verifyVaultUnlock(userId: number, creds: { password?: string; pin?: string }): Promise<{ success: boolean; expires_in: number; message: string; vault_token?: string }> {
     const res = await authFetch(`${API_BASE}/it-vault/verify-unlock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1154,7 +1187,13 @@ export const api = {
       const err = await res.json().catch(() => ({ error: 'Credenciales inválidas' }));
       throw new Error(err.error || 'Credenciales inválidas');
     }
-    return res.json();
+    const data = await res.json();
+    if (data?.vault_token) {
+      vaultToken = data.vault_token;
+      // Margen de 10 s para no enviar un token a punto de expirar
+      vaultTokenExpiresAt = Date.now() + Math.max(0, (Number(data.expires_in) || 900) - 10) * 1000;
+    }
+    return data;
   },
 
   // ================= DELEGACIONES Y USUARIOS DE APOYO =================

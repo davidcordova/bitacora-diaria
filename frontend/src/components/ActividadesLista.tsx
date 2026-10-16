@@ -477,13 +477,13 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               <thead>
                 <tr className="border-b border-slate-200/90 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-2.5 w-10 text-center">#</th>
-                  <th className="py-3 px-2.5 w-28 whitespace-nowrap">Horario / Tiempo</th>
+                  <th className="py-3 px-2.5 min-w-[150px] whitespace-nowrap">Horario / Tiempo</th>
                   <th className="py-3 px-3 min-w-[200px]">Actividad (Descripción)</th>
                   <th className="py-3 px-2.5 w-24 whitespace-nowrap">Tipo</th>
                   <th className="py-3 px-2.5 w-28 whitespace-nowrap">Para / Cliente</th>
                   <th className="py-3 px-2.5 w-32 whitespace-nowrap">Trabajo en Paralelo</th>
                   <th className="py-3 px-2 w-16 text-center whitespace-nowrap">Adjuntos</th>
-                  <th className="py-3 px-2.5 w-28 whitespace-nowrap">Estado</th>
+                  <th className="py-3 px-2.5 min-w-[130px] whitespace-nowrap">Estado</th>
                   <th className="py-3 px-2.5 w-20 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
@@ -512,15 +512,22 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
                       {/* Horario / Tiempo */}
                       <td className="py-3.5 px-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
-                          <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
-                          <span>{act.hora_inicio || '--:--'}</span>
-                          <span className="text-slate-400 dark:text-slate-500 font-normal">→</span>
-                          <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}</span>
-                          <span className="text-slate-300 dark:text-slate-700 mx-0.5">•</span>
-                          <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
-                        </div>
-                        {(act.parent_task_id || act.is_rollover) && (
+                        {(!act.hora_inicio || act.hora_inicio === '--:--') && (!act.duracion_min || act.duracion_min === 0) ? (
+                          <div className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 font-medium bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/50">
+                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                            <span>{act.parent_task_id || act.is_rollover ? 'Arrastrada · sin tiempo hoy' : 'Sin horario asignado'}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
+                            <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                            <span>{act.hora_inicio || '--:--'}</span>
+                            <span className="text-slate-400 dark:text-slate-500 font-normal">→</span>
+                            <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}</span>
+                            <span className="text-slate-300 dark:text-slate-700 mx-0.5">•</span>
+                            <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{act.duracion_min}m</span>
+                          </div>
+                        )}
+                        {(act.parent_task_id || act.is_rollover) && (act.hora_inicio && act.duracion_min > 0) && (
                           <span className="inline-flex items-center gap-1 text-[10px] text-purple-700 dark:text-purple-300 font-bold bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full border border-purple-200 dark:border-purple-800/40 mt-1">
                             <RefreshCw className="w-2.5 h-2.5" />
                             <span>Continuada</span>
@@ -719,12 +726,20 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-[10px] font-bold text-slate-600 dark:text-slate-400">
                         {index + 1}
                       </span>
-                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
-                      </span>
-                      <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
-                        {act.duracion_min}m
-                      </span>
+                      {(!act.hora_inicio || act.hora_inicio === '--:--') && (!act.duracion_min || act.duracion_min === 0) ? (
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800/40">
+                          {act.parent_task_id || act.is_rollover ? 'Arrastrada · sin tiempo hoy' : 'Sin horario'}
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
+                          </span>
+                          <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
+                            {act.duracion_min}m
+                          </span>
+                        </>
+                      )}
                       {hasShared && (
                         <span className="text-[10px] font-bold px-2 py-0.5 bg-[#EC4899]/10 text-[#EC4899] rounded-full border border-[#EC4899]/30 inline-flex items-center gap-1">
                           <Users className="w-3 h-3 text-[#EC4899]" />

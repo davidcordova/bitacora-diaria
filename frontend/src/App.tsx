@@ -1,19 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import confetti from 'canvas-confetti';
 
 import { Sidebar } from './components/Sidebar';
 import { ActividadesLista } from './components/ActividadesLista';
 import { CierreJornada } from './components/CierreJornada';
 import { ResumenPreview } from './components/ResumenPreview';
-import { KanbanBoard } from './components/KanbanBoard';
-import { HistorialView } from './components/HistorialView';
 import { SummaryDrawer } from './components/SummaryDrawer';
-import { DashboardView } from './components/DashboardView';
-import { TeamSupervisionView } from './components/TeamSupervisionView';
-import { UserManagementView } from './components/UserManagementView';
-import { BuzonView } from './components/BuzonView';
-import { VaultView } from './components/VaultView';
-import { ManualView } from './components/ManualView';
+// Vistas pesadas cargadas bajo demanda (code-splitting) para acelerar la carga inicial
+const KanbanBoard = lazy(() => import('./components/KanbanBoard').then((m) => ({ default: m.KanbanBoard })));
+const HistorialView = lazy(() => import('./components/HistorialView').then((m) => ({ default: m.HistorialView })));
+const DashboardView = lazy(() => import('./components/DashboardView').then((m) => ({ default: m.DashboardView })));
+const TeamSupervisionView = lazy(() => import('./components/TeamSupervisionView').then((m) => ({ default: m.TeamSupervisionView })));
+const UserManagementView = lazy(() => import('./components/UserManagementView').then((m) => ({ default: m.UserManagementView })));
+const BuzonView = lazy(() => import('./components/BuzonView').then((m) => ({ default: m.BuzonView })));
+const VaultView = lazy(() => import('./components/VaultView').then((m) => ({ default: m.VaultView })));
+const ManualView = lazy(() => import('./components/ManualView').then((m) => ({ default: m.ManualView })));
 import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
@@ -29,6 +30,8 @@ import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSetti
 import { defaultBitacora } from './utils/initialData';
 import { api, getAuthToken } from './services/api';
 import { getTodayLocalDateStr } from './utils/formatters';
+import { confirmDialog, DialogHost } from './components/DialogHost';
+import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 
 const getDraftKey = (userId?: number, dateStr?: string) => `bitacora_draft_${userId || 'user'}_${dateStr || 'today'}`;
 
@@ -1319,7 +1322,7 @@ export function App() {
   };
 
   const handleDeleteBitacora = async (id: number) => {
-    if (window.confirm('¿Deseas eliminar este registro del historial?')) {
+    if (await confirmDialog('¿Deseas eliminar este registro del historial?')) {
       await api.deleteBitacora(id);
       setHistorial((prev) => prev.filter((b) => b.id !== id));
       showToast('info', 'Registro eliminado del historial');
@@ -1402,6 +1405,15 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // El servidor exige cambiar la contraseña (403 password_change_required)
+  useEffect(() => {
+    const onPwRequired = () => {
+      setCurrentUser((prev) => (prev ? { ...prev, must_change_password: true } : prev));
+    };
+    window.addEventListener('auth:password-change-required', onPwRequired);
+    return () => window.removeEventListener('auth:password-change-required', onPwRequired);
+  }, []);
+
   // Cuando nadie está autenticado, renderizar la pantalla completa de Login
   if (!currentUser) {
     return (
@@ -1430,6 +1442,7 @@ export function App() {
           }}
           systemSettings={systemSettings || undefined}
         />
+        <DialogHost />
       </>
     );
   }
@@ -1479,6 +1492,14 @@ export function App() {
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
+          <Suspense
+            fallback={
+              <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
+                <div className="w-8 h-8 rounded-full border-4 border-slate-300 dark:border-slate-700 border-t-indigo-500 animate-spin" />
+                <span className="sr-only">Cargando vista…</span>
+              </div>
+            }
+          >
           {/* VIEW 1: MI BITÁCORA */}
           {viewMode === 'lista' && (
             <div className="w-full max-w-[1700px] mx-auto space-y-6">
@@ -1649,6 +1670,7 @@ export function App() {
               onOpenHelpModal={() => setHelpModalOpen(true)}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
@@ -1667,6 +1689,21 @@ export function App() {
 
       {/* Floating Toast Notification Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Diálogos de confirmación/alerta propios (reemplazan window.confirm/alert) */}
+      <DialogHost />
+
+      {/* Cambio de contraseña obligatorio (contraseña temporal o débil) */}
+      {currentUser.must_change_password && (
+        <ForcePasswordChangeModal
+          currentUser={currentUser}
+          onChanged={(u) => {
+            setCurrentUser(u);
+            setSyncNudge((n) => n + 1);
+          }}
+          onLogout={handleLogout}
+        />
+      )}
 
       {/* 3-Step Visual Help & Onboarding Guide Modal */}
       <HelpGuideModal

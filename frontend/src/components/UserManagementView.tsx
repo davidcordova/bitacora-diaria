@@ -35,6 +35,7 @@ import {
 import { User, Team, UserRole, SystemSettings, UserDelegation } from '../types';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
+import { confirmDialog, alertDialog } from './DialogHost';
 
 interface UserManagementViewProps {
   teams: Team[];
@@ -236,7 +237,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       setFeedbackMsg('Recurso cargado correctamente. Haz clic en "Guardar Configuración General" para aplicar.');
       setTimeout(() => setFeedbackMsg(''), 4000);
     } catch (err: any) {
-      alert(err.message || 'Error al subir el archivo');
+      void alertDialog(err.message || 'Error al subir el archivo');
     } finally {
       setUploadingTarget(null);
     }
@@ -287,7 +288,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       }
       setTimeout(() => setFeedbackMsg(''), 5000);
     } catch (err: any) {
-      alert(err.message || 'Error al purgar datos');
+      void alertDialog(err.message || 'Error al purgar datos');
     } finally {
       setCleaningData(false);
     }
@@ -308,7 +309,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       }
       setTimeout(() => setFeedbackMsg(''), 5000);
     } catch (err: any) {
-      alert(err.message || 'Error al cargar datos de demostración');
+      void alertDialog(err.message || 'Error al cargar datos de demostración');
     } finally {
       setSeedingData(false);
     }
@@ -357,15 +358,25 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         });
         setFeedbackMsg('Usuario actualizado correctamente');
       } else {
-        await api.createUser({
+        if (userForm.password && userForm.password.length < 8) {
+          void alertDialog('La contraseña debe tener al menos 8 caracteres.');
+          return;
+        }
+        const res = await api.createUser({
           username: userForm.username.trim(),
           full_name: userForm.full_name.trim(),
           email: userForm.email.trim(),
           phone: userForm.phone.trim(),
           role: userForm.role,
           team_id: userForm.team_id ? Number(userForm.team_id) : null,
-          password: userForm.password || '123456',
+          password: userForm.password ? userForm.password.trim() : undefined,
         });
+        if (res?.temp_password) {
+          void alertDialog(
+            `Se ha creado el usuario @${userForm.username.trim()} con éxito.\n\nContraseña temporal asignada:\n${res.temp_password}\n\nCopia esta clave y compártela de forma segura. El sistema le exigirá cambiarla inmediatamente en su primer ingreso.`,
+            'Usuario Creado con Clave Temporal'
+          );
+        }
         setFeedbackMsg('Usuario creado con éxito');
       }
       setShowUserModal(false);
@@ -373,7 +384,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       onRefreshTeams();
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar usuario');
+      void alertDialog(err.message || 'Error al guardar usuario');
     }
   };
 
@@ -384,7 +395,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       setFeedbackMsg(Boolean(u.is_active) ? `Usuario @${u.username} desactivado` : `Usuario @${u.username} reactivado`);
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message || 'Error al actualizar estado del usuario');
+      void alertDialog(err.message || 'Error al actualizar estado del usuario');
     }
   };
 
@@ -405,7 +416,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       setFeedbackMsg(permanent ? 'Usuario eliminado definitivamente del sistema' : 'Estado del usuario actualizado');
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
-      alert(err.message || 'Error al procesar la eliminación');
+      void alertDialog(err.message || 'Error al procesar la eliminación');
     } finally {
       setDeletingUser(false);
     }
@@ -432,11 +443,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const handleSaveDelegation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!delegationForm.delegate_user_id) {
-      alert('Debes seleccionar al colaborador que brindará el apoyo');
+      void alertDialog('Debes seleccionar al colaborador que brindará el apoyo');
       return;
     }
     if (delegationForm.target_user_ids.length === 0) {
-      alert('Debes seleccionar al menos un colaborador titular para brindarle apoyo');
+      void alertDialog('Debes seleccionar al menos un colaborador titular para brindarle apoyo');
       return;
     }
     setSavingDelegation(true);
@@ -452,7 +463,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       loadDelegations();
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
-      alert(err.message || 'Error al guardar asignaciones de apoyo');
+      void alertDialog(err.message || 'Error al guardar asignaciones de apoyo');
     } finally {
       setSavingDelegation(false);
     }
@@ -468,7 +479,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       loadDelegations();
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
-      alert(err.message || 'Error al revocar apoyo');
+      void alertDialog(err.message || 'Error al revocar apoyo');
     }
   };
 
@@ -482,7 +493,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       loadDelegations();
       setTimeout(() => setFeedbackMsg(''), 3500);
     } catch (err: any) {
-      alert(err.message || 'Error al revocar asignaciones');
+      void alertDialog(err.message || 'Error al revocar asignaciones');
     }
   };
 
@@ -532,12 +543,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       loadUsers();
       setTimeout(() => setFeedbackMsg(''), 3000);
     } catch (err: any) {
-      alert(err.message);
+      void alertDialog(err.message);
     }
   };
 
   const handleDeleteTeam = async (id: number) => {
-    if (window.confirm('¿Deseas eliminar este equipo? Sus miembros quedarán sin equipo asignado.')) {
+    if (await confirmDialog('¿Deseas eliminar este equipo? Sus miembros quedarán sin equipo asignado.')) {
       await api.deleteTeam(id);
       onRefreshTeams();
       loadUsers();
@@ -1078,7 +1089,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                     Limpieza y Purga de Datos
                   </h4>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Vacía las bitácoras y colaboradores de prueba para dejar el sistema impecable en producción con únicamente el Administrador.
+                    Vacía las bitácoras y colaboradores de prueba para dejar el sistema impecable en producción con únicamente el Administrador (Protegido por flag de servidor en producción).
                   </p>
                 </div>
 
@@ -2154,7 +2165,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   type="password"
                   value={userForm.password}
                   onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                  placeholder={editingUserId ? 'Dejar en blanco para conservar la actual' : 'Mínimo 4 caracteres (ej: 123456)'}
+                  placeholder={editingUserId ? 'Dejar en blanco para conservar la actual' : 'Mínimo 8 caracteres (o vacío para autogenerar temporal)'}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] dark:text-slate-100 focus:outline-hidden focus:border-[#00F0FF]"
                 />
                 {editingUserId && (

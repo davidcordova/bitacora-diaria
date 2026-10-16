@@ -9,6 +9,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Evidencia } from '../types';
+import { confirmDialog } from './DialogHost';
 
 interface EvidenceViewerModalProps {
   isOpen: boolean;
@@ -112,8 +113,8 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
             {onDelete && current.id && (
               <button
                 type="button"
-                onClick={() => {
-                  if (confirm(`¿Eliminar evidencia "${current.nombre}"?`)) {
+                onClick={async () => {
+                  if (await confirmDialog(`¿Eliminar evidencia "${current.nombre}"?`)) {
                     onDelete(current.id!);
                     if (evidencias.length <= 1) {
                       onClose();

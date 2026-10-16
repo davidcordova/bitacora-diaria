@@ -114,6 +114,7 @@ export interface User {
   team_name?: string | null;
   is_active?: boolean | number;
   is_leader?: boolean;
+  must_change_password?: boolean;
 }
 
 export interface Team {
@@ -253,7 +254,9 @@ export interface QuickLink {
   icono?: string;
   color?: string;
   usuario?: string;
-  password?: string;
+  password?: string | null;
+  has_password?: boolean;
+  secret_locked?: boolean;
   visibilidad: 'personal' | 'equipo' | 'global';
   team_id?: number | null;
   team_name?: string | null;
@@ -288,7 +291,9 @@ export interface ItCredential {
   tipo_servicio: string;
   url_acceso?: string;
   usuario_login: string;
-  password_secret: string;
+  password_secret: string | null;
+  has_password_secret?: boolean;
+  secret_locked?: boolean;
   notas?: string;
   tipo_cuenta?: 'master' | 'admin' | 'operativa' | 'consulta' | string;
   is_active?: number;
@@ -322,8 +327,10 @@ export interface ItPlatformUser {
   colaborador_email?: string;
   colaborador_telefono?: string;
   usuario_login: string;
-  password_actual: string;
-  password_anterior?: string;
+  password_actual: string | null;
+  password_anterior?: string | null;
+  has_password_actual?: boolean;
+  secret_locked?: boolean;
   estado: 'activo' | 'suspendido' | 'por_crear' | 'baja';
   ultimo_reseteo?: string;
   notas?: string;

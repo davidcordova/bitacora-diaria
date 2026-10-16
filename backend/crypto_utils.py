@@ -2,11 +2,12 @@
 Módulo de Seguridad Criptográfica para la Bóveda TI (Bitácora Diaria)
 Utiliza Fernet (AES-128-CBC + HMAC-SHA256 authenticated encryption).
 Garantiza cifrado en reposo para todas las contraseñas y secretos del sistema.
-Incluye mecanismo resiliente Zero-Crash si la dependencia 'cryptography' aún no ha sido instalada en el host.
+Si la dependencia 'cryptography' falta, el servidor arranca pero rechaza guardar secretos nuevos.
 """
 
 import os
 import base64
+import logging
 import secrets
 import time
 from pathlib import Path
@@ -18,6 +19,8 @@ LEGACY_KEY_FILE = BASE_DIR / ".vault_key"
 _DB_PATH = os.environ.get('DATABASE_PATH')
 KEY_FILE = (Path(_DB_PATH).resolve().parent / ".vault_key") if _DB_PATH else LEGACY_KEY_FILE
 
+logger = logging.getLogger('bitacora.crypto')
+
 try:
     from cryptography.fernet import Fernet, InvalidToken
     _HAS_FERNET = True
@@ -25,9 +28,8 @@ except ImportError:
     _HAS_FERNET = False
     Fernet = None
     InvalidToken = Exception
-    print("[Crypto WARNING] La biblioteca 'cryptography' no está instalada en este entorno Python.")
-    print("[Crypto WARNING] Se utilizará cifrado de reserva temporal para evitar caída del servidor (502 Bad Gateway).")
-    print("[Crypto WARNING] Ejecute 'pip install cryptography' en su entorno de servidor para habilitar Fernet AES-256.")
+    logger.error("La biblioteca 'cryptography' no está instalada: no se podrán guardar secretos en la bóveda. "
+                 "Instálala (requirements.txt) para habilitar Fernet (AES-128-CBC + HMAC-SHA256).")
 
 
 def _read_key(path: Path):
@@ -70,7 +72,7 @@ def get_or_create_vault_key() -> bytes:
                 return key
             time.sleep(0.05)
     except Exception as e:
-        print(f"[Crypto] Advertencia: No se pudo guardar la llave de la bóveda en {KEY_FILE}: {e}")
+        logger.error("[Crypto] No se pudo guardar la llave de la bóveda en %s: %s", KEY_FILE, e)
     return candidate
 
 
@@ -80,7 +82,7 @@ _cipher_suite = Fernet(_vault_key) if _HAS_FERNET and Fernet else None
 
 def encrypt_vault_secret(secret_text: str) -> str:
     """
-    Cifra un texto plano usando AES-Fernet o fallback seguro si la librería no está presente.
+    Cifra un texto plano con Fernet (AES-128-CBC + HMAC-SHA256).
     Retorna el token codificado con prefijo 'enc::' para identificación explícita.
     """
     if not secret_text:
@@ -92,14 +94,9 @@ def encrypt_vault_secret(secret_text: str) -> str:
     if _cipher_suite is not None:
         token = _cipher_suite.encrypt(secret_text.encode('utf-8')).decode('utf-8')
         return f"enc::{token}"
-    else:
-        # Fallback de emergencia cuando cryptography no está instalado
-        # Ofuscación XOR con la clave maestra + Base64
-        key_bytes = _vault_key
-        text_bytes = secret_text.encode('utf-8')
-        xored = bytes(b ^ key_bytes[i % len(key_bytes)] for i, b in enumerate(text_bytes))
-        token = base64.urlsafe_b64encode(xored).decode('utf-8')
-        return f"enc::fallback::{token}"
+    # Sin Fernet no se guarda nada: una ofuscación débil daría una falsa sensación de seguridad.
+    # (Los valores "enc::fallback::" antiguos se siguen pudiendo leer en decrypt_vault_secret.)
+    raise RuntimeError("Cifrado no disponible: instala la dependencia 'cryptography'")
 
 
 def decrypt_vault_secret(stored_val: str) -> str:

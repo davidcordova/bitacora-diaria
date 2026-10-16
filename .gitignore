@@ -16,9 +16,13 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
+*/.venv/
 ENV/
 env.bak/
 venv.bak/
+.pytest_cache/
+*/.pytest_cache/
 
 # SQLite databases (persisted on server volume, not tracked in git)
 *.db

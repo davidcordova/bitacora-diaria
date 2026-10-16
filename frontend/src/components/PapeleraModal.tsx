@@ -17,6 +17,7 @@ import { ActividadPapelera, User } from '../types';
 import { api } from '../services/api';
 import { formatDateDisplay, formatDuration, stripHtml } from '../utils/formatters';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { confirmDialog } from './DialogHost';
 
 interface PapeleraModalProps {
   currentUser: User | null;
@@ -115,7 +116,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
 
   const handleEliminarDefinitivo = async (act: ActividadPapelera) => {
     if (!act.id) return;
-    if (!window.confirm(`¿Estás seguro de eliminar permanentemente esta actividad? Esta acción no se puede deshacer.`)) {
+    if (!(await confirmDialog(`¿Estás seguro de eliminar permanentemente esta actividad? Esta acción no se puede deshacer.`))) {
       return;
     }
     setActionLoadingId(act.id);

@@ -622,9 +622,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            if (window.confirm('¿Estás seguro de eliminar esta bitácora del historial?')) {
-                              onDeleteBitacora(item.id as number);
-                            }
+                            onDeleteBitacora(item.id as number);
                           }}
                           title="Eliminar registro"
                           className="p-2 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full transition-colors cursor-pointer"
@@ -701,9 +699,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm('¿Estás seguro de eliminar esta bitácora del historial?')) {
-                                onDeleteBitacora(item.id as number);
-                              }
+                              onDeleteBitacora(item.id as number);
                             }}
                             className="p-2 min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer transition-colors"
                           >
@@ -848,9 +844,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (window.confirm('¿Estás seguro de eliminar esta bitácora del historial?')) {
-                          onDeleteBitacora(item.id as number);
-                        }
+                        onDeleteBitacora(item.id as number);
                       }}
                       title="Eliminar registro"
                       className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full transition-colors cursor-pointer"

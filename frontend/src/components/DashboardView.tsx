@@ -249,7 +249,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           <button
             type="button"
             onClick={fetchStats}
-            title="Actualizar telemetría"
+            title="Actualizar datos"
             className="p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer shrink-0"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
@@ -409,7 +409,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     Trabajo Planificado
                   </span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
-                    {ratioPlanificado > 0 ? `${ratioPlanificado}%` : 'Flexible'}
+                    {ratioPlanificado > 0 ? `${ratioPlanificado}%` : '0% (Reactivo)'}
                   </span>
                 </div>
               </div>
@@ -423,7 +423,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    {isPersonalScope ? 'Ritmo Diario' : 'Carga por Persona'}
+                    {isPersonalScope ? 'Ritmo Diario' : 'Carga Promedio'}
                   </span>
                   <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
                     {isPersonalScope
@@ -433,7 +433,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </div>
               </div>
               <span className="text-[11px] text-slate-400 font-mono">
-                {isPersonalScope ? 'tareas / día' : 'tareas / pers.'}
+                {isPersonalScope ? 'tareas / jornada' : 'prom. periodo'}
               </span>
             </div>
           </div>
@@ -529,8 +529,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   {isPersonalScope
-                    ? 'Curva de telemetría de tus actividades y horas trabajadas por jornada'
-                    : 'Curva spline de telemetría de actividades y horas registradas por jornada'}
+                    ? 'Tendencia diaria de tus actividades y horas trabajadas por jornada'
+                    : 'Tendencia diaria de actividades y horas registradas por jornada'}
                 </p>
               </div>
 

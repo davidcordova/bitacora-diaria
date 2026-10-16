@@ -1,9 +1,17 @@
 import sqlite3
 import os
 import json
+import logging
+import secrets
 from datetime import datetime, timedelta
-from werkzeug.security import generate_password_hash
+from werkzeug.security import generate_password_hash, check_password_hash
 from crypto_utils import encrypt_vault_secret
+
+logger = logging.getLogger('bitacora.db')
+
+# Contraseñas por defecto conocidas/filtradas: las cuentas que aún las usen deben cambiarla al ingresar
+WEAK_DEFAULT_PASSWORDS = ('M1un1c4cl4v3', '123456', '12345678', 'admin', 'password')
+MIN_PASSWORD_LENGTH = 8
 
 try:
     from zoneinfo import ZoneInfo
@@ -84,7 +92,7 @@ def init_db():
         w_conn.execute("PRAGMA synchronous = NORMAL")
         w_conn.close()
     except Exception as e:
-        print("[DB Init] Advertencia configurando WAL:", e)
+        logger.warning("[DB Init] Advertencia configurando WAL: %s", e)
 
     conn = get_db()
     cursor = conn.cursor()
@@ -127,6 +135,8 @@ def init_db():
         cursor.execute("ALTER TABLE users ADD COLUMN phone TEXT")
     if 'security_pin_hash' not in user_columns:
         cursor.execute("ALTER TABLE users ADD COLUMN security_pin_hash TEXT")
+    if 'must_change_password' not in user_columns:
+        cursor.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0")
 
     # 3. Crear tabla de bitácoras si no existe
     cursor.execute('''
@@ -216,7 +226,7 @@ def init_db():
     try:
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_bitacoras_user_fecha ON bitacoras(user_id, fecha) WHERE user_id IS NOT NULL")
     except sqlite3.IntegrityError as e:
-        print(f"[DB] No se pudo crear el índice único de bitácoras (existen duplicados a revisar): {e}")
+        logger.warning("[DB] No se pudo crear el índice único de bitácoras (existen duplicados a revisar): %s", e)
 
     # Registro de intentos fallidos de inicio de sesión (anti fuerza bruta)
     cursor.execute('''
@@ -277,7 +287,7 @@ def init_db():
             except Exception:
                 pass
     except Exception as e:
-        print(f"[DB] Aviso al limpiar duplicados de evidencias: {e}")
+        logger.warning("[DB] Aviso al limpiar duplicados de evidencias: %s", e)
 
     # 4.2. Crear tabla buzon_sugerencias y buzon_votos
     cursor.execute('''
@@ -352,11 +362,18 @@ def init_db():
             WHERE username = 'admin'
         ''')
     else:
-        initial_admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD') or 'M1un1c4cl4v3'
+        # Sin contraseña inicial por variable de entorno se genera una aleatoria (se muestra una sola vez
+        # en el log del contenedor) y se obliga a cambiarla en el primer ingreso.
+        initial_admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD')
+        must_change = 0
+        if not initial_admin_password:
+            initial_admin_password = secrets.token_urlsafe(12)
+            must_change = 1
+            logger.warning("[DB] Cuenta 'admin' creada con contraseña temporal: %s (cámbiala al ingresar)", initial_admin_password)
         cursor.execute('''
-            INSERT INTO users (username, email, password_hash, full_name, role, phone, is_active, created_at)
-            VALUES ('admin', 'admin@marketingalterno.pe', ?, 'Administrador Principal', 'admin', '51999888777', 1, CURRENT_TIMESTAMP)
-        ''', (generate_password_hash(initial_admin_password),))
+            INSERT INTO users (username, email, password_hash, full_name, role, phone, is_active, must_change_password, created_at)
+            VALUES ('admin', 'admin@marketingalterno.pe', ?, 'Administrador Principal', 'admin', '51999888777', 1, ?, CURRENT_TIMESTAMP)
+        ''', (generate_password_hash(initial_admin_password), must_change))
 
     # 5.1 Auto-sincronizar consistencia de líderes y equipos
     cursor.execute('''
@@ -788,11 +805,71 @@ def init_db():
             if lpass and not lpass.startswith("enc::"):
                 cursor.execute("UPDATE quick_links SET password = ? WHERE id = ?", (encrypt_vault_secret(lpass), lid))
     except Exception as e:
-        print(f"[Crypto] Error en migración de contraseñas: {e}")
+        logger.error("[Crypto] Error en migración de contraseñas: %s", e)
+
+    run_migrations(cursor)
 
     conn.commit()
     conn.close()
 
+
+# ==================== MIGRACIONES VERSIONADAS ====================
+# El esquema base se asegura arriba de forma idempotente (CREATE/ALTER IF NOT EXISTS).
+# Los cambios nuevos de datos o esquema deben agregarse aquí como una migración numerada:
+# cada una se ejecuta exactamente una vez y queda registrada en `schema_migrations`.
+
+def _mig_001_flag_weak_passwords(cursor):
+    """Obliga a cambiar la contraseña a las cuentas que aún usan una contraseña por defecto conocida."""
+    rows = cursor.execute("SELECT id, password_hash FROM users WHERE is_active = 1").fetchall()
+    for row in rows:
+        uid, p_hash = row[0], row[1] or ''
+        for weak in WEAK_DEFAULT_PASSWORDS:
+            try:
+                matches = check_password_hash(p_hash, weak)
+            except Exception:
+                matches = (p_hash == weak)
+            if matches or p_hash == weak:
+                cursor.execute("UPDATE users SET must_change_password = 1 WHERE id = ?", (uid,))
+                break
+
+
+MIGRATIONS = [
+    (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
+]
+
+
+def run_migrations(cursor):
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL
+        )
+    ''')
+    applied = {r[0] for r in cursor.execute("SELECT version FROM schema_migrations").fetchall()}
+    for version, name, fn in MIGRATIONS:
+        if version in applied:
+            continue
+        fn(cursor)
+        cursor.execute(
+            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+            (version, name, get_peru_now_str()),
+        )
+        logger.info("[DB] Migración %s (%s) aplicada", version, name)
+
+
+def get_schema_version():
+    conn = _new_connection()
+    try:
+        row = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        return row[0] or 0
+    except sqlite3.Error:
+        return 0
+    finally:
+        conn.close()
+
+
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
     init_db()
-    print("Base de datos y usuarios/equipos inicializados correctamente en", DB_PATH)
+    logger.info("Base de datos y usuarios/equipos inicializados correctamente en %s", DB_PATH)
