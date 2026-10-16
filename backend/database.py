@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import json
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash
 from crypto_utils import encrypt_vault_secret
@@ -41,22 +42,7 @@ try:
 except ImportError:
     has_app_context = None
 
-def get_db():
-    if has_app_context and has_app_context():
-        if '_db_conn' not in g:
-            conn = sqlite3.connect(DB_PATH, timeout=45.0)
-            conn.row_factory = sqlite3.Row
-            conn.create_function("peru_now", 0, get_peru_now_str)
-            conn.create_function("peru_today", 0, get_peru_today_str)
-            conn.execute("PRAGMA busy_timeout = 45000")
-            conn.execute("PRAGMA foreign_keys = ON")
-            conn.execute("PRAGMA synchronous = NORMAL")
-            g._db_conn = conn
-            if '_open_conns' not in g:
-                g._open_conns = []
-            g._open_conns.append(conn)
-        return g._db_conn
-
+def _new_connection():
     conn = sqlite3.connect(DB_PATH, timeout=45.0)
     conn.row_factory = sqlite3.Row
     conn.create_function("peru_now", 0, get_peru_now_str)
@@ -65,6 +51,30 @@ def get_db():
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA synchronous = NORMAL")
     return conn
+
+
+def _is_open(conn):
+    try:
+        conn.total_changes  # lanza ProgrammingError si la conexión fue cerrada
+        return True
+    except sqlite3.ProgrammingError:
+        return False
+
+
+def get_db():
+    if has_app_context and has_app_context():
+        # Reutilizar la conexión de la petición, salvo que un endpoint/helper ya la haya cerrado
+        cached = g.get('_db_conn')
+        if cached is not None and _is_open(cached):
+            return cached
+        conn = _new_connection()
+        g._db_conn = conn
+        if '_open_conns' not in g:
+            g._open_conns = []
+        g._open_conns.append(conn)
+        return conn
+
+    return _new_connection()
 
 def init_db():
     # Asegurar modo WAL en el archivo de base de datos una sola vez
@@ -196,6 +206,29 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN hora_fin TEXT")
     if 'last_stagnant_notified_at' not in act_columns:
         cursor.execute("ALTER TABLE actividades ADD COLUMN last_stagnant_notified_at DATETIME")
+    if 'client_uid' not in act_columns:
+        # Identificador temporal generado por el navegador (act-...): evita duplicados cuando
+        # una actividad nueva se edita mientras su primer guardado aún está en vuelo
+        cursor.execute("ALTER TABLE actividades ADD COLUMN client_uid TEXT")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_client_uid ON actividades(bitacora_id, client_uid)")
+
+    # Una sola bitácora por colaborador y fecha (evita duplicados por carreras entre workers)
+    try:
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_bitacoras_user_fecha ON bitacoras(user_id, fecha) WHERE user_id IS NOT NULL")
+    except sqlite3.IntegrityError as e:
+        print(f"[DB] No se pudo crear el índice único de bitácoras (existen duplicados a revisar): {e}")
+
+    # Registro de intentos fallidos de inicio de sesión (anti fuerza bruta)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT,
+            ip TEXT,
+            created_at INTEGER NOT NULL
+        )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_user ON login_attempts(username, created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip, created_at)")
 
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
@@ -309,20 +342,21 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_delegations_delegate ON user_delegations(delegate_user_id, is_active)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_delegations_target ON user_delegations(target_user_id, is_active)")
 
-    # 5. Configurar el usuario admin obligatorio con contraseña M1un1c4cl4v3
-    admin_hash = generate_password_hash('M1un1c4cl4v3')
+    # 5. Garantizar que exista la cuenta admin. Solo se fija contraseña al CREARLA:
+    #    nunca se sobrescribe la contraseña de un admin existente (antes se reseteaba en cada arranque).
     cursor.execute("SELECT id FROM users WHERE username = 'admin'")
     admin_row = cursor.fetchone()
     if admin_row:
         cursor.execute('''
-            UPDATE users SET password_hash = ?, full_name = 'Administrador Principal', role = 'admin', is_active = 1, phone = COALESCE(phone, '51999888777')
+            UPDATE users SET role = 'admin', is_active = 1, phone = COALESCE(phone, '51999888777')
             WHERE username = 'admin'
-        ''', (admin_hash,))
+        ''')
     else:
+        initial_admin_password = os.environ.get('ADMIN_INITIAL_PASSWORD') or 'M1un1c4cl4v3'
         cursor.execute('''
             INSERT INTO users (username, email, password_hash, full_name, role, phone, is_active, created_at)
             VALUES ('admin', 'admin@marketingalterno.pe', ?, 'Administrador Principal', 'admin', '51999888777', 1, CURRENT_TIMESTAMP)
-        ''', (admin_hash,))
+        ''', (generate_password_hash(initial_admin_password),))
 
     # 5.1 Auto-sincronizar consistencia de líderes y equipos
     cursor.execute('''
@@ -534,28 +568,10 @@ def init_db():
                     VALUES (?, 'Panel de Servidores AWS', 'https://aws.amazon.com/console', 'Sistemas', 'Consola de nube AWS para gestión de instancias', 'Server', '#F59E0B', 'equipo')
                 ''', (admin_uid,))
 
-    # Si estamos en PRODUCCIÓN: Limpiar quirúrgicamente datos semilla de prueba si existen en la base de datos
-    if is_production_mode():
-        sample_cred_logins = [
-            'admin@marketingalterno.pe', 'soporte.sistemas', 'root_nas',
-            'itadmin@marketingalterno.pe', 'comunicaciones@retailgroup.pe'
-        ]
-        q_marks = ','.join(['?'] * len(sample_cred_logins))
-        cursor.execute(f"DELETE FROM it_credential_permissions WHERE credential_id IN (SELECT id FROM it_credentials WHERE usuario_login IN ({q_marks}))", sample_cred_logins)
-        cursor.execute(f"DELETE FROM it_credentials WHERE usuario_login IN ({q_marks})", sample_cred_logins)
-
-        sample_links = ['Google Workspace', 'Portal Zimbra Webmail', 'Panel de Servidores AWS']
-        l_marks = ','.join(['?'] * len(sample_links))
-        cursor.execute(f"DELETE FROM quick_links WHERE titulo IN ({l_marks})", sample_links)
-
-        sample_colabs = [
-            'Carlos Mendoza Vargas', 'Lucía Torres Paredes', 'Diego Rivas Chávez',
-            'Mariana Quispe Benítez', 'Jorge Herrera Silva', 'Ana Sofía Morales',
-            'Rodrigo Gómez Flores', 'Álvaro Castillo Wong', 'Valeria Paz Soldán',
-            'Fernando Cáceres Luna', 'Patricia Ramos Vega', 'Nuevo Colaborador TI'
-        ]
-        c_marks = ','.join(['?'] * len(sample_colabs))
-        cursor.execute(f"DELETE FROM it_platform_users WHERE colaborador_nombre IN ({c_marks})", sample_colabs)
+    def _run_once(flag_key):
+        """True solo la primera vez para una tarea de mantenimiento; registra el flag de forma atómica."""
+        cursor.execute("INSERT OR IGNORE INTO system_settings (key, value) VALUES (?, ?)", (flag_key, get_peru_now_str()))
+        return cursor.rowcount == 1
 
     # 6.8 Bóveda IT: Directorio de Cuentas de Usuarios por Plataforma (Soporte y Reseteo)
     cursor.execute('''
@@ -587,6 +603,31 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_platform_users_emp_plat ON it_platform_users(empresa_id, plataforma)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_platform_users_colab ON it_platform_users(colaborador_nombre)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_platform_users_login ON it_platform_users(usuario_login)")
+
+    # PRODUCCIÓN: limpieza Única de datos semilla de prueba. Antes se ejecutaba en CADA arranque
+    # (borrando cualquier credencial/enlace real que coincidiera con esos nombres) y, en una base
+    # nueva, fallaba porque it_platform_users aún no existía.
+    if is_production_mode() and _run_once('seed_cleanup_v1_done'):
+        sample_cred_logins = [
+            'admin@marketingalterno.pe', 'soporte.sistemas', 'root_nas',
+            'itadmin@marketingalterno.pe', 'comunicaciones@retailgroup.pe'
+        ]
+        q_marks = ','.join(['?'] * len(sample_cred_logins))
+        cursor.execute(f"DELETE FROM it_credential_permissions WHERE credential_id IN (SELECT id FROM it_credentials WHERE usuario_login IN ({q_marks}))", sample_cred_logins)
+        cursor.execute(f"DELETE FROM it_credentials WHERE usuario_login IN ({q_marks})", sample_cred_logins)
+
+        sample_links = ['Google Workspace', 'Portal Zimbra Webmail', 'Panel de Servidores AWS']
+        l_marks = ','.join(['?'] * len(sample_links))
+        cursor.execute(f"DELETE FROM quick_links WHERE titulo IN ({l_marks})", sample_links)
+
+        sample_colabs = [
+            'Carlos Mendoza Vargas', 'Lucía Torres Paredes', 'Diego Rivas Chávez',
+            'Mariana Quispe Benítez', 'Jorge Herrera Silva', 'Ana Sofía Morales',
+            'Rodrigo Gómez Flores', 'Álvaro Castillo Wong', 'Valeria Paz Soldán',
+            'Fernando Cáceres Luna', 'Patricia Ramos Vega', 'Nuevo Colaborador TI'
+        ]
+        c_marks = ','.join(['?'] * len(sample_colabs))
+        cursor.execute(f"DELETE FROM it_platform_users WHERE colaborador_nombre IN ({c_marks})", sample_colabs)
 
     # 6.9 Datos Semilla para Cuentas de Usuarios por Plataforma (SOLO en entorno local)
     cursor.execute("SELECT COUNT(*) FROM it_platform_users")
@@ -682,30 +723,32 @@ def init_db():
         for c in default_cargos:
             cursor.execute("INSERT OR IGNORE INTO it_cargos (nombre, area) VALUES (?, ?)", c)
 
-    # 7. Limpieza de actividades duplicadas en papelera generadas accidentalmente por ediciones previas
-    cursor.execute('''
-        UPDATE actividades SET parent_task_id = NULL
-        WHERE parent_task_id IN (
-            SELECT a_del.id
-            FROM actividades a_del
-            JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
-                AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
-                AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
-            WHERE a_del.is_deleted = 1
-        )
-    ''')
-    cursor.execute('''
-        DELETE FROM actividades 
-        WHERE is_deleted = 1 
-          AND id IN (
-              SELECT a_del.id
-              FROM actividades a_del
-              JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
-                  AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
-                  AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
-              WHERE a_del.is_deleted = 1
-          )
-    ''')
+    # 7. Reparación Única: purga de duplicados en papelera generados por un bug antiguo de edición.
+    #    Antes se ejecutaba en cada arranque y borraba definitivamente elementos de la papelera.
+    if _run_once('trash_dedup_v1_done'):
+        cursor.execute('''
+            UPDATE actividades SET parent_task_id = NULL
+            WHERE parent_task_id IN (
+                SELECT a_del.id
+                FROM actividades a_del
+                JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
+                    AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
+                    AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
+                WHERE a_del.is_deleted = 1
+            )
+        ''')
+        cursor.execute('''
+            DELETE FROM actividades 
+            WHERE is_deleted = 1 
+              AND id IN (
+                  SELECT a_del.id
+                  FROM actividades a_del
+                  JOIN actividades a_act ON a_del.bitacora_id = a_act.bitacora_id 
+                      AND TRIM(LOWER(a_del.descripcion)) = TRIM(LOWER(a_act.descripcion))
+                      AND (a_act.is_deleted IS NULL OR a_act.is_deleted = 0)
+                  WHERE a_del.is_deleted = 1
+              )
+        ''')
 
     # 7.1 Limpieza de referencias huérfanas o cíclicas de parent_task_id
     cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = id")

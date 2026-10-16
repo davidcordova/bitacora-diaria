@@ -27,7 +27,7 @@ import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
 import { defaultBitacora } from './utils/initialData';
-import { api } from './services/api';
+import { api, getAuthToken } from './services/api';
 import { getTodayLocalDateStr } from './utils/formatters';
 
 const getDraftKey = (userId?: number, dateStr?: string) => `bitacora_draft_${userId || 'user'}_${dateStr || 'today'}`;
@@ -79,6 +79,164 @@ const getBitacoraSignature = (b?: Partial<Bitacora> | null, defaultColab?: strin
     acts,
   });
 };
+
+// ID numérico = actividad ya persistida en el servidor. Los IDs `act-...` son temporales (creadas en el cliente).
+const isPersistedId = (id: unknown): boolean =>
+  id !== undefined && id !== null && /^\d+$/.test(String(id));
+
+const SYNC_HEADER_FIELDS = ['hora_inicio', 'area', 'pendientes', 'necesita_apoyo', 'apoyo_detalle', 'prioridad_siguiente', 'estado'] as const;
+
+const actContentSig = (a: Actividad): string =>
+  JSON.stringify([
+    (a.hora_inicio || '').trim(),
+    Number(a.duracion_min || 0),
+    (a.tipo_trabajo || '').trim(),
+    (a.descripcion || '').trim(),
+    (a.para_cliente || '').trim(),
+    a.estado || '',
+    (a.comentarios || '').trim(),
+    a.parent_task_id ? Number(a.parent_task_id) : null,
+    a.tipo_vinculo || '',
+    Array.isArray(a.evidencias) ? a.evidencias.length : 0,
+    Array.isArray(a.shared_with) ? [...a.shared_with].sort() : [],
+  ]);
+
+/**
+ * Integra la respuesta del servidor a un guardado SIN perder lo que el usuario editó mientras
+ * la petición estaba en vuelo:
+ *  - Actividades no tocadas desde el envío -> versión del servidor (IDs reales, timestamps).
+ *  - Actividades editadas durante el vuelo -> se conservan las ediciones locales sobre el ID real.
+ *  - Actividades nuevas creadas durante el vuelo -> se conservan.
+ *  - Actividades que sólo existen en el servidor (compartidas, apoyo, arrastre) -> se agregan.
+ * Si el usuario cambió de fecha o de titular entretanto, la respuesta se ignora.
+ */
+const mergeSavedBitacora = (
+  prev: Bitacora,
+  sent: Bitacora,
+  server: Bitacora,
+  pendingDeleted?: Set<string>
+): { bitacora: Bitacora; clean: boolean } => {
+  if (!server || prev.fecha !== sent.fecha || server.fecha !== sent.fecha) return { bitacora: prev, clean: false };
+  if (prev.user_id && sent.user_id && String(prev.user_id) !== String(sent.user_id)) return { bitacora: prev, clean: false };
+
+  const srvActs = (server.actividades || []).filter((a) => !pendingDeleted?.has(String(a.id)));
+  const srvById = new Map<string, Actividad>();
+  const srvByUid = new Map<string, Actividad>();
+  srvActs.forEach((a) => {
+    srvById.set(String(a.id), a);
+    if (a.client_uid) srvByUid.set(String(a.client_uid), a);
+  });
+  const sentRefs = new Set<Actividad>(sent.actividades || []);
+  const sentKeys = new Set<string>();
+  (sent.actividades || []).forEach((a) => {
+    if (a.id !== undefined && a.id !== null) sentKeys.add(String(a.id));
+    if (a.client_uid) sentKeys.add(String(a.client_uid));
+  });
+
+  let clean = true;
+  const used = new Set<Actividad>();
+  const out: Actividad[] = [];
+  for (const local of prev.actividades || []) {
+    const srv =
+      (isPersistedId(local.id) ? srvById.get(String(local.id)) : undefined) ||
+      (local.client_uid ? srvByUid.get(String(local.client_uid)) : undefined) ||
+      (!isPersistedId(local.id) && local.id ? srvByUid.get(String(local.id)) : undefined);
+    if (srv && !used.has(srv)) {
+      used.add(srv);
+      if (sentRefs.has(local)) {
+        out.push(srv);
+      } else {
+        clean = false;
+        out.push({ ...srv, ...local, id: srv.id, client_uid: srv.client_uid || local.client_uid, updated_at: srv.updated_at });
+      }
+      continue;
+    }
+    if (sentRefs.has(local)) {
+      // Enviada pero el servidor ya no la devuelve (eliminada en otro dispositivo o por el titular)
+      continue;
+    }
+    if (isPersistedId(local.id)) {
+      // Persistida pero ausente en el servidor: fue eliminada; no resucitarla
+      continue;
+    }
+    clean = false;
+    out.push(local); // creada mientras el guardado estaba en vuelo
+  }
+  for (const s of srvActs) {
+    if (used.has(s)) continue;
+    // Si correspondía a algo enviado que el usuario quitó durante el vuelo, no reinsertarla
+    if (sentKeys.has(String(s.id)) || (s.client_uid && sentKeys.has(String(s.client_uid)))) continue;
+    out.push(s);
+  }
+
+  const merged: any = { ...prev, id: server.id ?? prev.id, tiempo_total_min: server.tiempo_total_min ?? prev.tiempo_total_min };
+  for (const f of SYNC_HEADER_FIELDS) {
+    if ((prev as any)[f] === (sent as any)[f]) {
+      merged[f] = (server as any)[f] ?? (prev as any)[f];
+    } else {
+      clean = false;
+    }
+  }
+  merged.actividades = out;
+  return { bitacora: merged as Bitacora, clean };
+};
+
+/**
+ * Reconcilia un borrador local con la versión fresca del servidor (al iniciar, cambiar de fecha o de titular).
+ * El servidor es la base; del borrador sólo se rescata lo que realmente no llegó al servidor:
+ *  - Actividades nuevas (ID temporal) no registradas aún.
+ *  - Ediciones offline sobre actividades cuya versión en el servidor no cambió desde entonces.
+ *  - Campos de cierre que en el servidor están vacíos.
+ * Nunca resucita actividades eliminadas ni pisa cambios más recientes hechos desde otro dispositivo.
+ */
+const reconcileDraftWithServer = (
+  server: Bitacora,
+  draft: Bitacora | null
+): { bitacora: Bitacora; hasLocalChanges: boolean } => {
+  if (!draft || draft.fecha !== server.fecha) return { bitacora: server, hasLocalChanges: false };
+  let changed = false;
+  const draftById = new Map<string, Actividad>();
+  (draft.actividades || []).forEach((a) => {
+    if (isPersistedId(a.id)) draftById.set(String(a.id), a);
+  });
+  const srvActs = server.actividades || [];
+  const acts = srvActs.map((s) => {
+    const l = draftById.get(String(s.id));
+    if (
+      l && !l.is_deleted && l.updated_at && s.updated_at &&
+      String(l.updated_at) === String(s.updated_at) &&
+      actContentSig(l) !== actContentSig(s)
+    ) {
+      changed = true;
+      return { ...s, ...l, id: s.id, updated_at: s.updated_at };
+    }
+    return s;
+  });
+  const srvUids = new Set(srvActs.filter((a) => a.client_uid).map((a) => String(a.client_uid)));
+  // Compatibilidad con borradores antiguos (antes de client_uid): evitar duplicar por descripción
+  const legacyDescs = new Set(
+    srvActs.filter((a) => !a.client_uid).map((a) => (a.descripcion || '').trim().toLowerCase()).filter(Boolean)
+  );
+  const unsynced = (draft.actividades || []).filter((a) => {
+    if (a.is_deleted || isPersistedId(a.id)) return false;
+    const uid = String(a.client_uid || a.id || '');
+    if (uid && srvUids.has(uid)) return false;
+    const desc = (a.descripcion || '').trim().toLowerCase();
+    if (desc && legacyDescs.has(desc)) return false;
+    return true;
+  });
+  if (unsynced.length > 0) changed = true;
+  const merged: any = { ...server, actividades: [...acts, ...unsynced] };
+  for (const f of ['pendientes', 'apoyo_detalle', 'prioridad_siguiente'] as const) {
+    if (!(merged[f] || '').trim() && ((draft as any)[f] || '').trim()) {
+      merged[f] = (draft as any)[f];
+      changed = true;
+    }
+  }
+  return { bitacora: merged as Bitacora, hasLocalChanges: changed };
+};
+
+const isClosedEstado = (e?: string) => e === 'generada' || e === 'cerrada' || e === 'cerrada_sistema';
 
 // Busca el borrador local más completo (evita que datos incompletos del servidor pisen el trabajo local)
 // Aislamiento estricto por usuario: NUNCA mezclar o retornar borradores pertenecientes a otro usuario
@@ -158,8 +316,19 @@ const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string)
 export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('lista');
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
+  // Aviso para la pantalla de login (sesión expirada / actualización de seguridad)
+  const [sessionNotice, setSessionNotice] = useState<string | null>(() =>
+    localStorage.getItem('auth_user') && !getAuthToken()
+      ? 'Actualizamos la seguridad del sistema. Inicia sesión nuevamente: tus borradores locales están a salvo.'
+      : null
+  );
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('auth_user');
+    // Sin token de sesión válido no hay sesión: se exige iniciar sesión (los borradores se conservan)
+    if (saved && !getAuthToken()) {
+      localStorage.removeItem('auth_user');
+      return null;
+    }
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -167,6 +336,9 @@ export function App() {
   const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
   const lastSavedSignature = React.useRef<string>('');
   const isSwitchingDateRef = React.useRef<boolean>(false);
+  // IDs de actividades eliminadas localmente cuya eliminación aún no se confirmó en el servidor
+  const pendingDeletedIds = React.useRef<Set<string>>(new Set());
+  const [syncNudge, setSyncNudge] = useState(0);
 
   const [bitacora, setBitacora] = useState<Bitacora>(() => {
     const todayStr = getTodayLocalDateStr();
@@ -387,6 +559,47 @@ export function App() {
     }
   }, [currentUser]);
 
+  // Única vía de guardado contra el servidor: envía, y fusiona la respuesta sin perder ediciones en vuelo
+  const syncNow = async (sent: Bitacora, opts?: { mode?: 'replace' | 'merge' }) => {
+    const deletedIds = Array.from(pendingDeletedIds.current);
+    setAutoSaveStatus('saving');
+    try {
+      const res = await api.saveBitacora(sent, currentUser?.id, { mode: opts?.mode, deletedIds });
+      deletedIds.forEach((id) => pendingDeletedIds.current.delete(id));
+      if (res.bitacora) {
+        setBitacora((prev) => {
+          const m = mergeSavedBitacora(prev, sent, res.bitacora, pendingDeletedIds.current);
+          if (m.clean) {
+            lastSavedSignature.current = getBitacoraSignature(m.bitacora, m.bitacora.colaborador, m.bitacora.user_id);
+          }
+          return m.bitacora;
+        });
+      }
+      setAutoSaveStatus('saved');
+      setLastSavedTime(new Date());
+      setLastSyncErrorMessage(null);
+      return res;
+    } catch (err: any) {
+      // Permitir el reintento automático (el borrador local ya está a salvo)
+      lastSavedSignature.current = '';
+      setAutoSaveStatus('error');
+      setLastSyncErrorMessage(err?.message || 'Error desconocido de sincronización en servidor');
+      throw err;
+    }
+  };
+
+  // Reintento automático tras un error de sincronización: cada 30 s y al recuperar la conexión
+  useEffect(() => {
+    if (autoSaveStatus !== 'error' || !currentUser?.id) return;
+    const nudge = () => setSyncNudge((n) => n + 1);
+    const interval = setInterval(nudge, 30000);
+    window.addEventListener('online', nudge);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('online', nudge);
+    };
+  }, [autoSaveStatus, currentUser?.id]);
+
   // Auto-guardado local y sincronización debounced con el backend
   useEffect(() => {
     if (isSwitchingDateRef.current || !bitacora.fecha) return;
@@ -397,7 +610,6 @@ export function App() {
     const effectiveUser = activeProxyUser || currentUser;
     const uid = effectiveUser.id;
     const colab = effectiveUser.full_name;
-    const requestingUid = currentUser.id;
 
     // SEGURO CRÍTICO CONTRA CONTAMINACIÓN DE SESIONES:
     // Si la bitácora en memoria pertenece a otro usuario que no es el efectivo, jamás guardarla
@@ -423,38 +635,15 @@ export function App() {
     // Debounce de 600ms antes de llamar al servidor
     const timer = setTimeout(async () => {
       try {
-        setAutoSaveStatus('saving');
         const payload: Bitacora = {
           ...bitacora,
           colaborador: colab,
           user_id: uid,
         };
-        const result = await api.saveBitacora(payload, requestingUid);
-        
-        if (result.bitacora) {
-          lastSavedSignature.current = getBitacoraSignature(result.bitacora, colab, uid);
-          setBitacora((prev) => ({
-            ...prev,
-            id: result.bitacora.id,
-            actividades: result.bitacora.actividades && result.bitacora.actividades.length > 0
-              ? result.bitacora.actividades
-              : prev.actividades,
-          }));
-
-          localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(result.bitacora));
-          if (!activeProxyUser) {
-            localStorage.setItem('active_bitacora', JSON.stringify(result.bitacora));
-          }
-        } else {
-          lastSavedSignature.current = currentSignature;
-        }
-
-        setAutoSaveStatus('saved');
-        setLastSavedTime(new Date());
-        setLastSyncErrorMessage(null);
+        const result = await syncNow(payload);
 
         // Actualizar historial local silenciosamente solo si estamos en la bitácora personal
-        if (!activeProxyUser) {
+        if (!activeProxyUser && result?.bitacora) {
           setHistorial((prev) => {
             const idx = prev.findIndex((b) => b.id === result.bitacora.id || (b.fecha === payload.fecha && b.user_id === payload.user_id));
             if (idx >= 0) {
@@ -467,13 +656,11 @@ export function App() {
         }
       } catch (err: any) {
         console.warn('Auto-save error:', err);
-        setAutoSaveStatus('error');
-        setLastSyncErrorMessage(err?.message || 'Error desconocido de sincronización en servidor');
       }
     }, 600);
 
     return () => clearTimeout(timer);
-  }, [bitacora, currentUser, activeProxyUser]);
+  }, [bitacora, currentUser, activeProxyUser, syncNudge]);
 
   // Carga inicial de datos con aislamiento estricto de usuario
   const loadInitialData = async (userOverride?: User | null) => {
@@ -517,34 +704,45 @@ export function App() {
       const defaultStart = sysSettings?.hora_inicio_default || '08:30';
 
       if (activeUser) {
-        // Sincronización proactiva en segundo plano de borradores pendientes de fechas anteriores
-        // (Garantiza que bitácoras que fallaron por caída de red o servidor el día anterior se guarden automáticamente sin perder nada)
+        // Sincronización en segundo plano de borradores de fechas anteriores que no llegaron al servidor
+        // (corte de red, servidor caído). Solo se envían cambios reales y sin pisar datos más recientes.
         try {
           const draftPrefix = `bitacora_draft_${activeUser.id}_`;
+          const draftKeys: string[] = [];
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && k.startsWith(draftPrefix)) {
-              const dStr = k.replace(draftPrefix, '');
-              if (dStr && dStr !== todayStr) {
-                const pastDraft = getBestLocalDraft(activeUser.id, dStr, activeUser.full_name);
-                if (pastDraft && Array.isArray(pastDraft.actividades) && pastDraft.actividades.length > 0) {
-                  const pastServer = hList.find(
-                    (b) =>
-                      (b.user_id === activeUser.id ||
-                        b.colaborador.toLowerCase() === activeUser.full_name.toLowerCase()) &&
-                      b.fecha === dStr
-                  );
-                  const pLocalCount = pastDraft.actividades.filter((a) => !a.is_deleted).length;
-                  const pServerCount = (pastServer?.actividades || []).filter((a) => !a.is_deleted).length;
-                  if (pLocalCount > pServerCount) {
-                    console.log(`[SmartSync] Sincronizando automáticamente borrador pendiente de ${dStr} (${pLocalCount} actividades vs ${pServerCount} en servidor)`);
-                    api.saveBitacora(pastDraft).then(() => {
-                      showToast('info', `¡Sincronizada automáticamente tu bitácora del ${dStr} (${pLocalCount} actividades)!`);
-                    }).catch(console.warn);
-                  }
-                }
-              }
+            if (k && k.startsWith(draftPrefix)) draftKeys.push(k);
+          }
+          for (const k of draftKeys) {
+            const dStr = k.replace(draftPrefix, '');
+            if (!dStr || dStr === todayStr) continue;
+            const pastDraft = getBestLocalDraft(activeUser.id, dStr, activeUser.full_name);
+            if (!pastDraft || !Array.isArray(pastDraft.actividades) || pastDraft.actividades.length === 0) continue;
+            const pastServer = hList.find(
+              (b) =>
+                (b.user_id === activeUser.id ||
+                  (!b.user_id && (b.colaborador || '').toLowerCase() === activeUser.full_name.toLowerCase())) &&
+                b.fecha === dStr
+            );
+            let toPush: Bitacora | null = null;
+            let mode: 'replace' | 'merge' = 'replace';
+            if (pastServer) {
+              const r = reconcileDraftWithServer(pastServer, pastDraft);
+              if (r.hasLocalChanges) toPush = r.bitacora;
+            } else if (pastDraft.actividades.some((a) => !a.is_deleted && !isPersistedId(a.id))) {
+              // No tenemos la versión del servidor a mano: envío seguro (solo agrega, nunca pisa)
+              toPush = pastDraft;
+              mode = 'merge';
             }
+            if (!toPush) {
+              if (pastServer) localStorage.setItem(k, JSON.stringify(pastServer));
+              continue;
+            }
+            const payload: Bitacora = { ...toPush, user_id: activeUser.id, colaborador: activeUser.full_name };
+            api.saveBitacora(payload, activeUser.id, { mode }).then((res) => {
+              if (res?.bitacora) localStorage.setItem(k, JSON.stringify(res.bitacora));
+              showToast('info', `Se sincronizaron cambios pendientes de tu bitácora del ${dStr}.`);
+            }).catch(console.warn);
           }
         } catch (e) {
           console.warn('[SmartSync] Error verificando borradores previos:', e);
@@ -558,73 +756,29 @@ export function App() {
             b.fecha === todayStr
         );
 
-        // Obtener el mejor borrador local para hoy del usuario activo
+        // Mejor borrador local para hoy del usuario activo
         const localDraft = getBestLocalDraft(activeUser.id, todayStr, activeUser.full_name);
-        const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
-        const serverActsCount = (todayMatch?.actividades || []).filter((a) => !a.is_deleted).length;
 
-        // REGLA DE ORO 1: Si el cliente tiene MÁS actividades locales que el servidor,
-        // NUNCA pisar con los datos incompletos del servidor. Priorizar el borrador local y sincronizar a la nube.
-        if (localDraft && localActsCount > serverActsCount) {
-          console.log(`[SmartSync] Priorizando borrador local (${localActsCount} actividades) sobre datos del servidor (${serverActsCount} actividades). Sincronizando con la nube.`);
-          setBitacora(localDraft);
-          setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
-
-          api.saveBitacora(localDraft).then((res) => {
-            if (res.bitacora) {
-              setBitacora(res.bitacora);
-            }
-            setAutoSaveStatus('saved');
-            setLastSavedTime(new Date());
-            setLastSyncErrorMessage(null);
-            showToast('success', `¡Sincronizadas tus ${localActsCount} actividades locales con el servidor!`);
-          }).catch((err) => {
-            console.warn('[SmartSync] Error al sincronizar borrador local con la nube:', err);
-            setAutoSaveStatus('error');
-            setLastSyncErrorMessage(err?.message || 'Error al sincronizar borrador inicial');
-          });
-          return;
-        }
-
-        // REGLA DE ORO 2: Si el servidor tiene datos, pero el borrador local tiene actividades adicionales no presentes en el servidor,
-        // combinarlas quirúrgicamente para no perder ninguna tarea registrada localmente.
         if (todayMatch) {
-          let mergedBitacora = { ...todayMatch };
-          if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
-            const serverDescriptions = new Set(
-              (todayMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase())
-            );
-            const extraLocalActs = localDraft.actividades.filter(
-              (a) => a.descripcion && a.descripcion.trim() && !serverDescriptions.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
-            );
-            if (extraLocalActs.length > 0) {
-              console.log(`[SmartSync] Fusionando ${extraLocalActs.length} actividades locales que no existían en el servidor.`);
-              mergedBitacora.actividades = [...(todayMatch.actividades || []), ...extraLocalActs];
-              setBitacora(mergedBitacora);
-              setIsGenerated(mergedBitacora.estado === 'generada' || mergedBitacora.estado === 'cerrada' || mergedBitacora.estado === 'cerrada_sistema');
-              api.saveBitacora(mergedBitacora).then((res) => {
-                if (res.bitacora) setBitacora(res.bitacora);
-                setAutoSaveStatus('saved');
-                setLastSavedTime(new Date());
-                showToast('success', `¡Fusionadas y sincronizadas ${extraLocalActs.length} actividades locales adicionales!`);
-              }).catch(console.warn);
-              return;
-            }
+          // El servidor es la base; del borrador solo se rescata lo que no llegó al servidor
+          const r = reconcileDraftWithServer(todayMatch, localDraft);
+          setBitacora(r.bitacora);
+          setIsGenerated(isClosedEstado(r.bitacora.estado));
+          lastSavedSignature.current = getBitacoraSignature(r.bitacora, activeUser.full_name, activeUser.id);
+          localStorage.setItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(r.bitacora));
+          if (r.hasLocalChanges) {
+            syncNow({ ...r.bitacora, colaborador: activeUser.full_name, user_id: activeUser.id })
+              .then(() => showToast('success', 'Se recuperaron y sincronizaron cambios locales que estaban pendientes.'))
+              .catch(console.warn);
           }
-
-          setBitacora(todayMatch);
-          setIsGenerated(todayMatch.estado === 'generada' || todayMatch.estado === 'cerrada' || todayMatch.estado === 'cerrada_sistema');
-          lastSavedSignature.current = getBitacoraSignature(todayMatch, activeUser.full_name, activeUser.id);
-          // Mantener borrador local sincronizado con el servidor
-          localStorage.setItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(todayMatch));
         } else if (localDraft) {
           setBitacora(localDraft);
-          setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
-          api.saveBitacora(localDraft).then((res) => {
-            if (res.bitacora) setBitacora(res.bitacora);
-            setAutoSaveStatus('saved');
-            setLastSavedTime(new Date());
-          }).catch(console.warn);
+          setIsGenerated(isClosedEstado(localDraft.estado));
+          lastSavedSignature.current = getBitacoraSignature(localDraft, activeUser.full_name, activeUser.id);
+          if ((localDraft.actividades || []).some((a) => !a.is_deleted)) {
+            syncNow({ ...localDraft, colaborador: activeUser.full_name, user_id: activeUser.id }, { mode: 'merge' })
+              .catch(console.warn);
+          }
         } else {
           // Inicializar bitácora limpia para el usuario activo sin residuos de sesiones anteriores
           setBitacora({
@@ -669,32 +823,16 @@ export function App() {
       return;
     }
     const effectiveUser = activeProxyUser || currentUser;
-    setAutoSaveStatus('saving');
     try {
       const payload: Bitacora = {
         ...bitacora,
         colaborador: effectiveUser?.full_name || bitacora.colaborador,
         user_id: effectiveUser?.id || bitacora.user_id,
       };
-      const res = await api.saveBitacora(payload, currentUser?.id);
-      lastSavedSignature.current = getBitacoraSignature(res.bitacora || payload, payload.colaborador, payload.user_id);
-      setAutoSaveStatus('saved');
-      setLastSavedTime(new Date());
-      setLastSyncErrorMessage(null);
-      if (res.bitacora) {
-        setBitacora((prev) => ({
-          ...prev,
-          id: res.bitacora.id,
-          actividades: res.bitacora.actividades && res.bitacora.actividades.length > 0
-            ? res.bitacora.actividades
-            : prev.actividades,
-        }));
-      }
+      const res = await syncNow(payload);
       const count = (res.bitacora?.actividades || bitacora.actividades).filter((a) => !a.is_deleted).length;
       showToast('success', `¡Bitácora sincronizada exitosamente con el servidor (${count} actividades guardadas en la nube)!`);
     } catch (err: any) {
-      setAutoSaveStatus('error');
-      setLastSyncErrorMessage(err?.message || 'Fallo de conexión al sincronizar');
       showToast('error', `Error al sincronizar con el servidor: ${err.message || 'Fallo de conexión'}`);
     }
   };
@@ -764,50 +902,29 @@ export function App() {
 
       // Obtener el borrador local para la nueva fecha
       const localDraft = getBestLocalDraft(activeUid, newDate, activeName);
-      const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
-      const serverActsCount = (serverMatch?.actividades || []).filter((a) => !a.is_deleted).length;
 
-      // REGLA 1: Si hay más actividades locales en esa fecha, usar el borrador local y sincronizar
-      if (localDraft && localActsCount > serverActsCount) {
-        setBitacora(localDraft);
-        setIsGenerated(localDraft.estado === 'generada' || localDraft.estado === 'cerrada' || localDraft.estado === 'cerrada_sistema');
-        api.saveBitacora(localDraft, requestingUid).then((res) => {
-          if (res.bitacora) setBitacora(res.bitacora);
-          setAutoSaveStatus('saved');
-          setLastSavedTime(new Date());
-        }).catch(console.warn);
-        return;
-      }
-
-      // REGLA 2: Si existe en el servidor, cargar y fusionar si hubiera tareas locales no reflejadas
+      // REGLA 1: Si existe en el servidor, es la base; se rescata solo lo que el borrador no llegó a subir
       if (serverMatch) {
-        let merged = { ...serverMatch };
-        if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
-          const sDescs = new Set((serverMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase()));
-          const extra = localDraft.actividades.filter(
-            (a) => a.descripcion && a.descripcion.trim() && !sDescs.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
-          );
-          if (extra.length > 0) {
-            merged.actividades = [...(serverMatch.actividades || []), ...extra];
-            setBitacora(merged);
-            api.saveBitacora(merged, requestingUid).catch(console.warn);
-            return;
-          }
-        }
-
-        setBitacora(serverMatch);
-        setIsGenerated(serverMatch.estado === 'generada' || serverMatch.estado === 'cerrada' || serverMatch.estado === 'cerrada_sistema');
-        lastSavedSignature.current = getBitacoraSignature(serverMatch, activeName, activeUid);
+        const r = reconcileDraftWithServer(serverMatch, localDraft);
+        setBitacora(r.bitacora);
+        setIsGenerated(isClosedEstado(r.bitacora.estado));
+        lastSavedSignature.current = getBitacoraSignature(r.bitacora, activeName, activeUid);
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
+        if (r.hasLocalChanges) {
+          syncNow({ ...r.bitacora, colaborador: activeName, user_id: activeUid }).catch(console.warn);
+        }
         return;
       }
 
-      // REGLA 3: Si no existe en el backend, usar borrador local
+      // REGLA 2: Si no existe en el backend, usar el borrador local y subirlo de forma segura
       if (localDraft) {
         setBitacora(localDraft);
         setIsGenerated(false);
         lastSavedSignature.current = getBitacoraSignature(localDraft, activeName, activeUid);
+        if ((localDraft.actividades || []).some((a) => !a.is_deleted)) {
+          syncNow({ ...localDraft, colaborador: activeName, user_id: activeUid }, { mode: 'merge' }).catch(console.warn);
+        }
         return;
       }
 
@@ -875,8 +992,9 @@ export function App() {
           b.fecha === bitacora.fecha
       );
       if (serverMatch) {
-        setBitacora(serverMatch);
-        setIsGenerated(serverMatch.estado === 'generada' || serverMatch.estado === 'cerrada' || serverMatch.estado === 'cerrada_sistema');
+        // Conservar ediciones locales aún no guardadas (no pisar con la versión del servidor)
+        setBitacora((prev) => (prev.fecha === serverMatch.fecha ? reconcileDraftWithServer(serverMatch, prev).bitacora : prev));
+        setIsGenerated(isClosedEstado(serverMatch.estado));
       }
     } catch (e) {
       console.warn('Error reloading bitacora:', e);
@@ -921,27 +1039,17 @@ export function App() {
       );
 
       const localDraft = getBestLocalDraft(newTarget.id, targetDate, newTarget.full_name);
-      const localActsCount = (localDraft?.actividades || []).filter((a) => !a.is_deleted).length;
-      const serverActsCount = (serverMatch?.actividades || []).filter((a) => !a.is_deleted).length;
 
       let nextBitacora: Bitacora;
+      let pushMode: 'replace' | 'merge' | null = null;
 
-      if (localDraft && localActsCount > serverActsCount) {
-        nextBitacora = localDraft;
-      } else if (serverMatch) {
-        let merged = { ...serverMatch };
-        if (localDraft && localDraft.actividades && localDraft.actividades.length > 0) {
-          const sDescs = new Set((serverMatch.actividades || []).map((a) => a.descripcion.trim().toLowerCase()));
-          const extra = localDraft.actividades.filter(
-            (a) => a.descripcion && a.descripcion.trim() && !sDescs.has(a.descripcion.trim().toLowerCase()) && !a.is_deleted
-          );
-          if (extra.length > 0) {
-            merged.actividades = [...(serverMatch.actividades || []), ...extra];
-          }
-        }
-        nextBitacora = merged;
+      if (serverMatch) {
+        const r = reconcileDraftWithServer(serverMatch, localDraft);
+        nextBitacora = r.bitacora;
+        if (r.hasLocalChanges) pushMode = 'replace';
       } else if (localDraft) {
         nextBitacora = localDraft;
+        if ((localDraft.actividades || []).some((a) => !a.is_deleted)) pushMode = 'merge';
       } else {
         nextBitacora = {
           ...defaultBitacora,
@@ -959,6 +1067,9 @@ export function App() {
       setIsGenerated(nextBitacora.estado === 'generada' || nextBitacora.estado === 'cerrada' || nextBitacora.estado === 'cerrada_sistema');
       lastSavedSignature.current = getBitacoraSignature(nextBitacora, newTarget.full_name, newTarget.id);
       setAutoSaveStatus('saved');
+      if (pushMode) {
+        syncNow({ ...nextBitacora, colaborador: newTarget.full_name, user_id: newTarget.id }, { mode: pushMode }).catch(console.warn);
+      }
 
       if (targetUser) {
         showToast('info', `Modo Apoyo activado: registrando tareas para ${targetUser.full_name}`, '🤝 Modo Apoyo');
@@ -986,6 +1097,7 @@ export function App() {
 
   const handleActivityRestoredFromPapelera = (restoredAct: any, bitacoraFecha?: string) => {
     refreshPapeleraCount();
+    if (restoredAct?.id !== undefined) pendingDeletedIds.current.delete(String(restoredAct.id));
     if (!bitacoraFecha || bitacoraFecha === bitacora.fecha) {
       setBitacora((prev) => {
         const exists = prev.actividades.some((a) => a.id === restoredAct.id);
@@ -1089,17 +1201,23 @@ export function App() {
 
   const handleRemoveActividad = async (index: number) => {
     const act = bitacora.actividades[index];
+    const persisted = !!act && isPersistedId(act.id);
+    // Registrar la eliminación pendiente: viaja en el próximo guardado aunque falle la llamada directa
+    if (persisted) pendingDeletedIds.current.add(String(act.id));
     setBitacora((prev) => ({
       ...prev,
-      actividades: prev.actividades.filter((_, i) => i !== index),
+      actividades: act
+        ? prev.actividades.filter((a) => a !== act && !(act.id !== undefined && a.id === act.id))
+        : prev.actividades.filter((_, i) => i !== index),
     }));
     showToast('info', 'Actividad movida a la papelera (retención 15 días)');
-    if (act && act.id && !String(act.id).startsWith('act-') && !isNaN(Number(act.id))) {
+    if (persisted) {
       try {
         await api.softDeleteActividad(Number(act.id));
+        pendingDeletedIds.current.delete(String(act.id));
         refreshPapeleraCount();
       } catch (e) {
-        console.warn('Error soft-deleting act:', e);
+        console.warn('Error soft-deleting act (se reintentará en el próximo guardado):', e);
       }
     }
   };
@@ -1148,27 +1266,21 @@ export function App() {
     const pendientesText = bitacora.pendientes?.trim() || 'Sin tareas pendientes para otra fecha';
     const prioridadText = bitacora.prioridad_siguiente?.trim() || 'Continuar con el plan de actividades programado';
 
-    if (!bitacora.pendientes?.trim()) handleFieldChange('pendientes', pendientesText);
-    if (!bitacora.prioridad_siguiente?.trim()) handleFieldChange('prioridad_siguiente', prioridadText);
 
     setIsSaving(true);
     try {
-      const match = users.find((u) => u.full_name === bitacora.colaborador);
       const payload: Bitacora = {
         ...bitacora,
         pendientes: pendientesText,
         prioridad_siguiente: prioridadText,
-        user_id: match ? match.id : (bitacora.user_id || currentUser?.id),
+        user_id: bitacora.user_id || currentUser?.id,
+        colaborador: bitacora.colaborador || currentUser?.full_name || '',
         estado: 'generada',
       };
-      const result = await api.saveBitacora(payload);
-      if (result.bitacora && result.bitacora.id) {
-        setBitacora(result.bitacora);
-      }
+      // El estado en memoria pasa a ser exactamente lo enviado (la respuesta se fusiona sin perder nada)
+      setBitacora(payload);
+      await syncNow(payload);
       setIsGenerated(true);
-      setAutoSaveStatus('saved');
-      setLastSavedTime(new Date());
-      lastSavedSignature.current = getBitacoraSignature(result.bitacora || payload, payload.colaborador, payload.user_id);
 
       try {
         confetti({
@@ -1245,7 +1357,9 @@ export function App() {
   };
 
   const handleLogout = () => {
-    // 1. Limpiar usuario autenticado
+    // 1. Limpiar usuario autenticado y token de sesión
+    api.logout();
+    pendingDeletedIds.current.clear();
     setActiveProxyUser(null);
     setDelegatedTargets([]);
     setCurrentUser(null);
@@ -1277,9 +1391,47 @@ export function App() {
     setViewMode('lista');
   };
 
+  // Sesión expirada, inválida o contraseña cambiada (401): volver al login conservando borradores locales
+  useEffect(() => {
+    const onExpired = () => {
+      handleLogout();
+      setSessionNotice('Tu sesión expiró o fue cerrada. Inicia sesión nuevamente: tus borradores locales están a salvo.');
+    };
+    window.addEventListener('auth:expired', onExpired);
+    return () => window.removeEventListener('auth:expired', onExpired);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Cuando nadie está autenticado, renderizar la pantalla completa de Login
   if (!currentUser) {
-    return <LoginPage onLoginSuccess={handleLoginSuccess} systemSettings={systemSettings || undefined} />;
+    return (
+      <>
+        {sessionNotice && (
+          <div
+            role="status"
+            className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-[92%] max-w-md rounded-2xl border border-amber-300 dark:border-amber-800 bg-amber-50/95 dark:bg-amber-950/90 text-amber-900 dark:text-amber-100 px-4 py-3 text-sm shadow-lg backdrop-blur flex items-start gap-3"
+          >
+            <span className="flex-1 leading-snug">{sessionNotice}</span>
+            <button
+              type="button"
+              id="session-notice-close"
+              onClick={() => setSessionNotice(null)}
+              className="font-bold opacity-70 hover:opacity-100 cursor-pointer"
+              aria-label="Cerrar aviso"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <LoginPage
+          onLoginSuccess={(u) => {
+            setSessionNotice(null);
+            handleLoginSuccess(u);
+          }}
+          systemSettings={systemSettings || undefined}
+        />
+      </>
+    );
   }
 
   return (

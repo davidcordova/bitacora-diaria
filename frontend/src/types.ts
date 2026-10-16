@@ -12,6 +12,7 @@ export interface Evidencia {
 
 export interface Actividad {
   id?: number | string;
+  client_uid?: string | null;
   bitacora_id?: number;
   orden?: number;
   hora_inicio: string;

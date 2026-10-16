@@ -13,7 +13,7 @@ interface LoginModalProps {
 export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLoginSuccess, systemSettings }) => {
   const isDemoMode = systemSettings?.system_mode === 'demo' || systemSettings?.show_demo_logins === 'true';
   const [username, setUsername] = useState(isDemoMode ? 'admin' : '');
-  const [password, setPassword] = useState(isDemoMode ? 'M1un1c4cl4v3' : '');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -124,7 +124,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
             <div className="grid grid-cols-3 gap-2">
               <button
                 type="button"
-                onClick={() => setQuickUser('admin', 'M1un1c4cl4v3')}
+                onClick={() => setQuickUser('admin', '')}
                 className={`p-2 rounded-full text-[11px] font-semibold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[36px] ${
                   username === 'admin'
                     ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300'

@@ -23,9 +23,14 @@ except ImportError:
 
 from database import get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
+from security import (
+    register_security, issue_token, login_is_throttled,
+    register_login_failure, clear_login_failures,
+)
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
+register_security(app)
 
 @app.teardown_appcontext
 def close_open_connections(exception=None):
@@ -482,10 +487,12 @@ def cleanup_synthetic_historical_data():
     except Exception as e:
         print("[Cleanup] Error en cleanup_synthetic_historical_data:", e)
 
-@app.route('/api/admin/clean-synthetic-history', methods=['POST', 'GET', 'OPTIONS'])
+@app.route('/api/admin/clean-synthetic-history', methods=['POST', 'OPTIONS'])
 def clean_synthetic_history_endpoint():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
+        return jsonify({"error": "Endpoint de mantenimiento deshabilitado"}), 410
     cleanup_synthetic_historical_data()
     return jsonify({"success": True, "message": "Bitácoras sintéticas de prueba del 2026-09-23 purgadas correctamente."})
 
@@ -564,10 +571,12 @@ Durante las pruebas en el sistema se detectaron y corrigieron 2 bugs relacionado
     except Exception as e:
         print("[Repair] Error in fix_mock_data_jayala:", e)
 
-@app.route('/api/admin/repair-mock-jayala', methods=['POST', 'GET', 'OPTIONS'])
+@app.route('/api/admin/repair-mock-jayala', methods=['POST', 'OPTIONS'])
 def repair_mock_jayala_endpoint():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
+        return jsonify({"error": "Endpoint de mantenimiento deshabilitado"}), 410
     fix_mock_data_jayala()
     conn = get_db()
     cursor = conn.cursor()
@@ -661,6 +670,26 @@ def seed_demo_data():
 
 # ==================== GESTIÓN DE ARCHIVOS Y EVIDENCIAS ====================
 
+# Extensiones permitidas para evidencias. Se excluyen deliberadamente html/svg/js/xml
+# porque se servirían desde el mismo dominio y permitirían XSS almacenado.
+ALLOWED_UPLOAD_EXTENSIONS = {
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'heic',
+    'pdf', 'txt', 'csv', 'log',
+    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods',
+    'zip', 'rar', '7z',
+    'mp4', 'mov', 'webm', 'mp3', 'wav', 'm4a',
+}
+INLINE_UPLOAD_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'pdf', 'mp4', 'webm', 'mp3', 'wav', 'm4a'}
+BASE64_MIME_EXT = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/gif': 'gif',
+    'image/webp': 'webp', 'image/bmp': 'bmp',
+}
+
+
+def _upload_ext(name):
+    return name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+
+
 @app.route('/api/upload', methods=['POST', 'OPTIONS'])
 def upload_file():
     if request.method == 'OPTIONS':
@@ -679,6 +708,8 @@ def upload_file():
             safe_name = secure_filename(orig_filename)
             if not safe_name:
                 safe_name = f"evidencia_{int(time.time())}.png"
+            if _upload_ext(safe_name) not in ALLOWED_UPLOAD_EXTENSIONS:
+                return jsonify({"error": f"Tipo de archivo no permitido (.{_upload_ext(safe_name) or 'sin extensión'}). Usa imágenes, PDF, documentos Office, ZIP o video."}), 400
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             unique_name = f"{timestamp}_{safe_name}"
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
@@ -702,18 +733,28 @@ def upload_file():
             safe_nombre = secure_filename(nombre)
             if not safe_nombre:
                 safe_nombre = f"captura_{int(time.time())}.png"
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            unique_name = f"{timestamp}_{safe_nombre}"
-            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
-            
+
             if ',' in base64_data:
                 header, base64_str = base64_data.split(',', 1)
                 mime_type = header.split(';')[0].replace('data:', '') if 'data:' in header else 'image/png'
             else:
                 base64_str = base64_data
                 mime_type = 'image/png'
-                
-            binary_bytes = base64.b64decode(base64_str)
+
+            # Las capturas pegadas solo pueden ser imágenes rasterizadas
+            if mime_type not in BASE64_MIME_EXT:
+                return jsonify({"error": "Solo se permiten capturas de imagen (PNG, JPG, GIF, WEBP)"}), 400
+            if _upload_ext(safe_nombre) not in BASE64_MIME_EXT.values():
+                safe_nombre = f"{safe_nombre.rsplit('.', 1)[0]}.{BASE64_MIME_EXT[mime_type]}"
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_name = f"{timestamp}_{safe_nombre}"
+            filepath = os.path.join(UPLOAD_FOLDER, unique_name)
+
+            try:
+                binary_bytes = base64.b64decode(base64_str, validate=False)
+            except Exception:
+                return jsonify({"error": "La imagen pegada no tiene un formato válido"}), 400
             with open(filepath, 'wb') as f:
                 f.write(binary_bytes)
                 
@@ -732,7 +773,10 @@ def upload_file():
 
 @app.route('/api/uploads/<path:filename>', methods=['GET'])
 def serve_uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    # Archivos que el navegador podría ejecutar/renderizar (html, svg, etc. subidos antes del
+    # endurecimiento) se fuerzan como descarga para evitar XSS desde el mismo dominio.
+    as_attachment = _upload_ext(filename) not in INLINE_UPLOAD_EXTENSIONS
+    return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=as_attachment)
 
 # ==================== AUTHENTICATION ====================
 
@@ -747,37 +791,46 @@ def login():
     
     if not username or not password:
         return jsonify({"error": "Usuario y contraseña requeridos"}), 400
+
+    if login_is_throttled(username):
+        return jsonify({"error": "Demasiados intentos fallidos. Espera 15 minutos o contacta al administrador."}), 429
         
     conn = get_db()
     cursor = conn.cursor()
     user = cursor.execute('''
-        SELECT u.id, u.username, u.email, u.password_hash, u.full_name, u.role, u.is_active, u.team_id,
+        SELECT u.id, u.username, u.email, u.phone, u.password_hash, u.full_name, u.role, u.is_active, u.team_id,
                t.nombre as team_name, t.lider_id
         FROM users u
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE LOWER(u.username) = ?
     ''', (username,)).fetchone()
-    conn.close()
     
     if not user:
-        return jsonify({"error": "Credenciales inválidas"}), 401
+        register_login_failure(username)
+        return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
         
     if not user['is_active']:
         return jsonify({"error": "Usuario desactivado. Contacta al administrador"}), 403
         
     stored_hash = user['password_hash']
-    # Comprobar contraseña con Werkzeug o fallback para desarrollo
     password_matches = False
     try:
         password_matches = check_password_hash(stored_hash, password)
     except Exception:
-        password_matches = (stored_hash == password)
-        
-    if not password_matches and stored_hash == password:
+        password_matches = False
+
+    # Compatibilidad con contraseñas legadas en texto plano: se aceptan una vez y se migran a hash
+    if not password_matches and stored_hash and stored_hash == password:
         password_matches = True
+        stored_hash = generate_password_hash(password)
+        cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (stored_hash, user['id']))
+        conn.commit()
         
     if not password_matches:
-        return jsonify({"error": "Contraseña incorrecta"}), 401
+        register_login_failure(username)
+        return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
+
+    clear_login_failures(username)
         
     role_name = 'analista' if user['role'] in ('operador', 'analista') else user['role']
     is_leader = (user['lider_id'] == user['id']) or (role_name == 'lider') or (role_name == 'admin')
@@ -796,7 +849,7 @@ def login():
     return jsonify({
         "message": "Autenticación exitosa",
         "user": user_dict,
-        "token": f"session-{user['id']}-{user['username']}"
+        "token": issue_token(user['id'], stored_hash)
     }), 200
 
 @app.route('/api/auth/change-password', methods=['POST', 'OPTIONS'])
@@ -825,7 +878,15 @@ def change_password():
         return jsonify({"error": "Usuario no encontrado"}), 404
         
     stored_hash = user['password_hash']
-    # Si se envía contraseña actual, validarla
+    acting_user = getattr(g, 'current_user', None) or {}
+    is_self_change = int(user['id']) == int(acting_user.get('id', -1))
+    if not is_self_change and acting_user.get('role') != 'admin':
+        conn.close()
+        return jsonify({"error": "Solo un administrador puede cambiar la contraseña de otro usuario"}), 403
+    # Cambiar la propia contraseña exige siempre la contraseña actual
+    if is_self_change and not current_password:
+        conn.close()
+        return jsonify({"error": "Debes ingresar tu contraseña actual"}), 400
     if current_password:
         password_matches = False
         try:
@@ -844,10 +905,14 @@ def change_password():
     conn.commit()
     conn.close()
     
-    return jsonify({
+    resp = {
         "success": True,
         "message": "Contraseña actualizada exitosamente"
-    }), 200
+    }
+    # Las sesiones previas quedan invalidadas: entregar un token nuevo a quien cambió su propia clave
+    if is_self_change:
+        resp["token"] = issue_token(user['id'], new_hash)
+    return jsonify(resp), 200
 
 @app.route('/api/auth/profile', methods=['PUT', 'OPTIONS'])
 def update_profile():
@@ -1297,14 +1362,20 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
         ''', (u_id, u_name)).fetchone()
         area_val = last_b['area'] if last_b else 'Sistemas'
         
-        cursor.execute('''
-            INSERT INTO bitacoras (
-                user_id, fecha, hora_inicio, colaborador, area,
-                pendientes, necesita_apoyo, prioridad_siguiente,
-                tiempo_total_min, estado, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
-        ''', (u_id, today_str, get_default_hora_inicio(cursor), u_name, area_val, now_peru, now_peru))
-        today_b_id = cursor.lastrowid
+        try:
+            cursor.execute('''
+                INSERT INTO bitacoras (
+                    user_id, fecha, hora_inicio, colaborador, area,
+                    pendientes, necesita_apoyo, prioridad_siguiente,
+                    tiempo_total_min, estado, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
+            ''', (u_id, today_str, get_default_hora_inicio(cursor), u_name, area_val, now_peru, now_peru))
+            today_b_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            today_b_id = cursor.execute(
+                "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
+                (u_id, today_str)
+            ).fetchone()['id']
 
     # IDs y descripciones de tareas que ya existen hoy
     existing_parent_ids = set(
@@ -1760,173 +1831,197 @@ def save_bitacora():
     else:
         estado_to_save = estado_req
 
+    # Modo de sincronización:
+    #  - 'replace' (por defecto): el cliente es la fuente de verdad para lo que envía.
+    #  - 'merge': push de un borrador local potencialmente desactualizado; solo agrega lo nuevo
+    #    y nunca pisa cambios más recientes del servidor.
+    sync_mode = str(data.get('sync_mode') or 'replace').lower()
+    is_merge = sync_mode == 'merge'
+
+    # Un usuario no administrador no puede crear bitácoras "huérfanas" a nombre libre
+    if not user_id and requesting_user_id:
+        req_role_row = cursor.execute("SELECT role, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        if req_role_row and req_role_row['role'] != 'admin':
+            user_id = int(requesting_user_id)
+            colaborador = req_role_row['full_name']
+
+    header_fields = {
+        'hora_inicio': data.get('hora_inicio', '') or '',
+        'area': area,
+        'pendientes': data.get('pendientes', '') or '',
+        'necesita_apoyo': data.get('necesita_apoyo', 'No') or 'No',
+        'apoyo_detalle': data.get('apoyo_detalle', '') or '',
+        'prioridad_siguiente': data.get('prioridad_siguiente', '') or '',
+        'resumen_texto': data.get('resumen_texto', '') or '',
+    }
+
+    def _update_header(b_id):
+        if is_merge:
+            # Solo completar campos vacíos en el servidor; jamás sobrescribir datos existentes
+            sets = ", ".join(
+                f"{k} = CASE WHEN COALESCE({k}, '') = '' THEN ? ELSE {k} END" for k in header_fields
+            )
+            cursor.execute(
+                f"UPDATE bitacoras SET user_id = COALESCE(user_id, ?), colaborador = ?, {sets}, updated_at = ? WHERE id = ?",
+                (user_id, colaborador, *header_fields.values(), now_peru, b_id)
+            )
+        else:
+            sets = ", ".join(f"{k} = ?" for k in header_fields)
+            cursor.execute(
+                f"UPDATE bitacoras SET user_id = COALESCE(?, user_id), colaborador = ?, {sets}, estado = ?, updated_at = ? WHERE id = ?",
+                (user_id, colaborador, *header_fields.values(), estado_to_save, now_peru, b_id)
+            )
+
+    def _find_by_owner_date():
+        if user_id:
+            row = cursor.execute(
+                "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
+                (user_id, fecha)
+            ).fetchone()
+            if not row:
+                row = cursor.execute(
+                    "SELECT id FROM bitacoras WHERE user_id IS NULL AND LOWER(colaborador) = LOWER(?) AND fecha = ? ORDER BY id ASC LIMIT 1",
+                    (colaborador, fecha)
+                ).fetchone()
+        else:
+            row = cursor.execute(
+                "SELECT id FROM bitacoras WHERE LOWER(colaborador) = LOWER(?) AND fecha = ? ORDER BY id ASC LIMIT 1",
+                (colaborador, fecha)
+            ).fetchone()
+        return row['id'] if row else None
+
     try:
         now_peru = get_peru_now_str()
-        actividades_data = data.get('actividades', [])
-        tiempo_total = sum(int(a.get('duracion_min', 0) or 0) for a in actividades_data)
-        bitacora_id = data.get('id')
-        
-        if bitacora_id:
-            existing_b = cursor.execute("SELECT id FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
-            if existing_b:
-                cursor.execute('''
-                    UPDATE bitacoras SET
-                        user_id = COALESCE(?, user_id),
-                        fecha = ?,
-                        hora_inicio = ?,
-                        colaborador = ?,
-                        area = ?,
-                        pendientes = ?,
-                        necesita_apoyo = ?,
-                        apoyo_detalle = ?,
-                        prioridad_siguiente = ?,
-                        tiempo_total_min = ?,
-                        resumen_texto = ?,
-                        estado = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                ''', (
-                    user_id,
-                    fecha,
-                    data.get('hora_inicio', ''),
-                    colaborador,
-                    area,
-                    data.get('pendientes', ''),
-                    data.get('necesita_apoyo', 'No'),
-                    data.get('apoyo_detalle', ''),
-                    data.get('prioridad_siguiente', ''),
-                    tiempo_total,
-                    data.get('resumen_texto', ''),
-                    estado_to_save,
-                    now_peru,
-                    bitacora_id
-                ))
-            else:
-                bitacora_id = None
+        actividades_data = data.get('actividades') or []
+        if not isinstance(actividades_data, list):
+            actividades_data = []
 
+        # 1) Resolver la bitácora destino. El id del cliente solo se respeta si corresponde
+        #    exactamente al mismo titular y la misma fecha (evita mover/pisar otras jornadas).
+        bitacora_id = None
+        raw_b_id = data.get('id')
+        if raw_b_id is not None and str(raw_b_id).isdigit():
+            row = cursor.execute("SELECT id, user_id, fecha FROM bitacoras WHERE id = ?", (int(raw_b_id),)).fetchone()
+            if row and row['fecha'] == fecha and (
+                row['user_id'] is None or not user_id or str(row['user_id']) == str(user_id)
+            ):
+                bitacora_id = row['id']
         if not bitacora_id:
-            # Si ya existe una bitácora para este colaborador y fecha, actualizarla para no duplicar
-            existing_by_date = cursor.execute(
-                "SELECT id FROM bitacoras WHERE (user_id = ? OR LOWER(colaborador) = LOWER(?)) AND fecha = ?",
-                (user_id, colaborador, fecha)
-            ).fetchone()
-            if existing_by_date:
-                bitacora_id = existing_by_date['id']
-                cursor.execute('''
-                    UPDATE bitacoras SET
-                        user_id = COALESCE(?, user_id),
-                        hora_inicio = ?,
-                        colaborador = ?,
-                        area = ?,
-                        pendientes = ?,
-                        necesita_apoyo = ?,
-                        apoyo_detalle = ?,
-                        prioridad_siguiente = ?,
-                        tiempo_total_min = ?,
-                        resumen_texto = ?,
-                        estado = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                ''', (
-                    user_id,
-                    data.get('hora_inicio', ''),
-                    colaborador,
-                    area,
-                    data.get('pendientes', ''),
-                    data.get('necesita_apoyo', 'No'),
-                    data.get('apoyo_detalle', ''),
-                    data.get('prioridad_siguiente', ''),
-                    tiempo_total,
-                    data.get('resumen_texto', ''),
-                    estado_to_save,
-                    now_peru,
-                    bitacora_id
-                ))
-            else:
+            bitacora_id = _find_by_owner_date()
+
+        if bitacora_id:
+            _update_header(bitacora_id)
+        else:
+            try:
                 cursor.execute('''
                     INSERT INTO bitacoras (
                         user_id, fecha, hora_inicio, colaborador, area, pendientes,
                         necesita_apoyo, apoyo_detalle, prioridad_siguiente,
                         tiempo_total_min, resumen_texto, estado, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
                 ''', (
-                    user_id,
-                    fecha,
-                    data.get('hora_inicio', ''),
-                    colaborador,
-                    area,
-                    data.get('pendientes', ''),
-                    data.get('necesita_apoyo', 'No'),
-                    data.get('apoyo_detalle', ''),
-                    data.get('prioridad_siguiente', ''),
-                    tiempo_total,
-                    data.get('resumen_texto', ''),
-                    estado_to_save,
-                    now_peru,
-                    now_peru
+                    user_id, fecha, header_fields['hora_inicio'], colaborador, area,
+                    header_fields['pendientes'], header_fields['necesita_apoyo'],
+                    header_fields['apoyo_detalle'], header_fields['prioridad_siguiente'],
+                    header_fields['resumen_texto'], estado_to_save, now_peru, now_peru
                 ))
                 bitacora_id = cursor.lastrowid
+            except sqlite3.IntegrityError:
+                # Otra petición concurrente creó la bitácora (índice único user_id+fecha)
+                bitacora_id = _find_by_owner_date()
+                if not bitacora_id:
+                    raise
+                _update_header(bitacora_id)
 
-
-        # Mapeo de actividades previas para actualización quirúrgica (conserva IDs y evita duplicados al editar)
-        existing_acts_list = [dict(r) for r in cursor.execute(
-            "SELECT id, orden, hora_inicio, tipo_trabajo, descripcion, shared_uuid FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY orden ASC, id ASC",
+        # 2) Emparejar actividades entrantes con las existentes (sin heurísticas posicionales)
+        all_rows = [dict(r) for r in cursor.execute(
+            "SELECT id, orden, shared_uuid, client_uid, updated_at, is_deleted FROM actividades WHERE bitacora_id = ? ORDER BY orden ASC, id ASC",
             (bitacora_id,)
         ).fetchall()]
-        existing_acts_by_id = {r['id']: r for r in existing_acts_list}
-        kept_ids = set()
+        active_by_id = {r['id']: r for r in all_rows if not r.get('is_deleted')}
+        deleted_rows = [r for r in all_rows if r.get('is_deleted')]
+        deleted_ids_set = {r['id'] for r in deleted_rows}
+        deleted_shared = {r['shared_uuid'] for r in deleted_rows if r.get('shared_uuid')}
+        deleted_client = {r['client_uid'] for r in deleted_rows if r.get('client_uid')}
+
+        used_ids = set()
         matched_target_ids = {}
+        skip_idx = set()
 
-        # Fase 1: Coincidencia exacta por ID numérico en la base de datos
-        for idx, act in enumerate(actividades_data):
-            act_id = act.get('id')
-            act_id_num = None
-            try:
-                act_id_num = int(act_id)
-            except (ValueError, TypeError):
-                pass
-            if act_id_num and act_id_num in existing_acts_by_id and act_id_num not in kept_ids:
-                matched_target_ids[idx] = act_id_num
-                kept_ids.add(act_id_num)
+        def _client_uid_of(a):
+            cu = a.get('client_uid')
+            if cu:
+                return str(cu)[:80]
+            raw = a.get('id')
+            if raw is not None and not str(raw).isdigit() and str(raw).strip():
+                return str(raw)[:80]
+            return None
 
-        # Fase 2: Coincidencia por shared_uuid para actividades sincronizadas entre usuarios
+        # Fase 1: id numérico
         for idx, act in enumerate(actividades_data):
-            if idx in matched_target_ids:
+            raw = act.get('id')
+            if raw is None or not str(raw).isdigit():
                 continue
-            shared_uuid = act.get('shared_uuid')
-            if shared_uuid:
-                for ex in existing_acts_list:
-                    if ex['id'] not in kept_ids and ex.get('shared_uuid') == shared_uuid:
-                        matched_target_ids[idx] = ex['id']
-                        kept_ids.add(ex['id'])
-                        break
+            num = int(raw)
+            if num in active_by_id and num not in used_ids:
+                matched_target_ids[idx] = num
+                used_ids.add(num)
+            elif num in deleted_ids_set:
+                # Fue enviada a la papelera: no resucitarla desde un estado desactualizado
+                skip_idx.add(idx)
 
-        # Fase 3: Coincidencia por posición (orden) para actividades que vienen sin ID numérico (ej. borrador local o ediciones en vuelo)
-        # Esto PREVIENE que una edición de actividad genere un duplicado y mande la original a la papelera
+        # Fase 2: shared_uuid (tareas compartidas)
         for idx, act in enumerate(actividades_data):
-            if idx in matched_target_ids:
+            if idx in matched_target_ids or idx in skip_idx:
                 continue
-            act_orden = act.get('orden', idx)
-            for ex in existing_acts_list:
-                if ex['id'] not in kept_ids and ex.get('orden') == act_orden:
+            su = act.get('shared_uuid')
+            if not su:
+                continue
+            for ex in active_by_id.values():
+                if ex['id'] not in used_ids and ex.get('shared_uuid') == su:
                     matched_target_ids[idx] = ex['id']
-                    kept_ids.add(ex['id'])
+                    used_ids.add(ex['id'])
                     break
+            else:
+                if su in deleted_shared:
+                    skip_idx.add(idx)
 
-        # Fase 4: Si la cantidad de actividades es >= a las existentes, emparejar unassigned por índice
-        unmatched_existing = [ex['id'] for ex in existing_acts_list if ex['id'] not in kept_ids]
-        unmatched_incoming = [idx for idx in range(len(actividades_data)) if idx not in matched_target_ids]
-        if len(actividades_data) >= len(existing_acts_list):
-            for i, idx in enumerate(unmatched_incoming):
-                if i < len(unmatched_existing):
-                    target_id = unmatched_existing[i]
-                    matched_target_ids[idx] = target_id
-                    kept_ids.add(target_id)
+        # Fase 3: client_uid (actividades creadas offline / en vuelo)
+        for idx, act in enumerate(actividades_data):
+            if idx in matched_target_ids or idx in skip_idx:
+                continue
+            cu = _client_uid_of(act)
+            if not cu:
+                continue
+            for ex in active_by_id.values():
+                if ex['id'] not in used_ids and ex.get('client_uid') == cu:
+                    matched_target_ids[idx] = ex['id']
+                    used_ids.add(ex['id'])
+                    break
+            else:
+                if cu in deleted_client:
+                    skip_idx.add(idx)
+
+        next_orden = (max([r['orden'] or 0 for r in all_rows]) + 1) if all_rows else 0
+        conflicts = 0
 
         for idx, act in enumerate(actividades_data):
+            if idx in skip_idx:
+                continue
+            target_act_id = matched_target_ids.get(idx)
+
+            # En modo merge, si el servidor tiene una versión distinta de la que conocía el
+            # cliente, el servidor gana (evita pisar ediciones hechas desde otro dispositivo).
+            if target_act_id and is_merge:
+                srv_upd = active_by_id[target_act_id].get('updated_at')
+                cli_upd = act.get('updated_at')
+                if not cli_upd or (srv_upd and str(srv_upd) != str(cli_upd)):
+                    conflicts += 1
+                    continue
+
             evidencias_clean = sanitize_evidencias(act.get('evidencias', []), act.get('descripcion', ''))
             evidencias_json = json.dumps(evidencias_clean)
-            
+
             shared_with_val = act.get('shared_with', [])
             if not isinstance(shared_with_val, list):
                 try:
@@ -1934,17 +2029,21 @@ def save_bitacora():
                 except Exception:
                     shared_with_val = []
             shared_with_json = json.dumps(shared_with_val)
-            
+
             shared_uuid = act.get('shared_uuid')
             if shared_with_val and not shared_uuid:
                 shared_uuid = f"sync-{int(time.time()*1000)}-{idx}-{user_id}"
-            target_act_id = matched_target_ids.get(idx)
             parent_task_id = int(act['parent_task_id']) if act.get('parent_task_id') and str(act['parent_task_id']).isdigit() else None
             if target_act_id and parent_task_id == target_act_id:
                 parent_task_id = None
             comentarios = act.get('comentarios', '') or ''
             tipo_vinculo = act.get('tipo_vinculo', 'continuacion') or 'continuacion'
-            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), act.get('duracion_min'), fecha)
+            try:
+                duracion = max(0, int(act.get('duracion_min', 0) or 0))
+            except (TypeError, ValueError):
+                duracion = 0
+            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), duracion, fecha)
+            client_uid = _client_uid_of(act)
 
             if target_act_id:
                 cursor.execute('''
@@ -1953,6 +2052,7 @@ def save_bitacora():
                         tipo_trabajo = ?, descripcion = ?, para_cliente = ?,
                         estado = ?, evidencias = ?, shared_with = ?,
                         shared_uuid = COALESCE(?, shared_uuid),
+                        client_uid = COALESCE(client_uid, ?),
                         comentarios = ?, parent_task_id = ?, tipo_vinculo = ?,
                         created_by_user_id = COALESCE(created_by_user_id, ?),
                         updated_by_user_id = ?,
@@ -1960,10 +2060,10 @@ def save_bitacora():
                         last_stagnant_notified_at = NULL
                     WHERE id = ?
                 ''', (
-                    idx,
+                    idx if not is_merge else active_by_id[target_act_id].get('orden', idx),
                     act.get('hora_inicio', ''),
                     act_hora_fin,
-                    int(act.get('duracion_min', 0) or 0),
+                    duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
                     act.get('para_cliente', ''),
@@ -1971,6 +2071,7 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
+                    client_uid,
                     comentarios,
                     parent_task_id,
                     tipo_vinculo,
@@ -1979,22 +2080,24 @@ def save_bitacora():
                     now_peru,
                     target_act_id
                 ))
-                kept_ids.add(target_act_id)
             else:
+                orden_val = idx if not is_merge else next_orden
+                if is_merge:
+                    next_orden += 1
                 cursor.execute('''
                     INSERT INTO actividades (
                         bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
                         tipo_trabajo, descripcion, para_cliente, estado, evidencias,
-                        shared_with, shared_uuid, comentarios, parent_task_id, tipo_vinculo,
+                        shared_with, shared_uuid, client_uid, comentarios, parent_task_id, tipo_vinculo,
                         created_by_user_id, updated_by_user_id,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     bitacora_id,
-                    idx,
+                    orden_val,
                     act.get('hora_inicio', ''),
                     act_hora_fin,
-                    int(act.get('duracion_min', 0) or 0),
+                    duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
                     act.get('para_cliente', ''),
@@ -2002,6 +2105,7 @@ def save_bitacora():
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
+                    client_uid,
                     comentarios,
                     parent_task_id,
                     tipo_vinculo,
@@ -2010,38 +2114,47 @@ def save_bitacora():
                     now_peru,
                     now_peru
                 ))
-                kept_ids.add(cursor.lastrowid)
+                used_ids.add(cursor.lastrowid)
 
             # Sincronización automática de tarea compartida en paralelo con el otro usuario
             if shared_with_val and shared_uuid:
                 for target_uid in shared_with_val:
-                    if target_uid != user_id:
+                    if str(target_uid) != str(user_id):
                         target_u = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
                         if target_u:
                             target_b = cursor.execute(
-                                "SELECT id FROM bitacoras WHERE (user_id = ? OR LOWER(colaborador) = LOWER(?)) AND fecha = ?",
-                                (target_u['id'], target_u['full_name'], fecha)
+                                "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
+                                (target_u['id'], fecha)
                             ).fetchone()
                             if not target_b:
-                                cursor.execute('''
-                                    INSERT INTO bitacoras (
-                                        user_id, fecha, hora_inicio, colaborador, area,
-                                        pendientes, necesita_apoyo, prioridad_siguiente,
-                                        tiempo_total_min, estado, created_at, updated_at
-                                    ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
-                                ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
-                                target_b_id = cursor.lastrowid
+                                try:
+                                    cursor.execute('''
+                                        INSERT INTO bitacoras (
+                                            user_id, fecha, hora_inicio, colaborador, area,
+                                            pendientes, necesita_apoyo, prioridad_siguiente,
+                                            tiempo_total_min, estado, created_at, updated_at
+                                        ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
+                                    ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
+                                    target_b_id = cursor.lastrowid
+                                except sqlite3.IntegrityError:
+                                    target_b_id = cursor.execute(
+                                        "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
+                                        (target_u['id'], fecha)
+                                    ).fetchone()['id']
                             else:
                                 target_b_id = target_b['id']
 
                             existing_sync_act = cursor.execute(
-                                "SELECT id FROM actividades WHERE bitacora_id = ? AND shared_uuid = ?",
+                                "SELECT id, is_deleted FROM actividades WHERE bitacora_id = ? AND shared_uuid = ?",
                                 (target_b_id, shared_uuid)
                             ).fetchone()
-                            
+
                             counterpart_shared = json.dumps([user_id])
-                            
+
                             if existing_sync_act:
+                                if existing_sync_act['is_deleted']:
+                                    # El colaborador la descartó: respetar su decisión
+                                    continue
                                 cursor.execute('''
                                     UPDATE actividades SET
                                         hora_inicio = ?,
@@ -2058,7 +2171,7 @@ def save_bitacora():
                                 ''', (
                                     act.get('hora_inicio', ''),
                                     act_hora_fin,
-                                    int(act.get('duracion_min', 0) or 0),
+                                    duracion,
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
                                     act.get('para_cliente', ''),
@@ -2084,7 +2197,7 @@ def save_bitacora():
                                     next_ord,
                                     act.get('hora_inicio', ''),
                                     act_hora_fin,
-                                    int(act.get('duracion_min', 0) or 0),
+                                    duracion,
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
                                     act.get('para_cliente', ''),
@@ -2095,26 +2208,32 @@ def save_bitacora():
                                     now_peru,
                                     now_peru
                                 ))
-                                
+
                             # Recalcular el tiempo_total_min de la bitácora del colaborador
                             cursor.execute('''
                                 UPDATE bitacoras SET tiempo_total_min = (
                                     SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
                                 ), updated_at = ? WHERE id = ?
-                            ''', (now_peru, target_b_id, target_b_id))
+                            ''', (target_b_id, now_peru, target_b_id))
 
-        # Safeguard de integridad: si vienen 0 actividades pero la bitácora ya tenía actividades previas,
-        # NO borrarlas todas a menos que venga explícitamente confirm_empty=True
-        # Esto previene pérdida accidental de datos por fallas de red, debounce o cambios rápidos de fecha
-        if len(actividades_data) == 0 and len(existing_acts_by_id) > 0 and not data.get('confirm_empty'):
-            kept_ids = set(existing_acts_by_id.keys())
+        # 3) Eliminaciones: SOLO las solicitadas explícitamente por el cliente (deleted_ids).
+        #    Las actividades ausentes del payload ya NO se envían implícitamente a la papelera
+        #    (podían ser tareas compartidas, de apoyo o del rollover que el cliente aún no veía).
+        if not is_merge:
+            for raw_del in (data.get('deleted_ids') or []):
+                if raw_del is None or not str(raw_del).isdigit():
+                    continue
+                del_id = int(raw_del)
+                if del_id in active_by_id and del_id not in matched_target_ids.values():
+                    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (del_id,))
+                    cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, del_id))
 
-        # Mover a papelera únicamente actividades removidas conscientemente por el usuario
-        for old_id in existing_acts_by_id:
-            if old_id not in kept_ids:
-                cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (old_id,))
-                cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, old_id))
-
+        # 4) Total de tiempo siempre calculado desde la base (fuente de verdad)
+        cursor.execute('''
+            UPDATE bitacoras SET tiempo_total_min = (
+                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
+            ) WHERE id = ?
+        ''', (bitacora_id, bitacora_id))
 
         conn.commit()
         
@@ -2144,12 +2263,27 @@ def save_bitacora():
         b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
         
         conn.close()
-        return jsonify({"message": "Bitácora guardada con éxito", "bitacora": b_dict}), 200
+        return jsonify({"message": "Bitácora guardada con éxito", "bitacora": b_dict, "conflicts": conflicts}), 200
         
     except Exception as e:
         conn.rollback()
         conn.close()
         return jsonify({"error": str(e)}), 500
+
+def _same_day_shared_siblings(cursor, act_id, shared_uuid):
+    """Copias activas de una tarea compartida en bitácoras de OTROS usuarios del MISMO día."""
+    if not shared_uuid:
+        return []
+    return cursor.execute('''
+        SELECT a.id, a.bitacora_id FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.shared_uuid = ? AND a.id != ?
+          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND b.fecha = (
+              SELECT b2.fecha FROM actividades a2 JOIN bitacoras b2 ON a2.bitacora_id = b2.id WHERE a2.id = ?
+          )
+          AND a.bitacora_id != (SELECT bitacora_id FROM actividades WHERE id = ?)
+    ''', (shared_uuid, act_id, act_id, act_id)).fetchall()
 
 @app.route('/api/actividades/<int:act_id>/estado', methods=['PATCH', 'OPTIONS'])
 def update_actividad_estado(act_id):
@@ -2163,11 +2297,13 @@ def update_actividad_estado(act_id):
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
-    act = cursor.execute("SELECT shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
-    if act and act['shared_uuid']:
-        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE shared_uuid = ?", (nuevo_estado, now_peru, act['shared_uuid']))
-    else:
-        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, act_id))
+    act = cursor.execute("SELECT id, shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    if not act:
+        conn.close()
+        return jsonify({"error": "Actividad no encontrada"}), 404
+    cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, act_id))
+    for sib in _same_day_shared_siblings(cursor, act_id, act['shared_uuid']):
+        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, sib['id']))
     conn.commit()
     conn.close()
     return jsonify({"success": True, "id": act_id, "nuevo_estado": nuevo_estado})
@@ -2219,7 +2355,10 @@ def update_actividad_detalle(act_id):
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
-    act = cursor.execute("SELECT shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    act = cursor.execute("SELECT id, shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    if not act:
+        conn.close()
+        return jsonify({"error": "Actividad no encontrada"}), 404
     
     shared_with_val = data.get('shared_with')
     shared_with_json = json.dumps(shared_with_val) if isinstance(shared_with_val, list) else None
@@ -2228,7 +2367,10 @@ def update_actividad_detalle(act_id):
     comentarios_param = data.get('comentarios')
     tipo_vinculo_param = data.get('tipo_vinculo')
 
-    if act and act['shared_uuid']:
+    # Propagar SOLO el contenido compartido a las copias del mismo día (no a jornadas históricas)
+    siblings = _same_day_shared_siblings(cursor, act_id, act['shared_uuid'])
+    affected_bitacoras = set()
+    for sib in siblings:
         cursor.execute('''
             UPDATE actividades SET
                 hora_inicio = COALESCE(?, hora_inicio),
@@ -2238,13 +2380,9 @@ def update_actividad_detalle(act_id):
                 para_cliente = COALESCE(?, para_cliente),
                 estado = COALESCE(?, estado),
                 evidencias = COALESCE(?, evidencias),
-                shared_with = COALESCE(?, shared_with),
-                comentarios = COALESCE(?, comentarios),
-                parent_task_id = COALESCE(?, parent_task_id),
-                tipo_vinculo = COALESCE(?, tipo_vinculo),
                 updated_at = ?,
                 last_stagnant_notified_at = NULL
-            WHERE shared_uuid = ?
+            WHERE id = ?
         ''', (
             data.get('hora_inicio'),
             data.get('duracion_min'),
@@ -2253,14 +2391,12 @@ def update_actividad_detalle(act_id):
             data.get('para_cliente'),
             data.get('estado'),
             evidencias_json,
-            shared_with_json,
-            comentarios_param,
-            parent_task_id_param,
-            tipo_vinculo_param,
             now_peru,
-            act['shared_uuid']
+            sib['id']
         ))
-    else:
+        affected_bitacoras.add(sib['bitacora_id'])
+
+    if True:
         cursor.execute('''
             UPDATE actividades SET
                 hora_inicio = COALESCE(?, hora_inicio),
@@ -2293,15 +2429,17 @@ def update_actividad_detalle(act_id):
             act_id
         ))
         
-    # Recalcular el tiempo_total_min de la bitácora asociada
+    # Recalcular el tiempo_total_min de la bitácora asociada (y de las copias compartidas)
     b_row = cursor.execute("SELECT bitacora_id FROM actividades WHERE id = ?", (act_id,)).fetchone()
     if b_row and b_row['bitacora_id']:
+        affected_bitacoras.add(b_row['bitacora_id'])
+    for b_id in affected_bitacoras:
         cursor.execute('''
             UPDATE bitacoras SET tiempo_total_min = (
                 SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
                 WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
             ), updated_at = ? WHERE id = ?
-        ''', (b_row['bitacora_id'], now_peru, b_row['bitacora_id']))
+        ''', (b_id, now_peru, b_id))
 
     conn.commit()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
@@ -2936,10 +3074,12 @@ def execute_daily_rollover(today_str=None):
             ''', (dur, auto_pend, now_peru, b['id']))
             closed_count += 1
 
-        # 2. Arrastre de actividades abiertas hacia el día de hoy
-        active_users = cursor.execute("SELECT id, full_name FROM users WHERE is_active = 1").fetchall()
-        for u in active_users:
-            rolled_count += rollover_user_open_tasks(cursor, u['id'], u['full_name'], today_str, now_peru)
+        # 2. Arrastre de actividades abiertas hacia el día de hoy (solo días laborables: el lunes
+        #    recoge automáticamente lo pendiente del viernes, sin crear bitácoras vacías en fin de semana)
+        if is_dia_laborable(today_str):
+            active_users = cursor.execute("SELECT id, full_name FROM users WHERE is_active = 1").fetchall()
+            for u in active_users:
+                rolled_count += rollover_user_open_tasks(cursor, u['id'], u['full_name'], today_str, now_peru)
                     
         conn.commit()
     except Exception as e:
@@ -2959,8 +3099,16 @@ def execute_daily_rollover(today_str=None):
 def trigger_rollover():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-    date_arg = request.args.get('date')
-    res = execute_daily_rollover(today_str=date_arg)
+    date_arg = request.args.get('date') or (request.get_json(silent=True) or {}).get('target_fecha')
+    today = get_peru_today_str()
+    if date_arg:
+        try:
+            datetime.strptime(date_arg, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({"error": "Formato de fecha inválido (YYYY-MM-DD)"}), 400
+        if date_arg > today:
+            return jsonify({"error": "No se puede ejecutar el cierre para una fecha futura"}), 400
+    res = execute_daily_rollover(today_str=date_arg or today)
     return jsonify(res)
 
 @app.route('/api/actividades/importar-pendientes', methods=['POST', 'OPTIONS'])
@@ -5187,20 +5335,25 @@ def ensure_daily_rollover(target_date=None, force=False):
         if LAST_ROLLOVER_DATE == today_str and not force:
             return
 
-        # Comprobación atómica persistente en base de datos para coordinar entre múltiples workers de Gunicorn
+        # Reclamo atómico persistente en base de datos para coordinar entre múltiples workers de Gunicorn:
+        # solo el worker cuyo UPDATE afecta 1 fila ejecuta el rollover.
         try:
             conn = get_db()
             cursor = conn.cursor()
-            cursor.execute("SELECT value FROM system_settings WHERE key = 'last_rollover_date'")
-            row = cursor.fetchone()
-            if row and row['value'] == today_str and not force:
-                LAST_ROLLOVER_DATE = today_str
-                return
-
-            # Registrar la fecha actual para que otros workers no ejecuten en paralelo
-            cursor.execute("INSERT OR REPLACE INTO system_settings (key, value, updated_at) VALUES ('last_rollover_date', ?, datetime('now'))", (today_str,))
+            cursor.execute("INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES ('last_rollover_date', '', datetime('now'))")
+            if force:
+                cursor.execute("UPDATE system_settings SET value = ?, updated_at = datetime('now') WHERE key = 'last_rollover_date'", (today_str,))
+                claimed = True
+            else:
+                cursor.execute(
+                    "UPDATE system_settings SET value = ?, updated_at = datetime('now') WHERE key = 'last_rollover_date' AND COALESCE(value, '') < ?",
+                    (today_str, today_str)
+                )
+                claimed = cursor.rowcount == 1
             conn.commit()
             LAST_ROLLOVER_DATE = today_str
+            if not claimed:
+                return
             print(f"[Scheduler] Ejecutando rollover diario para {today_str}...")
             execute_daily_rollover(today_str)
         except Exception as e:
@@ -5221,9 +5374,24 @@ def start_midnight_scheduler():
     t = threading.Thread(target=run_scheduler, daemon=True)
     t.start()
 
+def _init_db_serialized():
+    """Ejecuta init_db con un candado de archivo para que los workers de Gunicorn no migren en paralelo."""
+    lock_path = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), '.init.lock')
+    try:
+        import fcntl  # Solo disponible en Linux/Unix (producción)
+    except ImportError:
+        init_db()
+        return
+    with open(lock_path, 'w') as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            init_db()
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
 # Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
 try:
-    init_db()
+    _init_db_serialized()
     start_midnight_scheduler()
 except Exception as e:
     print("[Startup] Error inicializando DB o scheduler:", e)

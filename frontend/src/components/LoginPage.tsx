@@ -25,7 +25,7 @@ interface LoginPageProps {
 export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSettings }) => {
   const isDemoMode = systemSettings?.system_mode === 'demo' || systemSettings?.show_demo_logins === 'true';
   const [username, setUsername] = useState(isDemoMode ? 'admin' : '');
-  const [password, setPassword] = useState(isDemoMode ? 'M1un1c4cl4v3' : '');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -236,7 +236,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin('admin', 'M1un1c4cl4v3')}
+                  onClick={() => handleQuickLogin('admin', '')}
                   className={`py-2 px-2 rounded-full text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer min-h-[38px] ${
                     username === 'admin'
                       ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-300 ring-2 ring-rose-100 dark:ring-rose-900 shadow-2xs'

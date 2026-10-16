@@ -7,10 +7,16 @@ Incluye mecanismo resiliente Zero-Crash si la dependencia 'cryptography' aún no
 
 import os
 import base64
+import secrets
+import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-KEY_FILE = BASE_DIR / ".vault_key"
+LEGACY_KEY_FILE = BASE_DIR / ".vault_key"
+# La llave DEBE vivir en el volumen persistente (junto a la base de datos). Si vive dentro del
+# contenedor (/app), cada redeploy genera una llave nueva y todos los secretos quedan ilegibles.
+_DB_PATH = os.environ.get('DATABASE_PATH')
+KEY_FILE = (Path(_DB_PATH).resolve().parent / ".vault_key") if _DB_PATH else LEGACY_KEY_FILE
 
 try:
     from cryptography.fernet import Fernet, InvalidToken
@@ -24,37 +30,48 @@ except ImportError:
     print("[Crypto WARNING] Ejecute 'pip install cryptography' en su entorno de servidor para habilitar Fernet AES-256.")
 
 
+def _read_key(path: Path):
+    try:
+        with open(path, "rb") as f:
+            key = f.read().strip()
+        return key if key and len(key) >= 32 else None
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+
+
 def get_or_create_vault_key() -> bytes:
-    """Obtiene la clave maestra de la bóveda desde variable de entorno o archivo local seguro."""
+    """Obtiene la clave maestra de la bóveda desde variable de entorno o archivo persistente."""
     env_key = os.environ.get("BITACORA_VAULT_KEY")
     if env_key:
-        try:
-            return env_key.encode('utf-8') if isinstance(env_key, str) else env_key
-        except Exception:
-            pass
+        return env_key.encode('utf-8') if isinstance(env_key, str) else env_key
 
-    if KEY_FILE.exists():
-        try:
-            with open(KEY_FILE, "rb") as f:
-                key = f.read().strip()
-                if key and len(key) >= 32:
-                    return key
-        except Exception:
-            pass
+    key = _read_key(KEY_FILE)
+    if key:
+        return key
 
-    if _HAS_FERNET and Fernet:
-        new_key = Fernet.generate_key()
-    else:
-        # Generar clave pseudo-aleatoria de 32 bytes en base64 estándar
-        import secrets
-        new_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+    # Migrar una llave previa (ubicación antigua) si existe, para no perder secretos ya cifrados
+    candidate = _read_key(LEGACY_KEY_FILE) if KEY_FILE != LEGACY_KEY_FILE else None
+    if not candidate:
+        candidate = Fernet.generate_key() if (_HAS_FERNET and Fernet) else base64.urlsafe_b64encode(secrets.token_bytes(32))
 
+    # Creación atómica: si varios workers arrancan a la vez, todos terminan usando la misma llave
     try:
-        with open(KEY_FILE, "wb") as f:
-            f.write(new_key)
+        KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(str(KEY_FILE), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(candidate)
+        return candidate
+    except FileExistsError:
+        for _ in range(50):
+            key = _read_key(KEY_FILE)
+            if key:
+                return key
+            time.sleep(0.05)
     except Exception as e:
-        print(f"[Crypto] Advertencia: No se pudo guardar .vault_key en disco: {e}")
-    return new_key
+        print(f"[Crypto] Advertencia: No se pudo guardar la llave de la bóveda en {KEY_FILE}: {e}")
+    return candidate
 
 
 _vault_key = get_or_create_vault_key()

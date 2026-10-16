@@ -22,6 +22,8 @@ venv.bak/
 
 # SQLite databases (persisted on server volume, not tracked in git)
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
@@ -34,6 +36,8 @@ backend/uploads/*
 .env.*
 !.env.example
 .vault_key
+.session_secret
+.init.lock
 *.key
 
 # IDE / Editor

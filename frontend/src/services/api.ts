@@ -2,12 +2,55 @@ import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evide
 
 const API_BASE = '/api';
 
+// ================= SESIÓN / AUTENTICACIÓN =================
+// Todas las llamadas a la API viajan con el token de sesión firmado por el servidor.
+// Si el servidor responde 401 (token ausente, expirado o contraseña cambiada) se emite
+// el evento global `auth:expired` para que la app pida iniciar sesión de nuevo,
+// conservando los borradores locales.
+const TOKEN_KEY = 'auth_token';
+
+export const getAuthToken = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+export const setAuthToken = (token: string | null) => {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* almacenamiento no disponible */
+  }
+};
+
+let authExpiredNotified = false;
+
+const authFetch = async (input: string, init: RequestInit = {}): Promise<Response> => {
+  const headers = new Headers(init.headers || {});
+  const token = getAuthToken();
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  const res = await fetch(input, { ...init, headers });
+  if (res.status === 401 && !input.includes('/auth/login')) {
+    if (!authExpiredNotified) {
+      authExpiredNotified = true;
+      setTimeout(() => { authExpiredNotified = false; }, 3000);
+      window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+  }
+  return res;
+};
+
 export const api = {
   // ================= EVIDENCIAS =================
   async uploadFile(file: File): Promise<Evidencia> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${API_BASE}/upload`, {
+    const res = await authFetch(`${API_BASE}/upload`, {
       method: 'POST',
       body: formData,
     });
@@ -27,7 +70,7 @@ export const api = {
   },
 
   async uploadBase64(base64: string, nombre?: string): Promise<Evidencia> {
-    const res = await fetch(`${API_BASE}/upload`, {
+    const res = await authFetch(`${API_BASE}/upload`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64, nombre }),
@@ -48,7 +91,7 @@ export const api = {
   },
   // ================= AUTH =================
   async login(username: string, password: string):Promise<{ user: User; token: string }> {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await authFetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -57,13 +100,19 @@ export const api = {
       const err = await res.json().catch(() => ({ error: 'Error en la autenticación' }));
       throw new Error(err.error || 'Credenciales inválidas');
     }
-    return await res.json();
+    const data = await res.json();
+    if (data?.token) setAuthToken(data.token);
+    return data;
+  },
+
+  logout() {
+    setAuthToken(null);
   },
 
   // ================= USERS =================
   async getUsers(): Promise<User[]> {
     try {
-      const res = await fetch(`${API_BASE}/users`);
+      const res = await authFetch(`${API_BASE}/users`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -81,16 +130,13 @@ export const api = {
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch {}
     }
-    return [
-      { id: 1, username: 'admin', full_name: 'Administrador Principal', role: 'admin' },
-      { id: 2, username: 'juan', full_name: 'Juan Pérez García', role: 'lider', team_name: 'Equipo de Sistemas e Infraestructura', is_leader: true },
-      { id: 3, username: 'maria', full_name: 'María López', role: 'operador', team_name: 'Equipo de Sistemas e Infraestructura' },
-    ];
+    // Sin conexión ni caché: lista vacía (nunca usuarios ficticios que podrían recibir asignaciones)
+    return [];
   },
 
   async getAllAdminUsers(): Promise<User[]> {
     try {
-      const res = await fetch(`${API_BASE}/admin/users`);
+      const res = await authFetch(`${API_BASE}/admin/users`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -114,7 +160,7 @@ export const api = {
   },
 
   async createUser(userData: Partial<User> & { password?: string }): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/users`, {
+    const res = await authFetch(`${API_BASE}/admin/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -127,7 +173,7 @@ export const api = {
   },
 
   async updateUser(userId: number, userData: Partial<User> & { password?: string }): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}`, {
+    const res = await authFetch(`${API_BASE}/admin/users/${userId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
@@ -140,7 +186,7 @@ export const api = {
   },
 
   async deleteUser(userId: number, permanent = false): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/users/${userId}${permanent ? '?permanent=true' : ''}`, {
+    const res = await authFetch(`${API_BASE}/admin/users/${userId}${permanent ? '?permanent=true' : ''}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -151,7 +197,7 @@ export const api = {
   },
 
   async changePassword(data: { user_id: number; current_password?: string; new_password: string }): Promise<any> {
-    const res = await fetch(`${API_BASE}/auth/change-password`, {
+    const res = await authFetch(`${API_BASE}/auth/change-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -160,7 +206,9 @@ export const api = {
       const err = await res.json().catch(() => ({ error: 'Error al cambiar contraseña' }));
       throw new Error(err.error || 'Error al cambiar contraseña');
     }
-    return await res.json();
+    const result = await res.json();
+    if (result?.token) setAuthToken(result.token);
+    return result;
   },
 
   async updateProfile(data: {
@@ -171,7 +219,7 @@ export const api = {
     current_password?: string;
     new_password?: string;
   }): Promise<{ success: boolean; message: string; user: User }> {
-    const res = await fetch(`${API_BASE}/auth/profile`, {
+    const res = await authFetch(`${API_BASE}/auth/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -186,7 +234,7 @@ export const api = {
   // ================= TEAMS =================
   async getTeams(): Promise<Team[]> {
     try {
-      const res = await fetch(`${API_BASE}/admin/teams`);
+      const res = await authFetch(`${API_BASE}/admin/teams`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -207,7 +255,7 @@ export const api = {
   },
 
   async createTeam(teamData: { nombre: string; descripcion?: string; lider_id?: number | null; member_ids?: number[] }): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/teams`, {
+    const res = await authFetch(`${API_BASE}/admin/teams`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(teamData),
@@ -220,7 +268,7 @@ export const api = {
   },
 
   async updateTeam(teamId: number, teamData: Partial<Team> & { member_ids?: number[] }): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/teams/${teamId}`, {
+    const res = await authFetch(`${API_BASE}/admin/teams/${teamId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(teamData),
@@ -229,7 +277,7 @@ export const api = {
   },
 
   async deleteTeam(teamId: number): Promise<any> {
-    const res = await fetch(`${API_BASE}/admin/teams/${teamId}`, {
+    const res = await authFetch(`${API_BASE}/admin/teams/${teamId}`, {
       method: 'DELETE',
     });
     return res.ok;
@@ -244,7 +292,7 @@ export const api = {
       if (team_id) params.append('team_id', String(team_id));
       if (requesting_user_id) params.append('requesting_user_id', String(requesting_user_id));
       if (user_id) params.append('user_id', String(user_id));
-      const res = await fetch(`${API_BASE}/bitacoras?${params.toString()}`);
+      const res = await authFetch(`${API_BASE}/bitacoras?${params.toString()}`);
       if (res.ok) {
         return await res.json();
       }
@@ -255,7 +303,11 @@ export const api = {
     return local ? JSON.parse(local) : [];
   },
 
-  async saveBitacora(bitacora: Bitacora, requesting_user_id?: number): Promise<{ bitacora: Bitacora; message: string }> {
+  async saveBitacora(
+    bitacora: Bitacora,
+    requesting_user_id?: number,
+    opts?: { mode?: 'replace' | 'merge'; deletedIds?: Array<number | string> }
+  ): Promise<{ bitacora: Bitacora; message: string; conflicts?: number }> {
     // 1. Respaldo preventivo inmediato en cliente ante cualquier falla de red o corte
     this.saveToLocalStorage(bitacora);
     
@@ -263,8 +315,10 @@ export const api = {
     const timeoutId = setTimeout(() => controller.abort(), 30000);
     
     try {
-      const payload = requesting_user_id ? { ...bitacora, requesting_user_id } : bitacora;
-      const res = await fetch(`${API_BASE}/bitacoras`, {
+      const payload: any = requesting_user_id ? { ...bitacora, requesting_user_id } : { ...bitacora };
+      if (opts?.mode) payload.sync_mode = opts.mode;
+      if (opts?.deletedIds && opts.deletedIds.length > 0) payload.deleted_ids = opts.deletedIds;
+      const res = await authFetch(`${API_BASE}/bitacoras`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -295,7 +349,7 @@ export const api = {
   async updateActividadEstado(actId: number | string, nuevoEstado: EstadoActividad): Promise<boolean> {
     if (typeof actId === 'number') {
       try {
-        const res = await fetch(`${API_BASE}/actividades/${actId}/estado`, {
+        const res = await authFetch(`${API_BASE}/actividades/${actId}/estado`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ estado: nuevoEstado }),
@@ -311,7 +365,7 @@ export const api = {
   async updateActividadDetalle(actId: number | string, actData: Partial<Actividad>): Promise<boolean> {
     if (typeof actId === 'number') {
       try {
-        const res = await fetch(`${API_BASE}/actividades/${actId}`, {
+        const res = await authFetch(`${API_BASE}/actividades/${actId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(actData),
@@ -329,7 +383,7 @@ export const api = {
       const params = new URLSearchParams();
       if (colaborador) params.append('colaborador', colaborador);
       if (userId) params.append('user_id', String(userId));
-      const res = await fetch(`${API_BASE}/actividades/pendientes?${params.toString()}`);
+      const res = await authFetch(`${API_BASE}/actividades/pendientes?${params.toString()}`);
       if (res.ok) {
         return await res.json();
       }
@@ -342,7 +396,7 @@ export const api = {
   async getStagnantActividades(userId?: number): Promise<{ success: boolean; stagnant_count: number; notified_count: number; items: Actividad[] }> {
     try {
       const q = userId ? `?user_id=${userId}` : '';
-      const res = await fetch(`${API_BASE}/actividades/stagnant${q}`);
+      const res = await authFetch(`${API_BASE}/actividades/stagnant${q}`);
       if (res.ok) {
         return await res.json();
       }
@@ -357,7 +411,7 @@ export const api = {
     userId?: number,
     targetFecha?: string
   ): Promise<{ success: boolean; count: number; pendientes: Actividad[]; actividades: Actividad[] }> {
-    const res = await fetch(`${API_BASE}/actividades/importar-pendientes`, {
+    const res = await authFetch(`${API_BASE}/actividades/importar-pendientes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -381,7 +435,7 @@ export const api = {
   },
 
   async triggerRollover(targetFecha?: string): Promise<any> {
-    const res = await fetch(`${API_BASE}/cron/rollover`, {
+    const res = await authFetch(`${API_BASE}/cron/rollover`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_fecha: targetFecha }),
@@ -392,7 +446,7 @@ export const api = {
 
   async deleteBitacora(id: number): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/bitacoras/${id}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/bitacoras/${id}`, { method: 'DELETE' });
       return res.ok;
     } catch (e) {
       console.warn('API delete error', e);
@@ -407,7 +461,7 @@ export const api = {
     if (fecha) params.append('fecha', fecha);
     if (requestingUserId) params.append('requesting_user_id', String(requestingUserId));
     if (userId) params.append('user_id', String(userId));
-    const res = await fetch(`${API_BASE}/dashboard/stats?${params.toString()}`);
+    const res = await authFetch(`${API_BASE}/dashboard/stats?${params.toString()}`);
     if (!res.ok) throw new Error('Error al cargar estadísticas del dashboard');
     return await res.json();
   },
@@ -415,7 +469,7 @@ export const api = {
   // ================= SYSTEM SETTINGS =================
   async getSettings(): Promise<SystemSettings> {
     try {
-      const res = await fetch(`${API_BASE}/settings`);
+      const res = await authFetch(`${API_BASE}/settings`);
       if (res.ok) return await res.json();
     } catch (e) {
       console.warn('API settings error', e);
@@ -433,7 +487,7 @@ export const api = {
   },
 
   async updateSettings(settings: Partial<SystemSettings>): Promise<SystemSettings> {
-    const res = await fetch(`${API_BASE}/settings`, {
+    const res = await authFetch(`${API_BASE}/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -443,7 +497,7 @@ export const api = {
   },
 
   async cleanProductionData(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/admin/clean-production-data`, {
+    const res = await authFetch(`${API_BASE}/admin/clean-production-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -455,7 +509,7 @@ export const api = {
   },
 
   async seedDemoData(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/admin/seed-demo-data`, {
+    const res = await authFetch(`${API_BASE}/admin/seed-demo-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -471,7 +525,7 @@ export const api = {
     const params = new URLSearchParams();
     if (userId) params.append('user_id', userId.toString());
     if (requestingUserId) params.append('requesting_user_id', requestingUserId.toString());
-    const res = await fetch(`${API_BASE}/papelera?${params.toString()}`);
+    const res = await authFetch(`${API_BASE}/papelera?${params.toString()}`);
     if (!res.ok) throw new Error('Error al cargar la papelera');
     return await res.json();
   },
@@ -480,7 +534,7 @@ export const api = {
     actId: number | string,
     targetData?: { target_bitacora_id?: number; target_fecha?: string; target_user_id?: number }
   ): Promise<{ success: boolean; message: string; actividad: Actividad; bitacora_id: number; bitacora_fecha?: string }> {
-    const res = await fetch(`${API_BASE}/papelera/restaurar/${actId}`, {
+    const res = await authFetch(`${API_BASE}/papelera/restaurar/${actId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(targetData || {}),
@@ -493,7 +547,7 @@ export const api = {
   },
 
   async eliminarDefinitivoActividad(actId: number | string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/papelera/eliminar/${actId}`, {
+    const res = await authFetch(`${API_BASE}/papelera/eliminar/${actId}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -504,7 +558,7 @@ export const api = {
   },
 
   async vaciarPapelera(userId?: number, role?: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/papelera/vaciar`, {
+    const res = await authFetch(`${API_BASE}/papelera/vaciar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, role }),
@@ -517,7 +571,7 @@ export const api = {
   },
 
   async softDeleteActividad(actId: number | string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/actividades/${actId}/eliminar`, {
+    const res = await authFetch(`${API_BASE}/actividades/${actId}/eliminar`, {
       method: 'POST',
     });
     if (!res.ok) {
@@ -533,7 +587,7 @@ export const api = {
     if (fecha) params.append('fecha', fecha);
     if (requestingUserId) params.append('requesting_user_id', requestingUserId.toString());
     if (teamId && teamId !== 'all') params.append('team_id', teamId.toString());
-    const res = await fetch(`${API_BASE}/equipo/actividades-en-vivo?${params.toString()}`);
+    const res = await authFetch(`${API_BASE}/equipo/actividades-en-vivo?${params.toString()}`);
     if (!res.ok) throw new Error('Error al cargar feed de actividades en vivo');
     return await res.json();
   },
@@ -544,13 +598,13 @@ export const api = {
     if (userId) params.append('user_id', userId.toString());
     if (colaborador) params.append('colaborador', colaborador);
     if (q) params.append('q', q);
-    const res = await fetch(`${API_BASE}/actividades/referencias?${params.toString()}`);
+    const res = await authFetch(`${API_BASE}/actividades/referencias?${params.toString()}`);
     if (!res.ok) throw new Error('Error al buscar referencias de actividades');
     return await res.json();
   },
 
   async getActividadById(id: number): Promise<Actividad & { bitacora_fecha?: string; colaborador?: string }> {
-    const res = await fetch(`${API_BASE}/actividades/${id}`);
+    const res = await authFetch(`${API_BASE}/actividades/${id}`);
     if (!res.ok) throw new Error(`Error al obtener actividad #${id}`);
     return await res.json();
   },
@@ -572,7 +626,7 @@ export const api = {
     if (params?.mine) searchParams.append('mine', 'true');
     if (params?.sort) searchParams.append('sort', params.sort);
 
-    const res = await fetch(`${API_BASE}/sugerencias?${searchParams.toString()}`);
+    const res = await authFetch(`${API_BASE}/sugerencias?${searchParams.toString()}`);
     if (!res.ok) throw new Error('Error al cargar buzón de sugerencias');
     return await res.json();
   },
@@ -587,7 +641,7 @@ export const api = {
     impacto?: string;
     evidencias?: Evidencia[];
   }): Promise<{ message: string; sugerencia: Sugerencia }> {
-    const res = await fetch(`${API_BASE}/sugerencias`, {
+    const res = await authFetch(`${API_BASE}/sugerencias`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -600,7 +654,7 @@ export const api = {
   },
 
   async votarSugerencia(sugId: number, userId: number): Promise<{ success: boolean; message: string; voted: boolean; votos: number }> {
-    const res = await fetch(`${API_BASE}/sugerencias/${sugId}/votar`, {
+    const res = await authFetch(`${API_BASE}/sugerencias/${sugId}/votar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId }),
@@ -617,7 +671,7 @@ export const api = {
     respuesta_admin?: string;
     respondido_por?: string;
   }): Promise<{ success: boolean; message: string; sugerencia: Sugerencia }> {
-    const res = await fetch(`${API_BASE}/sugerencias/${sugId}/status`, {
+    const res = await authFetch(`${API_BASE}/sugerencias/${sugId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -630,7 +684,7 @@ export const api = {
   },
 
   async deleteSugerencia(sugId: number, userId: number, role?: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/sugerencias/${sugId}`, {
+    const res = await authFetch(`${API_BASE}/sugerencias/${sugId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, role }),
@@ -645,7 +699,7 @@ export const api = {
   // ================= NOTIFICACIONES =================
   async getNotifications(userId: number): Promise<SystemNotification[]> {
     try {
-      const res = await fetch(`${API_BASE}/notifications?user_id=${userId}`);
+      const res = await authFetch(`${API_BASE}/notifications?user_id=${userId}`);
       if (res.ok) return await res.json();
     } catch (e) {
       console.warn('API notifications fetch error', e);
@@ -655,7 +709,7 @@ export const api = {
 
   async markNotificationRead(notifId: number | string): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/notifications/${notifId}/read`, { method: 'PATCH' });
+      const res = await authFetch(`${API_BASE}/notifications/${notifId}/read`, { method: 'PATCH' });
       return res.ok;
     } catch {
       return false;
@@ -664,7 +718,7 @@ export const api = {
 
   async markAllNotificationsRead(userId: number): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/notifications/read-all`, {
+      const res = await authFetch(`${API_BASE}/notifications/read-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId }),
@@ -677,7 +731,7 @@ export const api = {
 
   async clearNotifications(userId: number): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/notifications?user_id=${userId}`, { method: 'DELETE' });
+      const res = await authFetch(`${API_BASE}/notifications?user_id=${userId}`, { method: 'DELETE' });
       return res.ok;
     } catch {
       return false;
@@ -690,13 +744,13 @@ export const api = {
     if (params?.user_id) q.set('user_id', String(params.user_id));
     if (params?.categoria) q.set('categoria', params.categoria);
     if (params?.search) q.set('search', params.search);
-    const res = await fetch(`${API_BASE}/quick-links?${q.toString()}`);
+    const res = await authFetch(`${API_BASE}/quick-links?${q.toString()}`);
     if (!res.ok) throw new Error('Error al obtener accesos directos');
     return res.json();
   },
 
   async createQuickLink(link: Partial<QuickLink>): Promise<QuickLink> {
-    const res = await fetch(`${API_BASE}/quick-links`, {
+    const res = await authFetch(`${API_BASE}/quick-links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(link),
@@ -709,7 +763,7 @@ export const api = {
   },
 
   async updateQuickLink(id: number, link: Partial<QuickLink> & { user_id?: number }): Promise<QuickLink> {
-    const res = await fetch(`${API_BASE}/quick-links/${id}`, {
+    const res = await authFetch(`${API_BASE}/quick-links/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(link),
@@ -723,7 +777,7 @@ export const api = {
 
   async deleteQuickLink(id: number, userId?: number): Promise<boolean> {
     const q = userId ? `?user_id=${userId}` : '';
-    const res = await fetch(`${API_BASE}/quick-links/${id}${q}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/quick-links/${id}${q}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Error al eliminar acceso directo' }));
       throw new Error(err.error || 'Error al eliminar acceso directo');
@@ -733,13 +787,13 @@ export const api = {
 
   // ================= BÓVEDA IT (MULTI-EMPRESA / CREDENCIALES) =================
   async getItEmpresas(): Promise<ItEmpresa[]> {
-    const res = await fetch(`${API_BASE}/it-vault/empresas`);
+    const res = await authFetch(`${API_BASE}/it-vault/empresas`);
     if (!res.ok) throw new Error('Error al obtener empresas');
     return res.json();
   },
 
   async createItEmpresa(empresa: { nombre: string; color?: string }): Promise<ItEmpresa> {
-    const res = await fetch(`${API_BASE}/it-vault/empresas`, {
+    const res = await authFetch(`${API_BASE}/it-vault/empresas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(empresa),
@@ -752,7 +806,7 @@ export const api = {
   },
 
   async createItMarca(marca: { empresa_id: number; nombre: string }): Promise<ItMarca> {
-    const res = await fetch(`${API_BASE}/it-vault/marcas`, {
+    const res = await authFetch(`${API_BASE}/it-vault/marcas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(marca),
@@ -771,13 +825,13 @@ export const api = {
     if (params?.marca_id) q.set('marca_id', String(params.marca_id));
     if (params?.tipo_servicio) q.set('tipo_servicio', params.tipo_servicio);
     if (params?.search) q.set('search', params.search);
-    const res = await fetch(`${API_BASE}/it-vault/credentials?${q.toString()}`);
+    const res = await authFetch(`${API_BASE}/it-vault/credentials?${q.toString()}`);
     if (!res.ok) throw new Error('Error al obtener credenciales de la bóveda');
     return res.json();
   },
 
   async createItCredential(cred: Partial<ItCredential> & { created_by: number; permissions?: any[] }): Promise<{ id: number; success: boolean }> {
-    const res = await fetch(`${API_BASE}/it-vault/credentials`, {
+    const res = await authFetch(`${API_BASE}/it-vault/credentials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cred),
@@ -790,7 +844,7 @@ export const api = {
   },
 
   async updateItCredential(id: number, cred: Partial<ItCredential> & { updated_by?: number }): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/credentials/${id}`, {
+    const res = await authFetch(`${API_BASE}/it-vault/credentials/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cred),
@@ -804,7 +858,7 @@ export const api = {
 
   async deleteItCredential(id: number, userId?: number): Promise<boolean> {
     const q = userId ? `?user_id=${userId}` : '';
-    const res = await fetch(`${API_BASE}/it-vault/credentials/${id}${q}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/credentials/${id}${q}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Error al eliminar credencial' }));
       throw new Error(err.error || 'Error al eliminar credencial');
@@ -814,7 +868,7 @@ export const api = {
 
   async auditItCredential(id: number, userId: number, action: 'view_password' | 'copy_password'): Promise<boolean> {
     try {
-      const res = await fetch(`${API_BASE}/it-vault/credentials/${id}/audit`, {
+      const res = await authFetch(`${API_BASE}/it-vault/credentials/${id}/audit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, action }),
@@ -826,13 +880,13 @@ export const api = {
   },
 
   async getItCredentialPermissions(credId: number): Promise<ItCredentialPermission[]> {
-    const res = await fetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`);
+    const res = await authFetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`);
     if (!res.ok) throw new Error('Error al obtener permisos de credencial');
     return res.json();
   },
 
   async updateItCredentialPermissions(credId: number, assignedBy: number, permissions: { user_id: number; can_view: boolean; can_edit: boolean }[]): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`, {
+    const res = await authFetch(`${API_BASE}/it-vault/credentials/${credId}/permissions`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ assigned_by: assignedBy, permissions }),
@@ -852,13 +906,13 @@ export const api = {
     if (params?.plataforma) q.set('plataforma', params.plataforma);
     if (params?.search) q.set('search', params.search);
     if (params?.estado) q.set('estado', params.estado);
-    const res = await fetch(`${API_BASE}/it-vault/platform-users?${q.toString()}`);
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users?${q.toString()}`);
     if (!res.ok) throw new Error('Error al obtener directorio de usuarios');
     return res.json();
   },
 
   async createItPlatformUser(user: Partial<ItPlatformUser>): Promise<ItPlatformUser> {
-    const res = await fetch(`${API_BASE}/it-vault/platform-users`, {
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user),
@@ -871,7 +925,7 @@ export const api = {
   },
 
   async updateItPlatformUser(id: number, user: Partial<ItPlatformUser>): Promise<ItPlatformUser> {
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}`, {
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(user),
@@ -884,7 +938,7 @@ export const api = {
   },
 
   async resetItPlatformUserPassword(id: number, resetBy?: number, newPassword?: string): Promise<{ success: boolean; new_password: string; ultimo_reseteo: string; share_message: string }> {
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}/reset-password`, {
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/${id}/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reset_by: resetBy, new_password: newPassword }),
@@ -897,7 +951,7 @@ export const api = {
   },
 
   async deleteItPlatformUser(id: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Error al eliminar usuario' }));
       throw new Error(err.error || 'Error al eliminar usuario');
@@ -906,7 +960,7 @@ export const api = {
   },
 
   async downloadItPlatformUsersTemplate(): Promise<void> {
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/template`);
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/template`);
     if (!res.ok) throw new Error('Error al descargar plantilla de cuentas');
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
@@ -927,7 +981,7 @@ export const api = {
     if (params?.search) q.set('search', params.search);
     if (params?.estado) q.set('estado', params.estado);
     if (params?.include_passwords) q.set('include_passwords', '1');
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/export?${q.toString()}`);
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/export?${q.toString()}`);
     if (!res.ok) throw new Error('Error al exportar cuentas de usuarios');
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
@@ -951,7 +1005,7 @@ export const api = {
   }> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${API_BASE}/it-vault/platform-users/import/preview`, {
+    const res = await authFetch(`${API_BASE}/it-vault/platform-users/import/preview`, {
       method: 'POST',
       body: formData,
     });
@@ -978,7 +1032,7 @@ export const api = {
   }> {
     let res: Response;
     if (options.rows && options.rows.length > 0) {
-      res = await fetch(`${API_BASE}/it-vault/platform-users/import`, {
+      res = await authFetch(`${API_BASE}/it-vault/platform-users/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -992,7 +1046,7 @@ export const api = {
       formData.append('file', options.file);
       formData.append('modo', options.modo || 'crear_o_actualizar');
       if (options.created_by) formData.append('created_by', String(options.created_by));
-      res = await fetch(`${API_BASE}/it-vault/platform-users/import`, {
+      res = await authFetch(`${API_BASE}/it-vault/platform-users/import`, {
         method: 'POST',
         body: formData,
       });
@@ -1009,13 +1063,13 @@ export const api = {
 
   // ================= GESTIÓN DE CATÁLOGOS TI =================
   async getItPlataformas(): Promise<ItPlataforma[]> {
-    const res = await fetch(`${API_BASE}/it-vault/plataformas`);
+    const res = await authFetch(`${API_BASE}/it-vault/plataformas`);
     if (!res.ok) throw new Error('Error al obtener plataformas');
     return res.json();
   },
 
   async createItPlataforma(p: { nombre: string; tipo_servicio?: string; color?: string }): Promise<ItPlataforma> {
-    const res = await fetch(`${API_BASE}/it-vault/plataformas`, {
+    const res = await authFetch(`${API_BASE}/it-vault/plataformas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(p),
@@ -1028,19 +1082,19 @@ export const api = {
   },
 
   async deleteItPlataforma(id: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/plataformas/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/plataformas/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Error al eliminar plataforma');
     return true;
   },
 
   async getItCargos(): Promise<ItCargo[]> {
-    const res = await fetch(`${API_BASE}/it-vault/cargos`);
+    const res = await authFetch(`${API_BASE}/it-vault/cargos`);
     if (!res.ok) throw new Error('Error al obtener cargos');
     return res.json();
   },
 
   async createItCargo(c: { nombre: string; area?: string }): Promise<ItCargo> {
-    const res = await fetch(`${API_BASE}/it-vault/cargos`, {
+    const res = await authFetch(`${API_BASE}/it-vault/cargos`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(c),
@@ -1053,32 +1107,32 @@ export const api = {
   },
 
   async deleteItCargo(id: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/cargos/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/cargos/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Error al eliminar cargo');
     return true;
   },
 
   async deleteItEmpresa(id: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/empresas/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/empresas/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Error al eliminar empresa');
     return true;
   },
 
   async deleteItMarca(id: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/it-vault/marcas/${id}`, { method: 'DELETE' });
+    const res = await authFetch(`${API_BASE}/it-vault/marcas/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Error al eliminar marca');
     return true;
   },
 
   // ================= SEGURIDAD DE BÓVEDA TI (PIN / DESBLOQUEO) =================
   async getVaultPinStatus(userId: number): Promise<{ has_pin: boolean }> {
-    const res = await fetch(`${API_BASE}/it-vault/pin-status?user_id=${userId}`);
+    const res = await authFetch(`${API_BASE}/it-vault/pin-status?user_id=${userId}`);
     if (!res.ok) return { has_pin: false };
     return res.json();
   },
 
   async setVaultPin(userId: number, currentPassword: string, newPin: string): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/it-vault/set-pin`, {
+    const res = await authFetch(`${API_BASE}/it-vault/set-pin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, current_password: currentPassword, new_pin: newPin }),
@@ -1091,7 +1145,7 @@ export const api = {
   },
 
   async verifyVaultUnlock(userId: number, creds: { password?: string; pin?: string }): Promise<{ success: boolean; expires_in: number; message: string }> {
-    const res = await fetch(`${API_BASE}/it-vault/verify-unlock`, {
+    const res = await authFetch(`${API_BASE}/it-vault/verify-unlock`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId, ...creds }),
@@ -1106,7 +1160,7 @@ export const api = {
   // ================= DELEGACIONES Y USUARIOS DE APOYO =================
   async getDelegations(): Promise<UserDelegation[]> {
     try {
-      const res = await fetch(`${API_BASE}/admin/delegations`);
+      const res = await authFetch(`${API_BASE}/admin/delegations`);
       if (res.ok) {
         return await res.json();
       }
@@ -1123,7 +1177,7 @@ export const api = {
     motivo?: string;
     assigned_by: number;
   }): Promise<{ message: string; count?: number; id?: number }> {
-    const res = await fetch(`${API_BASE}/admin/delegations`, {
+    const res = await authFetch(`${API_BASE}/admin/delegations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
@@ -1136,7 +1190,7 @@ export const api = {
   },
 
   async deleteDelegation(delegationId: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/delegations/${delegationId}`, {
+    const res = await authFetch(`${API_BASE}/admin/delegations/${delegationId}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -1147,7 +1201,7 @@ export const api = {
   },
 
   async deleteDelegationsByDelegate(delegateUserId: number): Promise<boolean> {
-    const res = await fetch(`${API_BASE}/admin/delegations/by-delegate/${delegateUserId}`, {
+    const res = await authFetch(`${API_BASE}/admin/delegations/by-delegate/${delegateUserId}`, {
       method: 'DELETE',
     });
     if (!res.ok) {
@@ -1159,7 +1213,7 @@ export const api = {
 
   async getMyDelegatedTargets(userId: number): Promise<User[]> {
     try {
-      const res = await fetch(`${API_BASE}/delegations/my-targets?user_id=${userId}`);
+      const res = await authFetch(`${API_BASE}/delegations/my-targets?user_id=${userId}`);
       if (res.ok) {
         return await res.json();
       }
@@ -1176,7 +1230,7 @@ export const api = {
     context?: string;
     screenshot_url?: string;
   }): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${API_BASE}/support/report-error`, {
+    const res = await authFetch(`${API_BASE}/support/report-error`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
