@@ -334,10 +334,10 @@ export const stripHtml = (html?: string): string => {
     .replace(/<\/h[1-6]>/gi, '\n')
     .replace(/<\/div>/gi, '\n');
   
-  if (typeof document !== 'undefined') {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = withLineBreaks;
-    return (tmp.textContent || tmp.innerText || '').trim();
+  if (typeof DOMParser !== 'undefined') {
+    // DOMParser crea un documento inerte: no carga imágenes ni ejecuta onerror/onload
+    const doc = new DOMParser().parseFromString(withLineBreaks, 'text/html');
+    return (doc.body.textContent || '').trim();
   }
   return withLineBreaks.replace(/<[^>]+>/g, '').trim();
 };

@@ -22,6 +22,7 @@ import {
 import { api } from '../services/api';
 import { Evidencia } from '../types';
 import { alertDialog } from './DialogHost';
+import { sanitizeHtml } from './RichHtmlRenderer';
 
 interface HtmlEditorProps {
   value: string;
@@ -51,11 +52,13 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
   const [linkText, setLinkText] = useState('');
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
-  // Mantener sincronizado el editor con el valor entrante si cambia externamente
+  // Mantener sincronizado el editor con el valor entrante si cambia externamente.
+  // Se sanitiza antes de inyectar: el contenido puede venir de otro usuario.
   useEffect(() => {
     if (editorRef.current && !isRawHtml) {
-      if (editorRef.current.innerHTML !== value) {
-        editorRef.current.innerHTML = value || '';
+      const safe = value ? sanitizeHtml(value) : '';
+      if (editorRef.current.innerHTML !== safe) {
+        editorRef.current.innerHTML = safe;
       }
     }
   }, [value, isRawHtml]);

@@ -213,12 +213,30 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     loadAllTeamData();
   }, [selectedDate, selectedTeamFilter, currentUser?.id]);
 
-  // Periodic Auto-refresh polling every 20 seconds so leaders always see live activities
+  // Auto-refresh cada 20 s solo mientras la pestaña está visible; al volver se refresca al instante.
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadAllTeamData();
-    }, 20000);
-    return () => clearInterval(interval);
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (!interval) interval = setInterval(loadAllTeamData, 20000);
+    };
+    const stop = () => {
+      if (interval) clearInterval(interval);
+      interval = null;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadAllTeamData();
+        start();
+      } else {
+        stop();
+      }
+    };
+    if (document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [selectedDate, selectedTeamFilter, currentUser?.id, allMembers.length]);
 
   // List of unique dates that have recorded bitacoras for quick jump

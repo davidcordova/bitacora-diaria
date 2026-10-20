@@ -1604,14 +1604,19 @@ def get_bitacoras():
     bitacoras = cursor.execute(query, params).fetchall()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
     
-    result = []
-    for b in bitacoras:
-        b_dict = dict(b)
-        acts = cursor.execute('''
+    # Carga de actividades en lote (antes: 1 consulta por bitácora → N+1).
+    # El CTE recursivo de tiempo acumulado solo se evalúa en tareas vinculadas (CASE es perezoso).
+    acts_by_bitacora = {}
+    bitacora_ids = [b['id'] for b in bitacoras]
+    CHUNK = 400
+    for i in range(0, len(bitacora_ids), CHUNK):
+        chunk = bitacora_ids[i:i + CHUNK]
+        placeholders = ','.join('?' * len(chunk))
+        rows = cursor.execute(f'''
             SELECT a.*,
               p.descripcion as parent_task_desc,
               p.estado as parent_task_estado,
-              COALESCE((
+              CASE WHEN a.parent_task_id IS NULL THEN a.duracion_min ELSE COALESCE((
                 WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
                   SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
                   UNION ALL
@@ -1621,12 +1626,19 @@ def get_bitacoras():
                   WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
                 )
                 SELECT SUM(duracion_min) FROM lineage
-              ), a.duracion_min) AS tiempo_acumulado_min
+              ), a.duracion_min) END AS tiempo_acumulado_min
             FROM actividades a
             LEFT JOIN actividades p ON a.parent_task_id = p.id
-            WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-            ORDER BY a.orden ASC, a.id ASC
-        ''', (b['id'],)).fetchall()
+            WHERE a.bitacora_id IN ({placeholders}) AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+            ORDER BY a.bitacora_id, a.orden ASC, a.id ASC
+        ''', chunk).fetchall()
+        for a in rows:
+            acts_by_bitacora.setdefault(a['bitacora_id'], []).append(a)
+
+    result = []
+    for b in bitacoras:
+        b_dict = dict(b)
+        acts = acts_by_bitacora.get(b['id'], [])
         b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
         result.append(b_dict)
         

@@ -17,6 +17,7 @@ import hashlib
 import secrets
 import time
 
+import nh3
 from flask import request, jsonify, g
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from werkzeug.datastructures import ImmutableMultiDict
@@ -238,6 +239,56 @@ def _rewrite_identity(user):
                 body['role'] = user['role']
 
 
+# ---------------------------------------------------------------------------
+# Sanitización de texto enriquecido (defensa en profundidad contra XSS almacenado)
+# ---------------------------------------------------------------------------
+RICH_TEXT_KEYS = frozenset({
+    'descripcion', 'comentarios', 'resumen_texto', 'pendientes',
+    'apoyo_detalle', 'prioridad_siguiente',
+})
+_HTML_TAG_RE = re.compile(r'<[a-zA-Z!/?]')
+_NH3_TAGS = {
+    'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'mark', 'small', 'sub', 'sup',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'span', 'div',
+    'a', 'img', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+}
+_NH3_ATTRS = {
+    '*': {'class', 'title'},
+    'a': {'href', 'target'},
+    'img': {'src', 'alt', 'width', 'height'},
+    'td': {'colspan', 'rowspan'},
+    'th': {'colspan', 'rowspan'},
+}
+_NH3_SCHEMES = {'http', 'https', 'mailto', 'tel', 'data'}
+
+
+def sanitize_rich_text(value):
+    """Limpia HTML peligroso. El texto plano (sin etiquetas) se deja intacto para no
+    alterar fragmentos de código como `a < b` que escriben los usuarios de TI."""
+    if not isinstance(value, str) or not _HTML_TAG_RE.search(value):
+        return value
+    return nh3.clean(value, tags=_NH3_TAGS, attributes=_NH3_ATTRS, url_schemes=_NH3_SCHEMES)
+
+
+def _sanitize_payload(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k in RICH_TEXT_KEYS and isinstance(v, str):
+                node[k] = sanitize_rich_text(v)
+            elif isinstance(v, (dict, list)):
+                _sanitize_payload(v)
+    elif isinstance(node, list):
+        for item in node:
+            _sanitize_payload(item)
+
+
+def _sanitize_request_body():
+    if request.method in ('POST', 'PUT', 'PATCH') and request.is_json:
+        body = request.get_json(silent=True)
+        if isinstance(body, (dict, list)):
+            _sanitize_payload(body)
+
+
 def user_can_access_owner(user, owner_id):
     """Admin, el propio dueño, su líder de equipo o un delegado activo."""
     if owner_id is None:
@@ -321,6 +372,7 @@ def register_security(app):
             return jsonify({'error': 'Acción reservada a administradores'}), 403
 
         _rewrite_identity(user)
+        _sanitize_request_body()
 
         if _ownership_denied(user):
             return jsonify({'error': 'No tienes permiso sobre este registro'}), 403

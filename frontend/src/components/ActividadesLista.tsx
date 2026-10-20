@@ -29,13 +29,13 @@ import {
   ShieldCheck,
   Zap,
   Rocket,
-  Coffee,
   Play,
   Square,
   Check,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration, calculateHoraFin } from '../utils/formatters';
+import { TIPOS_TRABAJO } from '../utils/initialData';
 import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
@@ -103,21 +103,23 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   const [quickCliente, setQuickCliente] = useState<string>('Interno TI');
   const [recentFeedback, setRecentFeedback] = useState<string | null>(null);
 
-  // Live Timer states
-  const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerStartTimeStr, setTimerStartTimeStr] = useState<string>('');
+  // Live Timer: se guarda el instante de inicio (no un contador) para que no se atrase
+  // cuando el navegador frena la pestaña en segundo plano y para sobrevivir a recargas.
+  const timerStorageKey = `bitacora_timer_${currentUser?.id ?? 'anon'}`;
+  const [timerStartedAt, setTimerStartedAt] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem(timerStorageKey));
+    // Ignorar cronómetros olvidados de una jornada anterior (> 16 h)
+    return Number.isFinite(saved) && saved > Date.now() - 16 * 3600 * 1000 ? saved : null;
+  });
+  const [timerNow, setTimerNow] = useState<number>(Date.now());
+  const isTimerRunning = timerStartedAt !== null;
+  const timerSeconds = isTimerRunning ? Math.max(0, Math.floor((timerNow - timerStartedAt) / 1000)) : 0;
 
   useEffect(() => {
-    let interval: any = null;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setTimerSeconds((sec) => sec + 1);
-      }, 1000);
-    }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    if (!isTimerRunning) return;
+    setTimerNow(Date.now());
+    const interval = setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => clearInterval(interval);
   }, [isTimerRunning]);
 
   // Compute tasks that reference other tasks in the current day (reverse linkages)
@@ -295,7 +297,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       id: 'daily',
       icon: Terminal,
       label: 'Daily Standup',
-      tipo: 'Reunión',
+      tipo: 'Capacitación / Reunión',
       cliente: 'Interno TI',
       duracion: 15,
       color: 'text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/60',
@@ -313,7 +315,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       id: 'deploy',
       icon: Rocket,
       label: 'Deploy / Pase a Prod',
-      tipo: 'Despliegue',
+      tipo: 'Desarrollo',
       cliente: 'Producción',
       duracion: 45,
       color: 'text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/60',
@@ -322,33 +324,28 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       id: 'ticket',
       icon: Zap,
       label: 'Soporte a Usuario',
-      tipo: 'Soporte Técnico',
+      tipo: 'Soporte técnico',
       cliente: 'Mesa de Ayuda',
       duracion: 20,
       color: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60',
     },
-    {
-      id: 'almuerzo',
-      icon: Coffee,
-      label: 'Almuerzo / Pausa',
-      tipo: 'Pausa',
-      cliente: 'Personal',
-      duracion: 60,
-      color: 'text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700',
-    },
+    // Nota: no hay preset de almuerzo. El refrigerio (13:00-14:00) ya se descuenta
+    // automáticamente; registrarlo como actividad inflaba la carga laboral.
   ];
 
+  // Hora de inicio encadenada: la hora de fin MÁS TARDÍA del día (no la del último
+  // elemento del arreglo, que puede estar desordenado por ediciones o arrastres).
   const getNextStartTime = () => {
-    if (actividades.length === 0) return horaInicio || '08:30';
-    for (let i = actividades.length - 1; i >= 0; i--) {
-      const a = actividades[i];
-      if (a.hora_fin && a.hora_fin !== '--:--') return a.hora_fin;
-      if (a.hora_inicio && a.duracion_min) {
+    let latest = '';
+    for (const a of actividades) {
+      let fin = a.hora_fin && a.hora_fin !== '--:--' ? a.hora_fin : '';
+      if (!fin && a.hora_inicio && a.duracion_min) {
         const calculated = calculateHoraFin(a.hora_inicio, a.duracion_min, fecha);
-        if (calculated && calculated !== '--:--') return calculated;
+        if (calculated && calculated !== '--:--') fin = calculated;
       }
+      if (fin && fin > latest) latest = fin;
     }
-    return horaInicio || '08:30';
+    return latest || horaInicio || '08:30';
   };
 
   const handleApplyPreset = (preset: typeof IT_PRESETS[0]) => {
@@ -387,54 +384,55 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     setTimeout(() => setRecentFeedback(null), 3000);
   };
 
+  const toHHMM = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+
   const handleStartTimer = () => {
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    setTimerStartTimeStr(`${hh}:${mm}`);
-    setTimerSeconds(0);
-    setIsTimerRunning(true);
+    const now = Date.now();
+    localStorage.setItem(timerStorageKey, String(now));
+    setTimerStartedAt(now);
+    setTimerNow(now);
   };
 
   const handleStopTimer = () => {
-    const durationMin = Math.max(5, Math.round(timerSeconds / 60));
-    const now = new Date();
-    const hh = String(now.getHours()).padStart(2, '0');
-    const mm = String(now.getMinutes()).padStart(2, '0');
-    const endTimeStr = `${hh}:${mm}`;
+    if (timerStartedAt === null) return;
+    const endMs = Date.now();
+    const durationMin = Math.max(1, Math.round((endMs - timerStartedAt) / 60000));
 
     onAddActividad({
-      hora_inicio: timerStartTimeStr || getNextStartTime(),
-      hora_fin: endTimeStr,
+      hora_inicio: toHHMM(new Date(timerStartedAt)),
+      hora_fin: toHHMM(new Date(endMs)),
       duracion_min: durationMin,
-      tipo_trabajo: quickTipo || 'Soporte Técnico',
+      tipo_trabajo: quickTipo || 'Soporte técnico',
       para_cliente: quickCliente || 'Interno TI',
       descripcion: quickDesc.trim() || 'Actividad registrada con cronómetro en vivo',
       estado: 'completada',
     });
 
-    setIsTimerRunning(false);
-    setTimerSeconds(0);
-    setTimerStartTimeStr('');
+    localStorage.removeItem(timerStorageKey);
+    setTimerStartedAt(null);
     setQuickDesc('');
     setRecentFeedback(`¡Cronómetro finalizado: ${durationMin} min registrados!`);
     setTimeout(() => setRecentFeedback(null), 3500);
   };
 
   const formatTimerClock = (totalSec: number) => {
-    const m = Math.floor(totalSec / 60);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
     const s = totalSec % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    const mmss = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    return h > 0 ? `${h}:${mmss}` : mmss;
   };
 
   // Atajos de teclado para desarrolladores (N, Esc, Ctrl+Enter)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const activeTag = (document.activeElement?.tagName || '').toUpperCase();
-      const isInputActive = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+      const activeEl = document.activeElement as HTMLElement | null;
+      const activeTag = (activeEl?.tagName || '').toUpperCase();
+      const isInputActive =
+        activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT' || !!activeEl?.isContentEditable;
 
       // 'N' abre modal de nueva actividad si no se está escribiendo
-      if ((e.key === 'n' || e.key === 'N') && !isInputActive && !createModalOpen && !detailModalOpen && !refModalOpen) {
+      if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !e.altKey && !isInputActive && !createModalOpen && !detailModalOpen && !refModalOpen) {
         e.preventDefault();
         handleOpenCreateModal();
         return;
@@ -811,11 +809,9 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               onChange={(e) => setQuickTipo(e.target.value)}
               className="text-xs font-semibold px-2.5 py-2 rounded-xl bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] focus:outline-none focus:border-cyan-500 cursor-pointer shadow-2xs"
             >
-              <option value="Desarrollo">💻 Desarrollo</option>
-              <option value="Soporte Técnico">🛠️ Soporte</option>
-              <option value="Infraestructura">🌐 Redes / Servidores</option>
-              <option value="Mantenimiento">🔧 Mantenimiento</option>
-              <option value="Reunión">👥 Reunión</option>
+              {TIPOS_TRABAJO.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
 
             <button

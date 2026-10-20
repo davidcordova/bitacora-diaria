@@ -1,5 +1,38 @@
 import React, { useMemo } from 'react';
-import { ExternalLink } from 'lucide-react';
+import DOMPurify from 'dompurify';
+
+const LINK_CLASS =
+  'text-cyan-600 dark:text-[#00F0FF] font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity';
+
+// Lista blanca estricta: solo formato de texto, listas, enlaces, imágenes y código.
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'mark', 'small', 'sub', 'sup',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'span', 'div',
+    'a', 'img', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan'],
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpe?g|gif|webp);base64,|\/|#)/i,
+};
+
+let hooksInstalled = false;
+const ensureHooks = () => {
+  if (hooksInstalled) return;
+  hooksInstalled = true;
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A') {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+      const existing = node.getAttribute('class') || '';
+      if (!existing.includes('underline')) node.setAttribute('class', `${existing} ${LINK_CLASS}`.trim());
+    }
+  });
+};
+
+export const sanitizeHtml = (html: string): string => {
+  ensureHooks();
+  return DOMPurify.sanitize(html, PURIFY_CONFIG) as unknown as string;
+};
 
 interface RichHtmlRendererProps {
   content?: string | null;
@@ -26,28 +59,8 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
     const hasHtmlTags = /<[a-z][\s\S]*>/i.test(raw);
 
     if (hasHtmlTags) {
-      // Sanitizar scripts básicos y manejadores inline peligrosos
-      let sanitized = raw
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/\son\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, '')
-        .replace(/href\s*=\s*(['"])javascript:[^'"]*\1/gi, 'href="#"');
-
-      // Asegurar que todos los enlaces tengan target="_blank", rel y clases estilizadas sin duplicar atributos
-      return sanitized.replace(/<a\b([^>]*)>/gi, (match, attrs) => {
-        let cleanAttrs = attrs;
-        if (!/target=/i.test(cleanAttrs)) cleanAttrs += ' target="_blank"';
-        if (!/rel=/i.test(cleanAttrs)) cleanAttrs += ' rel="noopener noreferrer"';
-        
-        const linkClass = 'text-cyan-600 dark:text-[#00F0FF] font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity';
-        if (/class="/i.test(cleanAttrs)) {
-          cleanAttrs = cleanAttrs.replace(/class="([^"]*)"/i, (_m: string, c: string) => `class="${c} ${linkClass}"`);
-        } else if (/class='/i.test(cleanAttrs)) {
-          cleanAttrs = cleanAttrs.replace(/class='([^']*)'/i, (_m: string, c: string) => `class='${c} ${linkClass}'`);
-        } else {
-          cleanAttrs += ` class="${linkClass}"`;
-        }
-        return `<a${cleanAttrs}>`;
-      });
+      // DOMPurify elimina scripts, manejadores on*, iframes, javascript: URIs, SVG, etc.
+      return sanitizeHtml(raw);
     }
 
     // Si es texto plano, soportar bloques de código markdown, backticks inline, tickets y URLs
@@ -81,9 +94,9 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
 
     // Convertir saltos de línea a <br /> preservando los bloques <pre>
     const parts = parsed.split(/(<pre[\s\S]*?<\/pre>)/gi);
-    return parts
-      .map((part) => (part.startsWith('<pre') ? part : part.replace(/\n/g, '<br />')))
-      .join('');
+    return sanitizeHtml(
+      parts.map((part) => (part.startsWith('<pre') ? part : part.replace(/\n/g, '<br />'))).join('')
+    );
   }, [content]);
 
   if (!processedHtml) {
