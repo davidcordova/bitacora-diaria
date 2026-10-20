@@ -32,6 +32,7 @@ from security import (
     register_security, issue_token, login_is_throttled,
     register_login_failure, clear_login_failures,
     issue_vault_token, vault_unlocked, VAULT_UNLOCK_SECONDS, VAULT_MAX_FAILED_UNLOCKS,
+    user_can_review_owner,
 )
 
 logging.basicConfig(
@@ -186,6 +187,9 @@ def format_actividad_dict(act_row, users_map=None, fecha=None):
         updater_id = a_dict.get('updated_by_user_id')
         if updater_id and updater_id in users_map:
             a_dict['updated_by_name'] = users_map[updater_id]
+        reviewer_id = a_dict.get('revisado_por')
+        if reviewer_id and reviewer_id in users_map:
+            a_dict['revisado_por_nombre'] = users_map[reviewer_id]
 
     # Cálculo preciso de días transcurridos sin cambios / estancamiento
     now_dt = get_peru_now().replace(tzinfo=None)
@@ -1843,7 +1847,7 @@ def save_bitacora():
 
         # 2) Emparejar actividades entrantes con las existentes (sin heurísticas posicionales)
         all_rows = [dict(r) for r in cursor.execute(
-            "SELECT id, orden, shared_uuid, client_uid, updated_at, is_deleted FROM actividades WHERE bitacora_id = ? ORDER BY orden ASC, id ASC",
+            "SELECT id, orden, shared_uuid, client_uid, updated_at, is_deleted, estado, revisado_at FROM actividades WHERE bitacora_id = ? ORDER BY orden ASC, id ASC",
             (bitacora_id,)
         ).fetchall()]
         active_by_id = {r['id']: r for r in all_rows if not r.get('is_deleted')}
@@ -1953,6 +1957,15 @@ def save_bitacora():
             act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), duracion, fecha)
             client_uid = _client_uid_of(act)
 
+            # Una decisión del líder (aprobar/devolver) que el cliente aún no conoce no debe ser
+            # pisada por un autoguardado con el estado viejo (p. ej. volver a 'en_revision').
+            estado_to_write = act.get('estado', 'completada')
+            if target_act_id:
+                srv_row = active_by_id[target_act_id]
+                srv_rev = srv_row.get('revisado_at')
+                if srv_rev and str(act.get('revisado_at') or '') != str(srv_rev):
+                    estado_to_write = srv_row.get('estado') or estado_to_write
+
             if target_act_id:
                 cursor.execute('''
                     UPDATE actividades SET
@@ -1975,7 +1988,7 @@ def save_bitacora():
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
                     act.get('para_cliente', ''),
-                    act.get('estado', 'completada'),
+                    estado_to_write,
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
@@ -2205,16 +2218,117 @@ def update_actividad_estado(act_id):
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
-    act = cursor.execute("SELECT id, shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    act = cursor.execute('''
+        SELECT a.id, a.shared_uuid, a.estado, a.descripcion, b.user_id AS owner_id, b.colaborador
+        FROM actividades a JOIN bitacoras b ON a.bitacora_id = b.id WHERE a.id = ?
+    ''', (act_id,)).fetchone()
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
     cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, act_id))
     for sib in _same_day_shared_siblings(cursor, act_id, act['shared_uuid']):
         cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, sib['id']))
+    if nuevo_estado == 'en_revision' and act['estado'] != 'en_revision':
+        _notify_reviewers(cursor, act['owner_id'], act['colaborador'], act['descripcion'])
     conn.commit()
     conn.close()
     return jsonify({"success": True, "id": act_id, "nuevo_estado": nuevo_estado})
+
+
+def _plain_snippet(html, limit=80):
+    text = re.sub(r'<[^>]+>', ' ', html or '')
+    text = re.sub(r'\s+', ' ', text).strip()
+    return (text[:limit] + '…') if len(text) > limit else text
+
+
+def _notify_reviewers(cursor, owner_id, colaborador, descripcion):
+    """Avisa a los líderes del equipo del colaborador que hay una tarea esperando su aprobación."""
+    if not owner_id:
+        return
+    try:
+        leaders = cursor.execute('''
+            SELECT DISTINCT l.id FROM users o
+            JOIN teams t ON o.team_id = t.id
+            JOIN users l ON l.id = t.lider_id
+            WHERE o.id = ? AND l.id != o.id AND COALESCE(l.is_active, 1) = 1
+        ''', (owner_id,)).fetchall()
+        msg = f"{colaborador} solicita tu aprobación: «{_plain_snippet(descripcion)}»"
+        for row in leaders:
+            cursor.execute('''
+                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                VALUES (?, 'Aprobación pendiente', ?, 'warning', 0, CURRENT_TIMESTAMP)
+            ''', (row['id'], msg))
+    except Exception as ne:
+        logger.warning("[Notif revisión] %s", ne)
+
+
+REVISION_DECISIONS = {
+    # decisión -> (nuevo estado, título de la notificación)
+    'aprobada_continuar': ('en_proceso', 'Aprobada: puedes continuar'),
+    'aprobada_cerrada': ('completada', 'Aprobada y cerrada'),
+    'devuelta': ('en_proceso', 'Devuelta con observaciones'),
+}
+
+
+@app.route('/api/actividades/<int:act_id>/revision', methods=['POST', 'OPTIONS'])
+def revisar_actividad(act_id):
+    """Decisión del líder sobre una tarea 'En revisión': aprobar y continuar, aprobar y cerrar,
+    o devolver con observaciones. Guarda quién y cuándo, y avisa al colaborador."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    data = request.get_json() or {}
+    decision = data.get('decision')
+    comentario = (data.get('comentario') or '').strip()[:1000]
+    if decision not in REVISION_DECISIONS:
+        return jsonify({"error": "Decisión inválida"}), 400
+    if decision == 'devuelta' and not comentario:
+        return jsonify({"error": "Indica qué debe corregirse al devolver la tarea"}), 400
+
+    reviewer = g.current_user
+    conn = get_db()
+    cursor = conn.cursor()
+    act = cursor.execute('''
+        SELECT a.id, a.shared_uuid, a.estado, a.descripcion, b.user_id AS owner_id
+        FROM actividades a JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+    ''', (act_id,)).fetchone()
+    if not act:
+        conn.close()
+        return jsonify({"error": "Actividad no encontrada"}), 404
+    if not user_can_review_owner(reviewer, act['owner_id']):
+        conn.close()
+        return jsonify({"error": "Solo el líder del equipo o un administrador puede revisar esta tarea"}), 403
+    if act['estado'] != 'en_revision':
+        conn.close()
+        return jsonify({"error": "La tarea ya no está esperando revisión", "estado": act['estado']}), 409
+
+    nuevo_estado, titulo = REVISION_DECISIONS[decision]
+    now_peru = get_peru_now_str()
+    ids = [act_id] + [s['id'] for s in _same_day_shared_siblings(cursor, act_id, act['shared_uuid'])]
+    for target in ids:
+        cursor.execute('''
+            UPDATE actividades SET estado = ?, revision_decision = ?, revision_comentario = ?,
+                revisado_por = ?, revisado_at = ?, updated_at = ?, updated_by_user_id = ?
+            WHERE id = ?
+        ''', (nuevo_estado, decision, comentario or None, reviewer['id'], now_peru, now_peru, reviewer['id'], target))
+
+    if act['owner_id']:
+        detalle = f" — {comentario}" if comentario else ''
+        cursor.execute('''
+            INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+            VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+        ''', (
+            act['owner_id'], titulo,
+            f"{reviewer['full_name']} revisó «{_plain_snippet(act['descripcion'])}»{detalle}",
+            'warning' if decision == 'devuelta' else 'success',
+        ))
+    conn.commit()
+    conn.close()
+    return jsonify({
+        "success": True, "id": act_id, "nuevo_estado": nuevo_estado, "revision_decision": decision,
+        "revision_comentario": comentario or None, "revisado_por": reviewer['id'],
+        "revisado_por_nombre": reviewer['full_name'], "revisado_at": now_peru,
+    })
 
 @app.route('/api/actividades/<int:act_id>', methods=['GET', 'PUT', 'OPTIONS'])
 def update_actividad_detalle(act_id):

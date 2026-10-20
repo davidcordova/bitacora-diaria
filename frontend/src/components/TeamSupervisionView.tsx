@@ -48,6 +48,8 @@ import {
 } from '../utils/formatters';
 import { api } from '../services/api';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { RevisionModal, RevisionBadge } from './RevisionModal';
+import type { RevisionDecision, RevisionResult } from '../types';
 
 interface TeamSupervisionViewProps {
   currentUser: User | null;
@@ -385,27 +387,38 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     return memberWorkload.find((wl) => wl.member.id === drawerMemberId) || null;
   }, [drawerMemberId, memberWorkload]);
 
-  // Handle Leader 1-Click Approval
-  const handleApproveActivity = async (activityId: number | string) => {
-    try {
-      if (typeof activityId === 'number') {
-        await api.updateActividadEstado(activityId, 'completada');
-      }
-      setFeedbackMsg('Actividad aprobada y marcada como completada');
-      setTimeout(() => setFeedbackMsg(''), 3000);
-      loadAllTeamData();
-    } catch (e) {
-      console.error('Error aprobando actividad', e);
-    }
+  // Revisión del líder: solo para tareas "En revisión" (el colaborador pidió visto bueno)
+  const [reviewTarget, setReviewTarget] = useState<{ act: Actividad & { colaborador?: string }; decision?: RevisionDecision } | null>(null);
+
+  const isOwnActivity = (act: Actividad & { user_id?: number }) => {
+    const ownerId = act.user_id ?? act.colaborador_id;
+    return !!currentUser && ownerId === currentUser.id;
   };
 
-  // Handle Leader 1-Click Reject / Return to In Process
+  const openReview = (act: Actividad & { colaborador?: string }, decision?: RevisionDecision) => {
+    if (typeof act.id !== 'number') return;
+    setReviewTarget({ act, decision });
+  };
+
+  const handleReviewDone = (result: RevisionResult) => {
+    setReviewTarget(null);
+    const msg: Record<RevisionDecision, string> = {
+      aprobada_continuar: 'Aprobada: el colaborador puede continuar con la tarea',
+      aprobada_cerrada: 'Aprobada y cerrada como completada',
+      devuelta: 'Tarea devuelta con tus observaciones',
+    };
+    setFeedbackMsg(msg[result.revision_decision]);
+    setTimeout(() => setFeedbackMsg(''), 3500);
+    loadAllTeamData();
+  };
+
+  // Reabrir una tarea ya completada (vuelve a "En Proceso")
   const handleRejectActivity = async (activityId: number | string) => {
     try {
       if (typeof activityId === 'number') {
         await api.updateActividadEstado(activityId, 'en_proceso');
       }
-      setFeedbackMsg('Actividad devuelta a "En Proceso"');
+      setFeedbackMsg('Actividad reabierta: pasa a "En Proceso"');
       setTimeout(() => setFeedbackMsg(''), 3000);
       loadAllTeamData();
     } catch (e) {
@@ -907,6 +920,18 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 />
               ) : (
                 <div className="space-y-3">
+                  {(() => {
+                    const pendientes = filteredLiveFeed.filter((a) => a.estado === 'en_revision' && !isOwnActivity(a)).length;
+                    return pendientes > 0 ? (
+                      <div className="flex items-center gap-2.5 p-3 rounded-xl border border-purple-200 dark:border-purple-800/50 bg-purple-50 dark:bg-purple-950/30 text-xs text-purple-800 dark:text-purple-200">
+                        <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shrink-0" />
+                        <span>
+                          <strong>{pendientes} {pendientes === 1 ? 'solicitud espera' : 'solicitudes esperan'} tu aprobación.</strong>{' '}
+                          Pulsa «Revisar» para dejar continuar, cerrar o devolver con observaciones.
+                        </span>
+                      </div>
+                    ) : null;
+                  })()}
                   {filteredLiveFeed.map((act) => {
                     const isCompleted = act.estado === 'completada';
                     const isInReview = act.estado === 'en_revision';
@@ -959,6 +984,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 </>
                               )}
                             </div>
+                            {(isInReview || act.revision_decision) && (
+                              <div>
+                                <RevisionBadge actividad={act} />
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -982,16 +1012,17 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             {isCompleted ? 'Completada' : isInReview ? 'En Revisión' : 'En Proceso'}
                           </span>
 
-                          {/* Quick 1-click Approval button */}
-                          {!isCompleted && act.id && (
+                          {/* Revisión: solo cuando el colaborador pidió aprobación */}
+                          {isInReview && act.id && !isOwnActivity(act) && (
                             <button
                               type="button"
-                              onClick={() => handleApproveActivity(act.id!)}
-                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
-                              title="Aprobar de inmediato esta actividad"
+                              id={`feed-revisar-${act.id}`}
+                              onClick={() => openReview(act)}
+                              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              title="Aprobar para continuar, aprobar y cerrar, o devolver con observaciones"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Aprobar</span>
+                              <span>Revisar</span>
                             </button>
                           )}
 
@@ -1237,15 +1268,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   showCollaboratorBadge={true}
                   onApproveActivity={(index) => {
                     const act = unifiedActivities[index];
-                    if (act && typeof act.id === 'number') {
-                      handleApproveActivity(act.id);
-                    }
+                    if (act) openReview(act, 'aprobada_continuar');
                   }}
                   onRejectActivity={(index) => {
                     const act = unifiedActivities[index];
-                    if (act && typeof act.id === 'number') {
-                      handleRejectActivity(act.id);
-                    }
+                    if (act) openReview(act, 'devuelta');
                   }}
                 />
               ) : (
@@ -1322,15 +1349,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 showCollaboratorBadge={false}
                 onApproveActivity={(index) => {
                   const act = (currentIndividualBitacora.actividades || []).filter((a) => !a.is_deleted)[index];
-                  if (act && typeof act.id === 'number') {
-                    handleApproveActivity(act.id);
-                  }
+                  if (act) openReview({ ...act, colaborador: currentIndividualBitacora.colaborador }, 'aprobada_continuar');
                 }}
                 onRejectActivity={(index) => {
                   const act = (currentIndividualBitacora.actividades || []).filter((a) => !a.is_deleted)[index];
-                  if (act && typeof act.id === 'number') {
-                    handleRejectActivity(act.id);
-                  }
+                  if (act) openReview({ ...act, colaborador: currentIndividualBitacora.colaborador }, 'devuelta');
                 }}
               />
             )
@@ -1479,21 +1502,25 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             </span>
                           </div>
 
+                          {(act.estado === 'en_revision' || act.revision_decision) && (
+                            <RevisionBadge actividad={act} compact />
+                          )}
+
                           <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-[#252636]">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
                               <span>{act.hora_inicio || '08:30'} · {act.duracion_min || 0} min</span>
                             </span>
 
-                            {/* Quick 1-click Approval/Reject */}
+                            {/* Revisión / reapertura */}
                             <div className="flex items-center gap-1.5">
-                              {act.estado !== 'completada' && (
+                              {act.estado === 'en_revision' && drawerWorkload.member.id !== currentUser?.id && (
                                 <button
                                   type="button"
-                                  onClick={() => act.id && handleApproveActivity(act.id)}
-                                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800/60 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+                                  onClick={() => openReview({ ...act, colaborador: drawerWorkload.member.full_name })}
+                                  className="px-3 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-300/80 dark:border-purple-800/60 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
                                 >
-                                  Aprobar
+                                  Revisar
                                 </button>
                               )}
                               {act.estado === 'completada' && (
@@ -1546,6 +1573,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           </div>
         </div>
       )}
+
+      <RevisionModal
+        actividad={reviewTarget?.act || null}
+        initialDecision={reviewTarget?.decision}
+        onClose={() => setReviewTarget(null)}
+        onDone={handleReviewDone}
+      />
     </div>
   );
 };

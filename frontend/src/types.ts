@@ -47,6 +47,23 @@ export interface Actividad {
   dias_sin_cambio?: number;
   is_stagnant?: boolean;
   last_stagnant_notified_at?: string;
+  revision_decision?: RevisionDecision | null;
+  revision_comentario?: string | null;
+  revisado_por?: number | null;
+  revisado_por_nombre?: string | null;
+  revisado_at?: string | null;
+}
+
+export type RevisionDecision = 'aprobada_continuar' | 'aprobada_cerrada' | 'devuelta';
+
+export interface RevisionResult {
+  id: number;
+  nuevo_estado: EstadoActividad;
+  revision_decision: RevisionDecision;
+  revision_comentario: string | null;
+  revisado_por: number;
+  revisado_por_nombre: string;
+  revisado_at: string;
 }
 
 export interface ActividadReferencia {

@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation, RevisionDecision, RevisionResult } from '../types';
 
 const API_BASE = '/api';
 
@@ -390,6 +390,27 @@ export const api = {
       }
     }
     return true;
+  },
+
+  /** Decisión del líder/admin sobre una tarea "En revisión". Devuelve los datos de la revisión o un error legible. */
+  async revisarActividad(
+    actId: number,
+    decision: RevisionDecision,
+    comentario: string,
+  ): Promise<{ ok: true; data: RevisionResult } | { ok: false; status: number; error: string }> {
+    try {
+      const res = await authFetch(`${API_BASE}/actividades/${actId}/revision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision, comentario }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, data: body as RevisionResult };
+      return { ok: false, status: res.status, error: body?.error || 'No se pudo registrar la revisión' };
+    } catch (e) {
+      console.warn('API revision error', e);
+      return { ok: false, status: 0, error: 'Sin conexión con el servidor' };
+    }
   },
 
   async updateActividadDetalle(actId: number | string, actData: Partial<Actividad>): Promise<boolean> {

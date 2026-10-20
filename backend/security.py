@@ -310,6 +310,23 @@ def user_can_access_owner(user, owner_id):
     return bool(row)
 
 
+def user_can_review_owner(user, owner_id):
+    """Quién puede aprobar/devolver una tarea "En revisión": el admin o el líder del equipo
+    del colaborador. Nunca el propio dueño ni un delegado (aprobarse a sí mismo no es control)."""
+    if owner_id is None:
+        return user['role'] == 'admin'
+    if int(owner_id) == int(user['id']):
+        return False
+    if user['role'] == 'admin':
+        return True
+    row = get_db().execute('''
+        SELECT 1 FROM users o
+        LEFT JOIN teams t ON o.team_id = t.id
+        WHERE o.id = ? AND (t.lider_id = ? OR (? = 'lider' AND o.team_id IS NOT NULL AND o.team_id = ?))
+    ''', (owner_id, user['id'], user['role'], user['team_id'])).fetchone()
+    return bool(row)
+
+
 _ACT_RE = re.compile(r'^/api/actividades/(\d+)(?:/estado|/eliminar)?$')
 _TRASH_RE = re.compile(r'^/api/papelera/(?:restaurar|eliminar)/(\d+)$')
 _BIT_RE = re.compile(r'^/api/bitacoras/(\d+)$')

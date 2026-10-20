@@ -288,6 +288,30 @@ export const ManualView: React.FC<ManualViewProps> = ({
       ),
     },
     {
+      id: 'aprobacion-lider',
+      category: 'roles',
+      title: '4.1 Aprobación del Líder: estado "En revisión"',
+      icon: <CheckCircle2 className="w-5 h-5 text-purple-500" />,
+      badge: 'Aprobaciones',
+      badgeColor: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+      description: 'Cómo pedir visto bueno a tu líder (p. ej. un plan de trabajo o una decisión) y cómo responde el líder.',
+      tags: ['revision', 'aprobar', 'aprobacion', 'lider', 'devolver', 'plan', 'decision'],
+      content: (
+        <div className="space-y-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
+          <ol className="list-decimal list-inside space-y-1.5 text-xs">
+            <li><strong>Colaborador:</strong> registra la actividad (p. ej. "Plan de migración de correo") y cambia su estado a <strong>En revisión</strong>. Tu líder recibe una notificación.</li>
+            <li><strong>Líder o administrador:</strong> en <em>Supervisión → Feed en Vivo</em> (o en el Tablero) pulsa <strong>Revisar</strong> y elige:</li>
+          </ol>
+          <div className="ml-5 space-y-1 text-xs">
+            <p>✔ <strong>Aprobar y continuar:</strong> la tarea vuelve a <em>En proceso</em> para que el colaborador siga con ella.</p>
+            <p>✔ <strong>Aprobar y cerrar:</strong> la tarea queda <em>Completada</em>.</p>
+            <p>↩ <strong>Devolver con observaciones:</strong> vuelve a <em>En proceso</em> con un comentario obligatorio de qué corregir.</p>
+          </div>
+          <p className="text-xs">El colaborador recibe una notificación y ve la decisión, quién la tomó y el comentario debajo de la actividad. Nadie puede aprobar sus propias tareas.</p>
+        </div>
+      ),
+    },
+    {
       id: 'modo-apoyo-delegado',
       category: 'apoyo',
       title: '5. Modo Apoyo: Registro para Uno o Más Colaboradores',

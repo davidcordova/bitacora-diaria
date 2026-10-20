@@ -222,6 +222,17 @@ def init_db():
         cursor.execute("ALTER TABLE actividades ADD COLUMN client_uid TEXT")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_client_uid ON actividades(bitacora_id, client_uid)")
 
+    # Flujo de aprobación del líder: última decisión tomada sobre una tarea "En revisión"
+    # revision_decision: 'aprobada_continuar' | 'aprobada_cerrada' | 'devuelta'
+    for col, ddl in (
+        ('revision_decision', 'TEXT'),
+        ('revision_comentario', 'TEXT'),
+        ('revisado_por', 'INTEGER REFERENCES users(id)'),
+        ('revisado_at', 'DATETIME'),
+    ):
+        if col not in act_columns:
+            cursor.execute(f"ALTER TABLE actividades ADD COLUMN {col} {ddl}")
+
     # Una sola bitácora por colaborador y fecha (evita duplicados por carreras entre workers)
     try:
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_bitacoras_user_fecha ON bitacoras(user_id, fecha) WHERE user_id IS NOT NULL")

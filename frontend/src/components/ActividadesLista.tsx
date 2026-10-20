@@ -40,6 +40,7 @@ import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { RevisionBadge } from './RevisionModal';
 
 
 interface ActividadesListaProps {
@@ -976,6 +977,11 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                             clampLines={2}
                             className="font-semibold text-slate-800 dark:text-slate-100 leading-relaxed group-hover:text-cyan-900 dark:group-hover:text-white transition-colors"
                           />
+                          {(act.estado === 'en_revision' || act.revision_decision) && (
+                            <div className="mt-1.5">
+                              <RevisionBadge actividad={act} />
+                            </div>
+                          )}
                         </div>
                       </td>
 
@@ -1203,6 +1209,11 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       clampLines={2}
                       className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed"
                     />
+                    {(act.estado === 'en_revision' || act.revision_decision) && (
+                      <div className="mt-1.5">
+                        <RevisionBadge actividad={act} />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
