@@ -30,6 +30,8 @@ import {
   Radio,
   RefreshCw,
   Zap,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { User, Bitacora, Team, Actividad, EstadoActividad, LiveFeedActividad } from '../types';
 import { KanbanBoard } from './KanbanBoard';
@@ -403,6 +405,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     }
   };
 
+  const [copiedStandup, setCopiedStandup] = useState(false);
+
   // Export to Excel / CSV with selected date in filename
   const handleExportCSV = () => {
     const listToExport = selectedMemberId === 'all' ? unifiedActivities : currentIndividualBitacora?.actividades || [];
@@ -411,6 +415,75 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
         ? `bitacora_${primaryTeam?.nombre.toLowerCase().replace(/\s+/g, '_') || 'equipo'}_${selectedDate}`
         : `bitacora_${selectedMember?.username || 'colaborador'}_${selectedDate}`;
     exportActivitiesToCSV(listToExport, prefix);
+  };
+
+  // Copiar Daily Standup para Slack / Teams / WhatsApp en 1 solo clic
+  const handleCopyDailyStandup = async () => {
+    try {
+      const activeMembers = memberWorkload.filter(
+        (mw) => (mw.dateLog?.actividades && mw.dateLog.actividades.length > 0) || mw.totalMinutos > 0
+      );
+
+      const teamName = primaryTeam?.nombre || (currentUser?.role === 'admin' ? 'Área de Sistemas / TI' : 'Mi Equipo');
+      const lines: string[] = [];
+
+      lines.push(`📋 *DAILY STANDUP - ${teamName.toUpperCase()}*`);
+      lines.push(`📅 *Fecha:* ${formatDateDisplay(selectedDate)}`);
+      lines.push(`👥 *Colaboradores activos:* ${activeMembers.length} de ${memberWorkload.length}`);
+      lines.push(`────────────────────────────────────────`);
+
+      if (activeMembers.length === 0) {
+        lines.push(`(Sin actividades registradas para esta fecha)`);
+      } else {
+        activeMembers.forEach((mw) => {
+          const acts = (mw.dateLog?.actividades || []).filter((a) => !a.is_deleted);
+          const completadas = acts.filter((a) => a.estado === 'completada');
+          const enProceso = acts.filter((a) => a.estado === 'en_proceso' || a.estado === 'en_revision');
+
+          lines.push(`\n👤 *${mw.member.full_name}* (${mw.hoursFormatted} hrs registradas):`);
+
+          if (completadas.length > 0) {
+            lines.push(`  ✅ *Completadas:*`);
+            completadas.forEach((a) => {
+              const cleanDesc = a.descripcion.replace(/<[^>]*>/g, '').trim().split('\n')[0];
+              const cliente = a.para_cliente ? ` [${a.para_cliente}]` : '';
+              lines.push(`     • ${cleanDesc}${cliente} (${a.duracion_min}m)`);
+            });
+          }
+
+          if (enProceso.length > 0) {
+            lines.push(`  ⏳ *En Curso / Revisión:*`);
+            enProceso.forEach((a) => {
+              const cleanDesc = a.descripcion.replace(/<[^>]*>/g, '').trim().split('\n')[0];
+              const cliente = a.para_cliente ? ` [${a.para_cliente}]` : '';
+              lines.push(`     • ${cleanDesc}${cliente} (${a.duracion_min}m)`);
+            });
+          }
+
+          if (mw.needsSupport || mw.dateLog?.necesita_apoyo === 'Si') {
+            lines.push(`  🚨 *BLOQUEO / REQUIERE APOYO:* ${mw.supportDetail || mw.dateLog?.apoyo_detalle || 'Requiere asistencia'}`);
+          }
+        });
+      }
+
+      const blockedCount = memberWorkload.filter((mw) => mw.needsSupport || mw.dateLog?.necesita_apoyo === 'Si').length;
+      lines.push(`\n────────────────────────────────────────`);
+      if (blockedCount > 0) {
+        lines.push(`⚠️ *Alertas de Bloqueo Activas:* ${blockedCount} colaborador(es) esperando apoyo.`);
+      } else {
+        lines.push(`✨ *Sin bloqueos reportados.*`);
+      }
+      const totalEquipoMins = memberWorkload.reduce((acc, m) => acc + m.totalMinutos, 0);
+      lines.push(`📊 *Total Equipo:* ${unifiedActivities.length} actividades | ${(totalEquipoMins / 60).toFixed(1)} hrs`);
+
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedStandup(true);
+      setFeedbackMsg('📋 ¡Resumen Daily Standup copiado al portapapeles! Listo para pegar en Slack/Teams/WhatsApp.');
+      setTimeout(() => setCopiedStandup(false), 3000);
+      setTimeout(() => setFeedbackMsg(''), 5000);
+    } catch (err) {
+      console.error('Error copiando standup:', err);
+    }
   };
 
   return (
@@ -485,26 +558,26 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
             {/* Toggle de Vistas del Equipo: Feed en Vivo / Semáforo / Kanban */}
             {selectedMemberId === 'all' ? (
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636] max-w-full overflow-x-auto scrollbar-none">
+              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-xl border border-slate-200/80 dark:border-[#252636] max-w-full overflow-x-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setTeamTab('feed')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'feed'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
                   }`}
                 >
-                  <Radio className="w-3.5 h-3.5 text-current animate-pulse shrink-0" />
+                  <Radio className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 animate-pulse shrink-0" />
                   <span>Feed <span className="hidden sm:inline">en Vivo</span> ({liveActivities.length})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTeamTab('semaforo')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'semaforo'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
                   }`}
                 >
                   <TrendingUp className="w-3.5 h-3.5 shrink-0" />
@@ -513,10 +586,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <button
                   type="button"
                   onClick={() => setTeamTab('kanban')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
                     teamTab === 'kanban'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-bold'
+                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
                   }`}
                 >
                   <KanbanIcon className="w-3.5 h-3.5 shrink-0" />
@@ -525,14 +598,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
             ) : (
               /* Si está en modo individual, toggle Kanban / Resumen */
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
+              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-xl border border-slate-200/80 dark:border-[#252636]">
                 <button
                   type="button"
                   onClick={() => setSubView('kanban')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                     subView === 'kanban'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
                   }`}
                 >
                   <KanbanIcon className="w-3.5 h-3.5" />
@@ -541,10 +614,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <button
                   type="button"
                   onClick={() => setSubView('resumen')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
                     subView === 'resumen'
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
                   }`}
                 >
                   <LayoutList className="w-3.5 h-3.5" />
@@ -553,14 +626,38 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
             )}
 
+            {/* Copiar Daily Standup para Slack / Teams / WhatsApp */}
+            <button
+              type="button"
+              onClick={handleCopyDailyStandup}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px] border ${
+                copiedStandup
+                  ? 'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20'
+                  : 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 hover:from-cyan-500/20 hover:to-blue-500/20 text-cyan-800 dark:text-[#00F0FF] border-cyan-500/30'
+              }`}
+              title="Copiar resumen del equipo en formato Daily Standup listo para Slack / Teams / WhatsApp"
+            >
+              {copiedStandup ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>¡Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar Daily Standup</span>
+                </>
+              )}
+            </button>
+
             {/* Exportar Excel CSV */}
             <button
               type="button"
               onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 text-white rounded-full text-xs font-bold transition-all shadow-md shadow-purple-500/25 cursor-pointer min-h-[36px]"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-white dark:bg-[#1A1C29] hover:bg-slate-50 dark:hover:bg-[#252636] active:scale-95 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#252636] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px]"
               title="Descargar reporte en formato Excel CSV"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               <span>Exportar Excel</span>
             </button>
           </div>
@@ -872,7 +969,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             <button
                               type="button"
                               onClick={() => handleApproveActivity(act.id!)}
-                              className="px-3.5 py-1.5 bg-[#00F0FF] hover:bg-[#00D8E6] text-slate-950 text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
                               title="Aprobar de inmediato esta actividad"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1376,7 +1473,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 <button
                                   type="button"
                                   onClick={() => act.id && handleApproveActivity(act.id)}
-                                  className="px-3 py-1 bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+                                  className="px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-800/60 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
                                 >
                                   Aprobar
                                 </button>

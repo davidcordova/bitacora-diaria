@@ -93,7 +93,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
     switch (currentView) {
       case 'kanban':
         return {
-          title: 'Actividades',
+          title: 'Tablero Kanban',
           icon: <Kanban className="w-4 h-4 text-blue-600 dark:text-blue-400" />,
           badge: activitiesCount > 0 ? `${activitiesCount} tareas` : null,
           badgeColor: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800/60',
@@ -107,7 +107,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         };
       case 'equipo':
         return {
-          title: 'Seguimiento',
+          title: 'Supervisión de Equipo',
           icon: <Users className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />,
           badge: null,
           badgeColor: '',

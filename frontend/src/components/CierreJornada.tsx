@@ -29,10 +29,15 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-5 border-b border-slate-100 dark:border-[#252636]/60 pb-3">
         <div className="flex items-center gap-2.5 text-slate-800 dark:text-white">
-          <div className="p-2 rounded-xl bg-[#EC4899]/15 text-[#EC4899]">
+          <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500/15 to-blue-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
             <CheckSquare className="w-4 h-4 stroke-[2.5]" />
           </div>
-          <h2 className="text-base sm:text-lg font-extrabold tracking-tight">Cierre de jornada</h2>
+          <div>
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight">Cierre de jornada</h2>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500">
+              Registra los pendientes y prioridades para consolidar el reporte del día.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -47,8 +52,8 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
             rows={3}
             value={pendientes}
             onChange={(e) => onChange('pendientes', e.target.value)}
-            placeholder="Ajustes o tareas pendientes..."
-            className="w-full px-3.5 py-2.5 bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            placeholder="¿Qué actividades o ajustes quedaron pendientes para la próxima jornada?..."
+            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             required
           />
         </div>
@@ -62,8 +67,8 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
             rows={3}
             value={prioridadSiguiente}
             onChange={(e) => onChange('prioridad_siguiente', e.target.value)}
-            placeholder="Objetivo principal de la siguiente jornada..."
-            className="w-full px-3.5 py-2.5 bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            placeholder="¿Cuál será tu principal objetivo o tarea crítica a resolver mañana?..."
+            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             required
           />
         </div>
@@ -71,27 +76,39 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
 
       {/* Row 2: Apoyo */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        {/* ¿Requiere apoyo? */}
-        <div className="md:col-span-3">
+        {/* ¿Requiere apoyo? (Modern Segmented Pills) */}
+        <div className="md:col-span-4">
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            ¿Requiere apoyo? <span className="text-rose-500">*</span>
+            ¿Requiere apoyo del equipo? <span className="text-rose-500">*</span>
           </label>
-          <select
-            value={necesitaApoyo}
-            onChange={(e) => onChange('necesita_apoyo', e.target.value)}
-            className={`w-full px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-xl border transition-all outline-hidden cursor-pointer ${
-              necesitaApoyo === 'Si'
-                ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700 ring-2 ring-amber-100 dark:ring-amber-900/30'
-                : 'bg-slate-50/80 hover:bg-slate-100/70 dark:bg-[#161722] dark:hover:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-[#252636]'
-            }`}
-          >
-            <option value="No" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">No</option>
-            <option value="Si" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">Si</option>
-          </select>
+          <div className="grid grid-cols-2 gap-2 bg-slate-100/80 dark:bg-[#161722] p-1 rounded-xl border border-slate-200/80 dark:border-[#252636]">
+            <button
+              type="button"
+              onClick={() => onChange('necesita_apoyo', 'No')}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                necesitaApoyo === 'No'
+                  ? 'bg-white dark:bg-[#1E2030] text-slate-800 dark:text-white shadow-xs border border-slate-200/60 dark:border-white/10'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              No, todo en orden
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange('necesita_apoyo', 'Si')}
+              className={`py-2 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                necesitaApoyo === 'Si'
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400'
+              }`}
+            >
+              ⚠️ Sí, requiero apoyo
+            </button>
+          </div>
         </div>
 
         {/* Detalle del apoyo */}
-        <div className="md:col-span-9">
+        <div className="md:col-span-8">
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
             Detalle del apoyo{' '}
             {necesitaApoyo === 'Si' ? (
@@ -106,23 +123,23 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
             onChange={(e) => onChange('apoyo_detalle', e.target.value)}
             placeholder={
               necesitaApoyo === 'Si'
-                ? 'Especifica el bloqueo o apoyo requerido...'
-                : 'Opcional si no requiere apoyo'
+                ? 'Especifica el bloqueo técnico o soporte que necesitas de tu líder...'
+                : 'Sin bloqueos registrados para hoy'
             }
             disabled={necesitaApoyo === 'No'}
             className={`w-full px-3.5 py-2.5 text-xs sm:text-sm rounded-xl border transition-all outline-hidden ${
               necesitaApoyo === 'No'
                 ? 'bg-slate-100/60 dark:bg-[#12131C] text-slate-400 dark:text-slate-600 border-slate-200 dark:border-[#252636]/60 cursor-not-allowed'
-                : 'bg-slate-50/80 hover:bg-slate-100/70 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-slate-800 dark:text-slate-100 border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30'
+                : 'bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-slate-800 dark:text-slate-100 border-amber-300 dark:border-amber-700 focus:ring-2 focus:ring-amber-500/20'
             }`}
           />
         </div>
       </div>
 
       {/* Action Area */}
-      <div className="mt-5 pt-3.5 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-end">
+      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-end">
         {isProxyMode ? (
-          <div className="flex items-center gap-2 p-2 px-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold shadow-xs">
+          <div className="flex items-center gap-2 p-2.5 px-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 text-xs font-semibold shadow-xs">
             <UserCheck className="w-4 h-4 text-amber-500 shrink-0" />
             <span>
               <strong>Modo Apoyo:</strong> El cierre formal corresponde al titular ({proxyUserName || 'colaborador'}).
@@ -133,12 +150,12 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
             type="button"
             onClick={onSubmit}
             disabled={isSaving}
-            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-[#A855F7] to-[#6366F1] hover:from-[#9333EA] hover:to-[#4F46E5] active:scale-95 disabled:opacity-60 text-white px-6 py-2.5 rounded-full text-xs font-extrabold shadow-md shadow-purple-500/20 hover:shadow-purple-500/35 transition-all cursor-pointer min-h-[38px]"
+            className="w-full sm:w-auto flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:scale-95 disabled:opacity-60 text-white px-6 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-cyan-600/20 hover:shadow-cyan-600/30 transition-all cursor-pointer min-h-[40px]"
           >
             {isSaving ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
+              <RefreshCw className="w-4 h-4 animate-spin text-white" />
             ) : (
-              <Play className="w-3.5 h-3.5 fill-current" />
+              <Play className="w-4 h-4 fill-current" />
             )}
             <span>{isSaving ? 'Guardando...' : 'Generar Bitácora'}</span>
           </button>

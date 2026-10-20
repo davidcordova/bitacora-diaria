@@ -167,14 +167,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
 
             {(!isCollapsed || isOpenMobile) && (
-              <div className="animate-in fade-in duration-200 overflow-hidden whitespace-nowrap">
+              <div className="animate-in fade-in duration-200 overflow-hidden">
                 <div className="flex items-center gap-1">
                   <span className="font-heading font-extrabold text-slate-900 dark:text-white text-base tracking-tight leading-none">
                     {systemSettings?.login_heading || 'Bitácora'}
                   </span>
-                  <span className="text-[#00F0FF] font-black text-base">.</span>
+                  <span className="text-cyan-500 font-black text-base">.</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest block mt-1">
+                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mt-1 truncate max-w-[150px]">
                   {systemSettings?.login_subheading ? systemSettings.login_subheading.toUpperCase() : 'CONTROL DIGITAL'}
                 </span>
               </div>
@@ -221,17 +221,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   type="button"
                   onClick={() => handleItemClick(item.id)}
                   title={!showText ? item.label : undefined}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold transition-all group cursor-pointer relative min-h-[44px] ${
+                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs transition-all group cursor-pointer relative min-h-[42px] ${
                     isActive
-                      ? 'border border-cyan-400/60 dark:border-[#00F0FF]/50 bg-cyan-100/70 dark:bg-[#00F0FF]/10 text-cyan-950 dark:text-white font-bold shadow-xs'
-                      : 'border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/5'
+                      ? 'bg-slate-900 text-white dark:bg-white/10 dark:text-white font-bold shadow-xs'
+                      : 'border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/5 font-semibold'
                   } ${!showText ? 'justify-center px-0' : ''}`}
                 >
                   <Icon
                     className={`w-4 h-4 shrink-0 transition-transform ${
                       isActive
-                        ? 'text-cyan-700 dark:text-[#00F0FF]'
-                        : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
+                        ? 'text-cyan-400 dark:text-[#00F0FF]'
+                        : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
                     }`}
                   />
 
@@ -241,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   {/* Dot on active item if no badge */}
                   {isActive && item.badge === null && showText && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-600 dark:bg-[#00F0FF] shrink-0" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 dark:bg-[#00F0FF] shrink-0" />
                   )}
 
                   {/* Badges in Pink/Magenta exactly as in Images 1, 2, 3 */}
@@ -262,24 +262,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* 3. BOTTOM FOOTER / USER, THEME, HELP & SUMMARY */}
       <div className="p-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-[#0D0E15]/90 space-y-2.5">
-        {/* Real Switch Toggle: Modo Oscuro / Modo Claro */}
+        {/* Switch Toggle: Modo Oscuro */}
         {onToggleTheme && (
           <div
             onClick={onToggleTheme}
-            className={`w-full flex items-center justify-between p-2 rounded-2xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer ${
+            className={`w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer ${
               isCollapsed && !isOpenMobile ? 'justify-center' : ''
             }`}
             title={isDark ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
           >
             <div className="flex items-center gap-2.5">
               {isDark ? (
-                <Moon className="w-4 h-4 text-[#00F0FF] shrink-0" />
+                <Moon className="w-4 h-4 text-cyan-400 shrink-0" />
               ) : (
                 <Sun className="w-4 h-4 text-amber-500 shrink-0" />
               )}
               {(!isCollapsed || isOpenMobile) && (
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  {isDark ? 'Modo Oscuro' : 'Modo Claro'}
+                  Modo Oscuro
                 </span>
               )}
             </div>
@@ -287,7 +287,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {(!isCollapsed || isOpenMobile) && (
               <div
                 className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 relative ${
-                  isDark ? 'bg-[#00F0FF]' : 'bg-slate-300 dark:bg-slate-700'
+                  isDark ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'
                 }`}
               >
                 <div
@@ -306,11 +306,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             type="button"
             onClick={onOpenHelp}
             title={isCollapsed && !isOpenMobile ? 'Guía rápida' : undefined}
-            className={`w-full flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold py-2 rounded-2xl transition-all cursor-pointer min-h-[40px] ${
+            className={`w-full flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold py-2 rounded-xl transition-all cursor-pointer min-h-[40px] ${
               isCollapsed && !isOpenMobile ? 'justify-center px-0' : 'px-3'
             }`}
           >
-            <HelpCircle className="w-4 h-4 text-[#00F0FF] shrink-0" />
+            <HelpCircle className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
             {(!isCollapsed || isOpenMobile) && <span>Guía rápida</span>}
           </button>
         )}
@@ -324,14 +324,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               if (onCloseMobile) onCloseMobile();
             }}
             title={isCollapsed && !isOpenMobile ? `Papelera (${papeleraCount})` : undefined}
-            className={`w-full flex items-center gap-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-red-50/50 dark:hover:bg-red-950/20 text-xs font-semibold py-2 rounded-2xl transition-all cursor-pointer min-h-[40px] ${
+            className={`w-full flex items-center gap-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold py-2 rounded-xl transition-all cursor-pointer min-h-[40px] ${
               isCollapsed && !isOpenMobile ? 'justify-center px-0' : 'px-3'
             }`}
           >
             <div className="relative flex items-center justify-center">
-              <Trash2 className="w-4 h-4 text-red-500 shrink-0" />
+              <Trash2 className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
               {papeleraCount > 0 && isCollapsed && !isOpenMobile && (
-                <span className="absolute -top-1.5 -right-2 min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-black bg-red-500 text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-2 min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center">
                   {papeleraCount}
                 </span>
               )}
@@ -340,7 +340,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <>
                 <span className="flex-1 text-left">Papelera</span>
                 {papeleraCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800">
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
                     {papeleraCount}
                   </span>
                 )}
@@ -357,12 +357,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             if (onCloseMobile) onCloseMobile();
           }}
           title={isCollapsed && !isOpenMobile ? 'Ver Resumen Diario' : undefined}
-          className={`w-full flex items-center bg-slate-900 hover:bg-slate-800 dark:bg-[#161724] dark:hover:bg-[#1E1F30] border border-slate-800 dark:border-white/10 text-white text-xs font-bold py-2.5 rounded-2xl shadow-sm transition-all cursor-pointer min-h-[44px] ${
+          className={`w-full flex items-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-[#161724] dark:hover:bg-[#1E1F30] border border-slate-200/90 dark:border-white/10 text-slate-800 dark:text-white text-xs font-bold py-2.5 rounded-xl shadow-2xs transition-all cursor-pointer min-h-[42px] ${
             isCollapsed && !isOpenMobile ? 'justify-center px-0 relative' : 'gap-2 px-3.5'
           }`}
         >
           <div className="relative flex items-center justify-center">
-            <FileText className="w-4 h-4 text-[#00F0FF] shrink-0" />
+            <FileText className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
           </div>
           {(!isCollapsed || isOpenMobile) && (
             <span className="flex-1 text-left">Resumen Diario</span>

@@ -108,31 +108,44 @@
   box-shadow: 0 10px 30px -5px rgba(0, 240, 255, 0.4);
 }
 
-/* Luminous Cybernetic Primary Action Button */
+/* Primary Action Button (Accesible & High Contrast) */
 .btn-pill-mint,
 .btn-pill-primary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  background: linear-gradient(135deg, #00f0ff 0%, #6366f1 100%);
-  color: #0b0c13;
+  background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+  color: #ffffff;
   font-weight: 700;
   border-radius: 9999px;
-  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.35);
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   border: none;
 }
 .btn-pill-mint:hover,
 .btn-pill-primary:hover {
-  background: linear-gradient(135deg, #3df3ff 0%, #7579ff 100%);
-  box-shadow: 0 0 25px rgba(0, 240, 255, 0.5);
+  background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.38);
   transform: translateY(-1px);
 }
 .btn-pill-mint:active,
 .btn-pill-primary:active {
   transform: translateY(0);
+}
+
+.dark .btn-pill-mint,
+.dark .btn-pill-primary {
+  background: linear-gradient(135deg, #00f0ff 0%, #6366f1 100%);
+  color: #0b0c13;
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.35);
+}
+.dark .btn-pill-mint:hover,
+.dark .btn-pill-primary:hover {
+  background: linear-gradient(135deg, #3df3ff 0%, #7579ff 100%);
+  box-shadow: 0 0 25px rgba(0, 240, 255, 0.5);
+  transform: translateY(-1px);
 }
 
 .btn-pill-secondary {

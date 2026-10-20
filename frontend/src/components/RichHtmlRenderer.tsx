@@ -50,16 +50,40 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
       });
     }
 
-    // Si es texto plano, autovincular URLs http/https y preservar saltos de línea
+    // Si es texto plano, soportar bloques de código markdown, backticks inline, tickets y URLs
+    let parsed = raw;
+
+    // 1. Bloques de código multilínea ```código```
+    parsed = parsed.replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (_match, codeContent) => {
+      const escaped = codeContent
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<pre class="my-2 p-2.5 bg-slate-900 dark:bg-black/80 text-emerald-400 dark:text-emerald-300 rounded-xl font-mono text-xs overflow-x-auto border border-slate-800 dark:border-white/10 shadow-xs leading-relaxed"><code>${escaped.trim()}</code></pre>`;
+    });
+
+    // 2. Código inline `comando`
+    parsed = parsed.replace(/`([^`\n]+)`/g, (_match, inlineCode) => {
+      const escaped = inlineCode
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<code class="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-cyan-700 dark:text-[#00F0FF] font-mono text-[11px] font-semibold border border-slate-200/60 dark:border-white/10">${escaped}</code>`;
+    });
+
+    // 3. Autovincular URLs http/https
     const urlPattern = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
-    const withLinks = raw.replace(
+    parsed = parsed.replace(
       urlPattern,
       (url) =>
         `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-cyan-600 dark:text-[#00F0FF] font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity inline-flex items-center gap-0.5">${url}</a>`
     );
 
-    // Convertir saltos de línea a <br />
-    return withLinks.replace(/\n/g, '<br />');
+    // Convertir saltos de línea a <br /> preservando los bloques <pre>
+    const parts = parsed.split(/(<pre[\s\S]*?<\/pre>)/gi);
+    return parts
+      .map((part) => (part.startsWith('<pre') ? part : part.replace(/\n/g, '<br />')))
+      .join('');
   }, [content]);
 
   if (!processedHtml) {

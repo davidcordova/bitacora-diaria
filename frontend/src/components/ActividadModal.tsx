@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Clock,
@@ -66,6 +66,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [refSearch, setRefSearch] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const loadReferencias = async (query = '') => {
     try {
@@ -125,11 +126,14 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     }
   }, [isOpen, actividadToEdit]);
 
-  // Handle escape key
+  // Handle escape key & Ctrl+Enter / Cmd+Enter fast submit
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
         onClose();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isOpen) {
+        e.preventDefault();
+        formRef.current?.requestSubmit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -331,7 +335,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         </div>
 
         {/* Modal Form with Scrollable Body & Sticky Footer */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-3.5 sm:space-y-4">
             {errorMsg && (
               <div className="flex items-center gap-2 p-3 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl">
@@ -380,12 +384,12 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                   min
                 </span>
               </div>
-              {/* Píldoras rápidas debajo del input para evitar cualquier solapamiento responsive */}
-              <div className="grid grid-cols-3 gap-1 mt-1.5">
+              {/* Píldoras rápidas debajo del input para ajuste veloz de tiempo IT */}
+              <div className="grid grid-cols-5 gap-1 mt-1.5">
                 <button
                   type="button"
                   onClick={() => handleAddMinutes(15)}
-                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  className="py-1 text-[10px] font-bold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
                   title="Añadir 15 minutos"
                 >
                   +15m
@@ -393,18 +397,34 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleAddMinutes(30)}
-                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  className="py-1 text-[10px] font-bold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
                   title="Añadir 30 minutos"
                 >
                   +30m
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleAddMinutes(45)}
+                  className="py-1 text-[10px] font-bold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  title="Añadir 45 minutos"
+                >
+                  +45m
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleAddMinutes(60)}
-                  className="py-1 text-[10px] font-semibold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  className="py-1 text-[10px] font-bold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
                   title="Añadir 1 hora"
                 >
                   +1h
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddMinutes(120)}
+                  className="py-1 text-[10px] font-bold bg-slate-100 dark:bg-[#161722] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 border border-slate-200/70 dark:border-[#252636] hover:border-[#00F0FF]/40 text-slate-600 dark:text-slate-300 rounded-lg transition-colors cursor-pointer text-center"
+                  title="Añadir 2 horas"
+                >
+                  +2h
                 </button>
               </div>
             </div>
@@ -794,6 +814,9 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{editIndex !== null ? 'Actualizar' : 'Guardar'}</span>
+              <kbd className="hidden sm:inline-block text-[10px] font-mono bg-black/15 text-slate-950 font-extrabold px-1.5 py-0.5 rounded-md ml-1 tracking-tighter">
+                Ctrl+↵
+              </kbd>
             </button>
           </div>
         </form>

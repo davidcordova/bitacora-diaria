@@ -396,7 +396,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">/ día</span>
+              <span className="text-[11px] text-slate-400 font-medium">/ día</span>
             </div>
 
             <div className="saas-card p-4 flex items-center justify-between">
@@ -413,7 +413,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">vs Reactivo</span>
+              <span className="text-[11px] text-slate-400 font-medium">vs Reactivo</span>
             </div>
 
             <div className="saas-card p-4 flex items-center justify-between">
@@ -432,7 +432,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   </span>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">
+              <span className="text-[11px] text-slate-400 font-medium">
                 {isPersonalScope ? 'tareas / jornada' : 'prom. periodo'}
               </span>
             </div>
@@ -796,7 +796,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   <Users className="w-4 h-4 text-[#00F0FF]" />
                   <span>Productividad y Tasa de Éxito por Colaborador</span>
                 </h3>
-                <span className="text-xs text-slate-400 font-mono">Supervisión en tiempo real</span>
+                <span className="text-xs text-slate-400 font-medium">Supervisión en tiempo real</span>
               </div>
 
               <div className="overflow-x-auto">
