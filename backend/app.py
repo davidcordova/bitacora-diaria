@@ -1315,13 +1315,18 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
         ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
         sw_val = task['shared_with'] if ('shared_with' in task.keys() and task['shared_with']) else '[]'
         sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
+        rev_dec = task['revision_decision'] if ('revision_decision' in task.keys() and task['revision_decision']) else None
+        rev_com = task['revision_comentario'] if ('revision_comentario' in task.keys() and task['revision_comentario']) else None
+        rev_por = task['revisado_por'] if ('revisado_por' in task.keys() and task['revisado_por']) else None
+        rev_at = task['revisado_at'] if ('revisado_at' in task.keys() and task['revisado_at']) else None
         cursor.execute('''
             INSERT INTO actividades (
                 bitacora_id, orden, hora_inicio, duracion_min,
                 tipo_trabajo, descripcion, para_cliente, estado,
                 parent_task_id, tipo_vinculo, created_at, updated_at, evidencias,
-                shared_with, shared_uuid, is_deleted
-            ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0)
+                shared_with, shared_uuid, is_deleted,
+                revision_decision, revision_comentario, revisado_por, revisado_at
+            ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
         ''', (
             today_b_id,
             current_order,
@@ -1334,7 +1339,11 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
             orig_updated,
             ev_val,
             sw_val,
-            sw_uuid
+            sw_uuid,
+            rev_dec,
+            rev_com,
+            rev_por,
+            rev_at
         ))
         existing_parent_ids.add(task['id'])
         current_order += 1
@@ -2479,6 +2488,7 @@ def update_actividad_detalle(act_id):
 def get_actividades_pendientes():
     colaborador = request.args.get('colaborador')
     user_id = request.args.get('user_id')
+    current_u = getattr(g, 'current_user', None) or {}
     
     conn = get_db()
     cursor = conn.cursor()
@@ -2490,6 +2500,18 @@ def get_actividades_pendientes():
         WHERE a.estado != 'completada' AND (a.is_deleted IS NULL OR a.is_deleted = 0)
     '''
     params = []
+    
+    # Scoping de privacidad por rol
+    if current_u.get('role') in ('analista', 'operador'):
+        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
+        params.extend([current_u['id'], current_u.get('full_name', ''), current_u['id']])
+    elif current_u.get('role') == 'lider':
+        leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (current_u['id'], current_u.get('team_id'))).fetchall()]
+        if leader_teams:
+            placeholders = ','.join(['?'] * len(leader_teams))
+            query += f" AND (b.user_id IN (SELECT id FROM users WHERE team_id IN ({placeholders})) OR b.user_id = ?)"
+            params.extend(leader_teams + [current_u['id']])
+
     if colaborador:
         query += " AND b.colaborador LIKE ?"
         params.append(f"%{colaborador}%")
@@ -2564,7 +2586,15 @@ def get_papelera():
                 if req_u['role'] in ('analista', 'operador'):
                     query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
                     params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-                # Admin y líderes pueden supervisar la papelera del equipo
+                elif req_u['role'] == 'lider':
+                    leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
+                    if leader_teams:
+                        placeholders = ','.join(['?'] * len(leader_teams))
+                        query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ?)"
+                        params.extend(leader_teams + [req_u['id'], req_u['id']])
+                    else:
+                        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
+                        params.extend([req_u['id'], req_u['full_name']])
         elif user_id:
             query += " AND (b.user_id = ? OR u.id = ?)"
             params.extend([user_id, user_id])
@@ -2705,34 +2735,36 @@ def vaciar_papelera():
         return jsonify({}), 200
         
     data = request.get_json() or {}
-    user_id = data.get('user_id')
-    role = data.get('role')
+    current_u = getattr(g, 'current_user', None) or {}
+    user_role = current_u.get('role', 'analista')
+    current_uid = current_u.get('id')
     
     conn = get_db()
     cursor = conn.cursor()
     
-    if role == 'admin' and not user_id:
+    # Solo un administrador con intención explícita puede vaciar la papelera de todos los usuarios
+    if user_role == 'admin' and (data.get('all') or data.get('role') == 'admin') and not data.get('target_user_id'):
         cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1)")
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
-    elif user_id:
-        cursor.execute('''
-            UPDATE actividades SET parent_task_id = NULL 
-            WHERE parent_task_id IN (
-                SELECT id FROM actividades 
+    else:
+        # Administrador vaciando la de un usuario específico, o un usuario vaciando su propia papelera
+        target_uid = data.get('target_user_id') if (user_role == 'admin' and data.get('target_user_id')) else current_uid
+        if target_uid:
+            cursor.execute('''
+                UPDATE actividades SET parent_task_id = NULL 
+                WHERE parent_task_id IN (
+                    SELECT id FROM actividades 
+                    WHERE is_deleted = 1 AND bitacora_id IN (
+                        SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
+                    )
+                )
+            ''', (target_uid, target_uid))
+            cursor.execute('''
+                DELETE FROM actividades 
                 WHERE is_deleted = 1 AND bitacora_id IN (
                     SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
                 )
-            )
-        ''', (user_id, user_id))
-        cursor.execute('''
-            DELETE FROM actividades 
-            WHERE is_deleted = 1 AND bitacora_id IN (
-                SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
-            )
-        ''', (user_id, user_id))
-    else:
-        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1)")
-        cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
+            ''', (target_uid, target_uid))
         
     conn.commit()
     conn.close()
@@ -3195,6 +3227,7 @@ def get_actividades_referencias():
     user_id = request.args.get('user_id')
     colaborador = request.args.get('colaborador')
     q = request.args.get('q', '').strip()
+    current_u = getattr(g, 'current_user', None) or {}
     
     conn = get_db()
     cursor = conn.cursor()
@@ -3207,6 +3240,18 @@ def get_actividades_referencias():
         WHERE (a.is_deleted IS NULL OR a.is_deleted = 0)
     '''
     params = []
+
+    # Scoping de privacidad por rol
+    if current_u.get('role') in ('analista', 'operador'):
+        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
+        params.extend([current_u['id'], current_u.get('full_name', ''), current_u['id']])
+    elif current_u.get('role') == 'lider':
+        leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (current_u['id'], current_u.get('team_id'))).fetchall()]
+        if leader_teams:
+            placeholders = ','.join(['?'] * len(leader_teams))
+            query += f" AND (b.user_id IN (SELECT id FROM users WHERE team_id IN ({placeholders})) OR b.user_id = ?)"
+            params.extend(leader_teams + [current_u['id']])
+
     if user_id:
         query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
         params.extend([user_id, colaborador or ''])

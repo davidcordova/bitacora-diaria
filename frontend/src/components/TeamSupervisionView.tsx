@@ -428,7 +428,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
   // Handle Quick State Update
   const handleUpdateActivityState = async (index: number, nuevoEstado: EstadoActividad) => {
-    const targetList = selectedMemberId === 'all' ? unifiedActivities : currentIndividualBitacora?.actividades || [];
+    const targetList =
+      selectedMemberId === 'all'
+        ? unifiedActivities
+        : (currentIndividualBitacora?.actividades || []).filter((a) => !a.is_deleted);
     const act = targetList[index];
     if (act && typeof act.id === 'number') {
       await api.updateActividadEstado(act.id, nuevoEstado);

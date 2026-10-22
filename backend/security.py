@@ -207,7 +207,9 @@ def _rewrite_identity(user):
     path = request.path
     uid = user['id']
     is_admin = user['role'] == 'admin'
-    force_self_uid = path.startswith(SELF_USER_ID_PREFIXES) or (
+    force_self_uid = (
+        path.startswith(SELF_USER_ID_PREFIXES) and not (is_admin and path == '/api/papelera/vaciar')
+    ) or (
         path == '/api/auth/change-password' and not is_admin
     )
     force_role = path.startswith(ROLE_CLAIM_PREFIXES)
@@ -218,7 +220,7 @@ def _rewrite_identity(user):
         if k in args:
             args[k] = [str(uid)]
     args['requesting_user_id'] = [str(uid)]
-    if force_self_uid and 'user_id' in args:
+    if force_self_uid:
         args['user_id'] = [str(uid)]
     if force_role and 'role' in args:
         args['role'] = [user['role']]
@@ -233,7 +235,7 @@ def _rewrite_identity(user):
                     body[k] = uid
             if request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
                 body['requesting_user_id'] = uid
-            if force_self_uid and 'user_id' in body:
+            if force_self_uid:
                 body['user_id'] = uid
             if force_role and 'role' in body:
                 body['role'] = user['role']
