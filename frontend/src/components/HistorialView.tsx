@@ -55,6 +55,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   const [loading, setLoading] = useState(false);
   const [liveHistorial, setLiveHistorial] = useState<Bitacora[]>(historial || []);
   const [filtroActividades, setFiltroActividades] = useState<'activas' | 'todas' | 'estancadas'>('activas');
+  const [visibleCount, setVisibleCount] = useState<number>(15);
 
   const isActividadInactiva = (act: Actividad, bitacoraFecha?: string): boolean => {
     if (act.estado === 'completada') return false;
@@ -272,7 +273,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               onClick={() => setDateFilter(todayStr)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 dateFilter === todayStr
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1C1D2A]'
               }`}
             >
@@ -283,7 +284,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               onClick={() => setDateFilter(yesterdayStr)}
               className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 dateFilter === yesterdayStr
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1C1D2A]'
               }`}
             >
@@ -478,7 +479,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
           {/* Table Rows */}
           <div className="divide-y divide-slate-100 dark:divide-[#252636]/60">
-            {filtered.map((item, idx) => {
+            {filtered.slice(0, visibleCount).map((item, idx) => {
               const totalMin = item.actividades.reduce(
                 (sum, a) => sum + (Number(a.duracion_min) || 0),
                 0
@@ -717,7 +718,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
       ) : (
         /* VISTA DE CUADRÍCULA / TARJETAS (GRID VIEW) */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((item, idx) => {
+          {filtered.slice(0, visibleCount).map((item, idx) => {
             const totalMin = item.actividades.reduce(
               (sum, a) => sum + (Number(a.duracion_min) || 0),
               0
@@ -856,6 +857,22 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Botón de Paginación Progresiva si hay más registros */}
+      {filtered.length > visibleCount && (
+        <div className="flex flex-col items-center justify-center pt-2 pb-4 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((prev) => prev + 15)}
+            className="px-5 py-2.5 rounded-xl bg-white dark:bg-[#13141F] hover:bg-slate-50 dark:hover:bg-[#1A1C29] text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#252636] shadow-xs transition-all cursor-pointer"
+          >
+            Mostrar más registros ({filtered.length - visibleCount} restantes)
+          </button>
+          <span className="text-[11px] text-slate-400">
+            Mostrando {Math.min(visibleCount, filtered.length)} de {filtered.length} bitácoras
+          </span>
         </div>
       )}
 

@@ -14,7 +14,7 @@
   --color-mint-800: #00745f;
   --color-mint-900: #035f4f;
 
-  /* Obsidian Cybernetic Palette */
+  /* Obsidian Cybernetic Palette (Dark Mode Accents) */
   --color-cyan-electric: #00f0ff;
   --color-cyan-bright: #00dbe9;
   --color-magenta-vivid: #ec4899;
@@ -31,12 +31,40 @@
   --shadow-cyber-indigo: 0 0 20px rgba(139, 92, 246, 0.35);
 }
 
+:root {
+  --bg-canvas: #f4f7f9;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f8fafc;
+  --border-subtle: rgba(226, 232, 240, 0.9);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --accent-primary: #0284c7;
+  --accent-primary-hover: #0369a1;
+  --accent-on-primary: #ffffff;
+}
+
+.dark {
+  --bg-canvas: #0b0c13;
+  --bg-surface: #13141f;
+  --bg-elevated: #181a28;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-primary: #00f0ff;
+  --accent-primary-hover: #3df3ff;
+  --accent-on-primary: #0b0c13;
+}
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
-    transition: background-color 0.25s ease, color 0.25s ease;
+    background-color: var(--bg-canvas);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.2s ease, color 0.2s ease;
   }
   
   .dark body,
@@ -78,13 +106,13 @@
   background: #334155;
 }
 
-/* Obsidian Cybernetic Card & Pill Classes */
+/* Unified Surface & Card System */
 .saas-card {
-  background-color: #ffffff;
-  border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  background-color: var(--bg-surface);
+  border-radius: 1rem;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 16px rgba(15, 23, 42, 0.02);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .dark .saas-card {
@@ -92,23 +120,27 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
 }
 
 .dark .saas-card:hover {
-  border-color: rgba(0, 240, 255, 0.25);
-  box-shadow: 0 10px 30px -10px rgba(0, 240, 255, 0.12);
+  border-color: rgba(0, 240, 255, 0.22);
 }
 
-/* Spotlight Highlight Widget (Cyan-Indigo Gradient with dark contrast text) */
+/* Spotlight Highlight Widget */
 .saas-card-accent {
+  background: linear-gradient(135deg, #0284c7 0%, #4f46e5 100%);
+  color: #ffffff;
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px -5px rgba(2, 132, 199, 0.3);
+}
+.dark .saas-card-accent {
   background: linear-gradient(135deg, #00f0ff 0%, #6366f1 100%);
   color: #0b0c13;
-  border-radius: 1.25rem;
-  box-shadow: 0 10px 30px -5px rgba(0, 240, 255, 0.4);
+  box-shadow: 0 10px 30px -5px rgba(0, 240, 255, 0.35);
 }
 
-/* Primary Action Button (Accesible & High Contrast) */
+/* Primary Action Button (Accessible & High Contrast in both themes) */
 .btn-pill-mint,
 .btn-pill-primary {
   display: inline-flex;
@@ -119,7 +151,7 @@
   color: #ffffff;
   font-weight: 700;
   border-radius: 9999px;
-  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.28);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.24);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   border: none;
@@ -127,7 +159,7 @@
 .btn-pill-mint:hover,
 .btn-pill-primary:hover {
   background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
-  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.38);
+  box-shadow: 0 4px 14px rgba(2, 132, 199, 0.34);
   transform: translateY(-1px);
 }
 .btn-pill-mint:active,
@@ -139,12 +171,12 @@
 .dark .btn-pill-primary {
   background: linear-gradient(135deg, #00f0ff 0%, #6366f1 100%);
   color: #0b0c13;
-  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.3);
 }
 .dark .btn-pill-mint:hover,
 .dark .btn-pill-primary:hover {
   background: linear-gradient(135deg, #3df3ff 0%, #7579ff 100%);
-  box-shadow: 0 0 25px rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.45);
   transform: translateY(-1px);
 }
 
@@ -178,7 +210,6 @@
   background-color: rgba(0, 240, 255, 0.12);
   color: #00f0ff;
   border-color: rgba(0, 240, 255, 0.4);
-  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
 }
 
 .btn-pill-outline {
@@ -195,9 +226,9 @@
   cursor: pointer;
 }
 .btn-pill-outline:hover {
-  border-color: #00dbe9;
-  color: #009aa6;
-  background-color: #eefcfd;
+  border-color: #0284c7;
+  color: #0369a1;
+  background-color: #f0f9ff;
 }
 
 .dark .btn-pill-outline {
@@ -208,7 +239,6 @@
   border-color: #00f0ff;
   color: #00f0ff;
   background-color: rgba(0, 240, 255, 0.1);
-  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
 }
 
 /* Glassmorphism helpers */
@@ -234,15 +264,15 @@
 @keyframes cyber-beacon {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(0, 240, 255, 0.6);
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.55);
   }
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 8px rgba(0, 240, 255, 0);
+    box-shadow: 0 0 0 8px rgba(2, 132, 199, 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(0, 240, 255, 0);
+    box-shadow: 0 0 0 0 rgba(2, 132, 199, 0);
   }
 }
 .beacon-pulse {
@@ -267,15 +297,13 @@
 /* Activity highlight pulse when jumped via link/reference */
 @keyframes act-jump-pulse {
   0% {
-    background-color: rgba(0, 240, 255, 0.28);
-    outline: 2px solid #00f0ff;
-    box-shadow: 0 0 25px rgba(0, 240, 255, 0.45);
-    transform: scale(1.006);
+    background-color: rgba(2, 132, 199, 0.22);
+    outline: 2px solid #0284c7;
+    transform: scale(1.004);
   }
   35% {
-    background-color: rgba(0, 240, 255, 0.16);
-    outline: 2px solid #00f0ff;
-    box-shadow: 0 0 16px rgba(0, 240, 255, 0.3);
+    background-color: rgba(2, 132, 199, 0.12);
+    outline: 2px solid #0284c7;
     transform: scale(1);
   }
   100% {
@@ -286,28 +314,26 @@
   }
 }
 .act-highlighted {
-  animation: act-jump-pulse 2.8s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  animation: act-jump-pulse 2.6s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
   z-index: 10;
   position: relative;
 }
 
 /* Executive high-contrast brand tokens */
 .text-cyan-brand {
-  color: #0e7490; /* cyan-700 in light mode: WCAG 4.8:1 on white */
+  color: #0369a1; /* sky-700 in light mode: WCAG 5.9:1 on white */
 }
 .dark .text-cyan-brand {
   color: #00f0ff; /* luminous cyan in dark mode: WCAG 13:1 on dark */
 }
 
 .badge-cyan-brand {
-  background-color: #ecfeff;
-  color: #0e7490;
-  border: 1px solid #a5f3fc;
+  background-color: #f0f9ff;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
 }
 .dark .badge-cyan-brand {
   background-color: rgba(0, 240, 255, 0.12);
   color: #00f0ff;
   border: 1px solid rgba(0, 240, 255, 0.35);
 }
-
-

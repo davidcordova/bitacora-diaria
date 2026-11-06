@@ -211,20 +211,20 @@ export const ManualView: React.FC<ManualViewProps> = ({
           <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-3">
             <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-500" />
-              Cálculo Bidireccional Automático
+              Barra de Registro Rápido (Smart Command Bar) & Cálculo Bidireccional
             </h4>
             <ul className="list-disc list-inside space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
               <li>
-                <strong>Si ingresas la Duración:</strong> Escribes <span className="font-mono bg-slate-200 dark:bg-white/10 px-1 py-0.5 rounded">90 min</span> con inicio a las <span className="font-mono">09:00</span> ➔ el sistema proyecta la <strong>Hora Fin</strong> a las <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">10:30</span>.
+                <strong>Barra de Registro Rápido (1 Clic / Enter):</strong> En <em>Mi Bitácora</em> puedes escribir directamente tu actividad en la barra superior, elegir duración (<span className="font-mono">15m</span>, <span className="font-mono">30m</span>, <span className="font-mono">45m</span>, <span className="font-mono">1h</span>, <span className="font-mono">2h</span>) y pulsar <code className="bg-slate-200 dark:bg-white/10 px-1.5 py-0.5 rounded font-bold">Enter</code> sin abrir el modal completo. El sistema encadena automáticamente la hora de inicio con el fin de tu última tarea.
               </li>
               <li>
-                <strong>Si ajustas la Hora Fin:</strong> Indicas que concluiste a las <span className="font-mono">11:45</span> ➔ el sistema calcula automáticamente <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">165 min (2h 45m)</span>.
+                <strong>Detección de Huecos y Solapes:</strong> La tabla detecta automáticamente si hay un hueco mayor a 15 min (excluyendo el horario de almuerzo 13:00–14:00) o un solapamiento horario con la actividad anterior.
+              </li>
+              <li>
+                <strong>Si ingresas la Duración en el Modal:</strong> Escribes <span className="font-mono bg-slate-200 dark:bg-white/10 px-1 py-0.5 rounded">90 min</span> con inicio a las <span className="font-mono">09:00</span> ➔ el sistema proyecta la <strong>Hora Fin</strong> a las <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">10:30</span>.
               </li>
               <li>
                 <strong>Botón ⚡ Ahora:</strong> Al terminar una tarea en tiempo real, presiona el botón <em>"Ahora"</em> junto a Hora Fin para fijar la hora de tu reloj y calcular el tiempo transcurrido al segundo.
-              </li>
-              <li>
-                <strong>Píldoras Rápidas:</strong> Usa los botones <span className="font-mono text-cyan-600 dark:text-[#00F0FF] font-bold">+15m</span>, <span className="font-mono text-cyan-600 dark:text-[#00F0FF] font-bold">+30m</span> y <span className="font-mono text-cyan-600 dark:text-[#00F0FF] font-bold">+1h</span> para sumar tiempo en un clic.
               </li>
             </ul>
           </div>
@@ -270,18 +270,21 @@ export const ManualView: React.FC<ManualViewProps> = ({
         <div className="space-y-4 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
           <ol className="list-decimal list-inside space-y-2 text-xs">
             <li>
-              <strong>Documenta la sección inferior:</strong>
+              <strong>Documenta la sección inferior (con Auto-Completado en 1 Clic):</strong>
               <div className="ml-5 mt-1 space-y-1 text-slate-500 dark:text-slate-400">
-                <p>• <strong>Tareas Pendientes:</strong> Lo que quedó en curso para continuar mañana.</p>
-                <p>• <strong>¿Necesita Apoyo?:</strong> Si seleccionas <em>"Sí"</em>, detalla a qué equipo o líder requieres apoyo para que se genere una alerta en el dashboard.</p>
+                <p>• <strong>Tareas Pendientes:</strong> Si tienes actividades en estado <em>En proceso</em>, <em>Por iniciar</em> o <em>En revisión</em>, usa el botón <strong>"✨ Auto-completar con X pendientes de hoy"</strong> para listarlas automáticamente sin volver a escribirlas.</p>
+                <p>• <strong>¿Necesita Apoyo?:</strong> Si seleccionas <em>"Sí"</em>, detalla a qué equipo o líder requieres apoyo para que aparezca de inmediato en la <em>Bandeja de Atención del Líder</em>.</p>
                 <p>• <strong>Prioridad de Mañana:</strong> Tu principal objetivo al iniciar tu próxima jornada.</p>
               </div>
+            </li>
+            <li>
+              <strong>Vista Previa bajo Demanda (Summary Drawer):</strong> Puedes inspeccionar el documento formal en cualquier momento desde el botón <strong>"Ver Resumen"</strong> en la barra superior sin quitar espacio a tu tabla de actividades.
             </li>
             <li>
               <strong>Presiona "🚀 Generar Bitácora":</strong> Se activará la animación de confeti y se guardará el estado formal como cerrada.
             </li>
             <li>
-              <strong>Compartir en WhatsApp:</strong> En la ventana emergente, selecciona si deseas enviar a tu líder asignado, a tu propio número o a un número externo. El texto ya viene pre-redactado con formato ejecutivo y emojis profesionales.
+              <strong>Compartir en WhatsApp:</strong> En la ventana emergente, selecciona si deseas enviar a tu líder asignado, a tu propio número o a un número externo. El texto ya viene pre-redactado con formato ejecutivo.
             </li>
           </ol>
         </div>

@@ -112,6 +112,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
   const [feedSearch, setFeedSearch] = useState('');
+  const [feedStatusFilter, setFeedStatusFilter] = useState<'all' | 'en_revision'>('all');
 
   const todayStr = useMemo(() => getTodayLocalDateStr(), []);
   const yesterdayStr = useMemo(() => getYesterdayLocalDateStr(), []);
@@ -351,6 +352,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           (targetM?.username && act.colaborador.toLowerCase() === targetM.username.toLowerCase())
       );
     }
+    if (feedStatusFilter === 'en_revision') {
+      list = list.filter((act) => act.estado === 'en_revision');
+    }
     if (feedSearch.trim()) {
       const q = feedSearch.toLowerCase();
       list = list.filter(
@@ -362,7 +366,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
       );
     }
     return list;
-  }, [liveActivities, selectedMemberId, feedSearch, allMembers]);
+  }, [liveActivities, selectedMemberId, feedSearch, feedStatusFilter, allMembers]);
 
   // Individual selected member and bitacora for selectedDate
   const selectedMember = useMemo(() => {
@@ -714,7 +718,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               {formatDateLong(selectedDate)}
             </span>
             {isSelectedToday ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00F0FF] text-slate-950">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950">
                 Hoy
               </span>
             ) : isSelectedYesterday ? (
@@ -754,7 +758,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={handleToday}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isSelectedToday
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-white/5'
               }`}
             >
@@ -765,7 +769,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={handleYesterday}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isSelectedYesterday
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-white/5'
               }`}
             >
@@ -791,7 +795,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={() => setSelectedMemberId('all')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
                 selectedMemberId === 'all'
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1E2030]'
               }`}
             >
@@ -800,7 +804,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                   selectedMemberId === 'all'
-                    ? 'bg-slate-950/20 text-slate-950'
+                    ? 'bg-white/20 text-white dark:bg-slate-950/20 dark:text-slate-950'
                     : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
                 }`}
               >
@@ -828,20 +832,20 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   onClick={() => setSelectedMemberId(m.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 ${
                     isSelected
-                      ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                       : 'bg-white dark:bg-[#161722] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1E2030] border border-slate-200/80 dark:border-[#252636]'
                   }`}
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-slate-950' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-white dark:bg-slate-950' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
                     }`}
                   />
                   <span>{m.full_name}</span>
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                       isSelected
-                        ? 'bg-slate-950/20 text-slate-950'
+                        ? 'bg-white/20 text-white dark:bg-slate-950/20 dark:text-slate-950'
                         : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
                     }`}
                   >
@@ -864,6 +868,149 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           )}
         </div>
       </div>
+
+      {/* ================= BANDEJA DE ATENCIÓN DEL LÍDER (INBOX DE ACCIÓN RÁPIDA) ================= */}
+      {selectedMemberId === 'all' && (() => {
+        const pendingReviewTasks = liveActivities.filter((a) => a.estado === 'en_revision' && !isOwnActivity(a));
+        const blockedMembers = memberWorkload.filter((m) => m.needsSupport || m.dateLog?.necesita_apoyo === 'Si');
+        const noLogMembers = memberWorkload.filter((m) => m.totalMinutos === 0 && m.activitiesCount === 0);
+
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {/* 1. Solicitudes por aprobar */}
+            <button
+              type="button"
+              onClick={() => {
+                setTeamTab('feed');
+                setFeedStatusFilter((prev) => (prev === 'en_revision' ? 'all' : 'en_revision'));
+              }}
+              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                feedStatusFilter === 'en_revision'
+                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/20 shadow-sm'
+                  : pendingReviewTasks.length > 0
+                  ? 'bg-white dark:bg-[#13141F] border-purple-200 dark:border-purple-800/60 hover:border-purple-400 shadow-2xs'
+                  : 'bg-white dark:bg-[#13141F] border-slate-200/80 dark:border-[#252636] opacity-80 hover:opacity-100'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  pendingReviewTasks.length > 0
+                    ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300'
+                    : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-400'
+                }`}>
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Por Aprobar
+                    </span>
+                    {feedStatusFilter === 'en_revision' && (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-600 text-white">
+                        Filtro Activo
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                    {pendingReviewTasks.length > 0
+                      ? `${pendingReviewTasks.length} ${pendingReviewTasks.length === 1 ? 'tarea espera' : 'tareas esperan'} tu visto bueno`
+                      : 'Todo al día sin revisiones pendientes'}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
+                pendingReviewTasks.length > 0
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-500'
+              }`}>
+                {pendingReviewTasks.length}
+              </span>
+            </button>
+
+            {/* 2. Bloqueos / Solicitudes de Apoyo */}
+            <button
+              type="button"
+              onClick={() => {
+                if (blockedMembers.length === 1) {
+                  setDrawerMemberId(blockedMembers[0].member.id);
+                } else {
+                  setTeamTab('semaforo');
+                }
+              }}
+              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                blockedMembers.length > 0
+                  ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-700/60 hover:border-amber-400 shadow-2xs'
+                  : 'bg-white dark:bg-[#13141F] border-slate-200/80 dark:border-[#252636] opacity-80 hover:opacity-100'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  blockedMembers.length > 0
+                    ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300'
+                    : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-400'
+                }`}>
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                    Solicitudes de Apoyo
+                  </span>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                    {blockedMembers.length > 0
+                      ? blockedMembers.map((b) => b.member.full_name.split(' ')[0]).join(', ')
+                      : 'Sin bloqueos reportados hoy'}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
+                blockedMembers.length > 0
+                  ? 'bg-amber-500 text-white shadow-xs'
+                  : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-500'
+              }`}>
+                {blockedMembers.length}
+              </span>
+            </button>
+
+            {/* 3. Colaboradores sin registro en la fecha */}
+            <button
+              type="button"
+              onClick={() => setTeamTab('semaforo')}
+              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                noLogMembers.length > 0
+                  ? 'bg-white dark:bg-[#13141F] border-slate-300 dark:border-[#2E3045] hover:border-sky-400 shadow-2xs'
+                  : 'bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-200/80 dark:border-emerald-800/40'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  noLogMembers.length > 0
+                    ? 'bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300'
+                    : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
+                }`}>
+                  <UserCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                    Sin Registro ({formatDateDisplay(selectedDate)})
+                  </span>
+                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
+                    {noLogMembers.length > 0
+                      ? noLogMembers.map((m) => m.member.full_name.split(' ')[0]).join(', ')
+                      : '100% del equipo con actividad registrada'}
+                  </p>
+                </div>
+              </div>
+              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
+                noLogMembers.length > 0
+                  ? 'bg-slate-200 dark:bg-[#252636] text-slate-800 dark:text-slate-200'
+                  : 'bg-emerald-500 text-white'
+              }`}>
+                {noLogMembers.length}
+              </span>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ================= CONTENIDO PRINCIPAL ================= */}
       {selectedMemberId === 'all' ? (

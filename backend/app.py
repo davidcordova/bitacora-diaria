@@ -2866,6 +2866,8 @@ def get_dashboard_stats():
     team_id = request.args.get('team_id')
     user_id = request.args.get('user_id')
     fecha = request.args.get('fecha')
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
     requesting_user_id = request.args.get('requesting_user_id')
     
     conn = get_db()
@@ -2898,6 +2900,12 @@ def get_dashboard_stats():
     if fecha:
         base_filter += " AND b.fecha = ?"
         params.append(fecha)
+    if fecha_desde:
+        base_filter += " AND b.fecha >= ?"
+        params.append(fecha_desde)
+    if fecha_hasta:
+        base_filter += " AND b.fecha <= ?"
+        params.append(fecha_hasta)
         
     # 1. Totales generales
     total_query = f'''
@@ -3948,7 +3956,7 @@ def api_it_credentials():
             conn.close()
             return jsonify({"error": "empresa_id, plataforma, usuario_login y password_secret son requeridos"}), 400
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             INSERT INTO it_credentials (
                 empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
@@ -4054,7 +4062,7 @@ def api_it_credential_detail(cred_id):
         notas = data.get('notas') if 'notas' in data else cred['notas']
         tipo_cuenta = data.get('tipo_cuenta') or cred['tipo_cuenta']
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             UPDATE it_credentials SET
                 empresa_id = ?, marca_id = ?, plataforma = ?, tipo_servicio = ?,
@@ -4232,7 +4240,7 @@ def api_it_platform_users():
             conn.close()
             return jsonify({"error": "Empresa, Plataforma, Colaborador, Usuario y Contraseña son obligatorios"}), 400
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             INSERT INTO it_platform_users (
                 empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
@@ -4301,7 +4309,7 @@ def api_it_platform_user_detail(user_id):
         notas = (data.get('notas') if 'notas' in data else existing['notas']) or ''
         updated_by = data.get('updated_by')
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             UPDATE it_platform_users SET
                 empresa_id = ?, marca_id = ?, plataforma = ?, colaborador_nombre = ?,
@@ -4351,7 +4359,7 @@ def api_it_platform_user_reset_password(user_id):
         alphabet = string.ascii_letters + string.digits + "!@#$%&*"
         new_password = ''.join(secrets.choice(alphabet) for _ in range(14))
 
-    now_peru = get_peru_now()
+    now_peru = get_peru_now_str()
     encrypted_new = encrypt_vault_secret(new_password)
     cursor.execute('''
         UPDATE it_platform_users SET
@@ -5010,7 +5018,7 @@ def api_it_platform_users_import():
 
     conn = get_db()
     cursor = conn.cursor()
-    now_peru = get_peru_now()
+    now_peru = get_peru_now_str()
 
     created_count = 0
     updated_count = 0

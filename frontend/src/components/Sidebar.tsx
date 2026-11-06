@@ -11,8 +11,6 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Star,
-  User as UserIcon,
   HelpCircle,
   X,
   Sun,
@@ -45,6 +43,20 @@ interface SidebarProps {
   papeleraCount?: number;
 }
 
+interface NavItemConfig {
+  id: ViewMode;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  show: boolean;
+  badge: number | string | null;
+}
+
+interface NavGroupConfig {
+  id: string;
+  title: string;
+  items: NavItemConfig[];
+}
+
 export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   onViewChange,
@@ -61,7 +73,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   systemSettings,
   isDark = false,
   onToggleTheme,
-  onOpenProfile,
   onOpenPapelera,
   papeleraCount = 0,
 }) => {
@@ -69,69 +80,87 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isAdmin = role === 'admin';
   const isLider = role === 'lider' || currentUser?.is_leader || isAdmin;
 
-  const navItems = [
+  const navGroups: NavGroupConfig[] = [
     {
-      id: 'lista' as ViewMode,
-      label: 'Mi Bitácora',
-      icon: LayoutList,
-      show: true,
-      badge: null,
+      id: 'operacion',
+      title: 'Operación Diaria',
+      items: [
+        {
+          id: 'lista',
+          label: 'Mi Bitácora',
+          icon: LayoutList,
+          show: true,
+          badge: activitiesCount > 0 ? activitiesCount : null,
+        },
+        {
+          id: 'kanban',
+          label: 'Tablero Kanban',
+          icon: Kanban,
+          show: true,
+          badge: null,
+        },
+        {
+          id: 'historial',
+          label: 'Historial',
+          icon: History,
+          show: true,
+          badge: null,
+        },
+      ],
     },
     {
-      id: 'kanban' as ViewMode,
-      label: 'Tablero Kanban',
-      icon: Kanban,
-      show: true,
-      badge: null,
+      id: 'analitica',
+      title: isLider ? 'Liderazgo & Analítica' : 'Analítica',
+      items: [
+        {
+          id: 'equipo',
+          label: 'Supervisión de Equipo',
+          icon: Users,
+          show: Boolean(isLider),
+          badge: null,
+        },
+        {
+          id: 'dashboard',
+          label: isLider ? 'Dashboard' : 'Mi Rendimiento',
+          icon: BarChart3,
+          show: true,
+          badge: null,
+        },
+      ],
     },
     {
-      id: 'historial' as ViewMode,
-      label: 'Historial',
-      icon: History,
-      show: true,
-      badge: null,
-    },
-    {
-      id: 'equipo' as ViewMode,
-      label: 'Supervisión de Equipo',
-      icon: Users,
-      show: isLider,
-      badge: null,
-    },
-    {
-      id: 'dashboard' as ViewMode,
-      label: isLider ? 'Dashboard' : 'Mi Rendimiento',
-      icon: BarChart3,
-      show: true,
-      badge: null,
-    },
-    {
-      id: 'buzon' as ViewMode,
-      label: 'Buzón de Ideas',
-      icon: Lightbulb,
-      show: true,
-      badge: null,
-    },
-    {
-      id: 'vault' as ViewMode,
-      label: 'Accesos & Bóveda',
-      icon: KeyRound,
-      show: true,
-      badge: null,
-    },
-    {
-      id: 'gestion' as ViewMode,
-      label: 'Gestión',
-      icon: Shield,
-      show: isAdmin,
-      badge: null,
-    },
-    {
-      id: 'manual' as ViewMode,
-      label: 'Manual & Guía',
-      icon: BookOpen,
-      show: true,
-      badge: null,
+      id: 'recursos',
+      title: 'Recursos & Gestión',
+      items: [
+        {
+          id: 'vault',
+          label: 'Accesos & Bóveda',
+          icon: KeyRound,
+          show: true,
+          badge: null,
+        },
+        {
+          id: 'buzon',
+          label: 'Buzón de Ideas',
+          icon: Lightbulb,
+          show: true,
+          badge: null,
+        },
+        {
+          id: 'gestion',
+          label: 'Gestión',
+          icon: Shield,
+          show: isAdmin,
+          badge: null,
+        },
+        {
+          id: 'manual',
+          label: 'Manual & Guía',
+          icon: BookOpen,
+          show: true,
+          badge: null,
+        },
+      ],
     },
   ];
 
@@ -140,20 +169,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     if (onCloseMobile) onCloseMobile();
   };
 
-  const roleLabel = isAdmin ? 'ADMIN' : (role === 'lider' || currentUser?.is_leader ? 'LÍDER' : 'ANALISTA');
+  const showText = !isCollapsed || isOpenMobile;
 
   const sidebarContent = (
     <div className="flex flex-col justify-between h-full select-none">
       {/* 1. TOP HEADER / BRANDING & TOGGLE */}
-      <div>
+      <div className="flex-1 min-h-0 flex flex-col">
         <div
-          className={`flex items-center justify-between p-4 border-b border-slate-100 dark:border-white/5 min-h-[72px] ${
-            isCollapsed && !isOpenMobile ? 'flex-col gap-2 p-2.5' : ''
+          className={`flex items-center justify-between px-4 py-3.5 border-b border-slate-100 dark:border-white/5 min-h-[64px] shrink-0 ${
+            isCollapsed && !isOpenMobile ? 'flex-col gap-2 px-2 py-3' : ''
           }`}
         >
           <div className="flex items-center gap-3 overflow-hidden">
             {systemSettings?.logo_url ? (
-              <div className="w-10 h-10 rounded-2xl bg-white dark:bg-[#1B1C2A] border border-slate-100 dark:border-white/10 p-1 flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+              <div className="w-9 h-9 rounded-xl bg-white dark:bg-[#1B1C2A] border border-slate-200/80 dark:border-white/10 p-1 flex items-center justify-center shadow-2xs shrink-0 overflow-hidden">
                 <img
                   src={systemSettings.logo_url}
                   alt="Logo"
@@ -161,31 +190,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 />
               </div>
             ) : (
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center shadow-md shadow-[#00F0FF]/30 shrink-0 font-bold">
-                <CalendarCheck className="w-5 h-5 text-slate-950" />
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-600 to-blue-600 dark:from-[#00F0FF] dark:to-[#00A3BF] text-white dark:text-slate-950 flex items-center justify-center shadow-sm shrink-0 font-bold">
+                <CalendarCheck className="w-5 h-5" />
               </div>
             )}
 
-            {(!isCollapsed || isOpenMobile) && (
+            {showText && (
               <div className="animate-in fade-in duration-200 overflow-hidden">
-                <div className="flex items-center gap-1">
-                  <span className="font-heading font-extrabold text-slate-900 dark:text-white text-base tracking-tight leading-none">
+                <div className="flex items-center gap-0.5">
+                  <span className="font-heading font-extrabold text-slate-900 dark:text-white text-sm sm:text-base tracking-tight leading-none truncate">
                     {systemSettings?.login_heading || 'Bitácora'}
                   </span>
-                  <span className="text-cyan-500 font-black text-base">.</span>
+                  <span className="text-sky-600 dark:text-[#00F0FF] font-black text-base leading-none">.</span>
                 </div>
-                <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mt-1 truncate max-w-[150px]">
-                  {systemSettings?.login_subheading ? systemSettings.login_subheading.toUpperCase() : 'CONTROL DIGITAL'}
+                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider block mt-0.5 truncate max-w-[150px]">
+                  {systemSettings?.login_subheading ? systemSettings.login_subheading : 'Control Digital'}
                 </span>
               </div>
             )}
           </div>
 
-          {/* Mobile close button vs Desktop Collapse toggle */}
           {isOpenMobile ? (
             <button
               type="button"
               onClick={onCloseMobile}
+              aria-label="Cerrar menú lateral"
               className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 md:hidden"
             >
               <X className="w-5 h-5" />
@@ -194,7 +223,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={onToggleCollapse}
-              title={isCollapsed ? 'Expandir menú lateral' : 'Encoger menú lateral'}
+              title={isCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'}
+              aria-label={isCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'}
               className="hidden md:flex p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0"
             >
               {isCollapsed ? (
@@ -206,239 +236,161 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
         </div>
 
-        {/* 2. NAVIGATION ITEMS */}
-        <nav className="p-3 space-y-1.5 mt-2">
-          {navItems
-            .filter((item) => item.show)
-            .map((item) => {
-              const Icon = item.icon;
-              const isActive = currentView === item.id;
-              const showText = !isCollapsed || isOpenMobile;
+        {/* 2. GROUPED NAVIGATION ITEMS */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+          {navGroups.map((group) => {
+            const visibleItems = group.items.filter((i) => i.show);
+            if (visibleItems.length === 0) return null;
 
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleItemClick(item.id)}
-                  title={!showText ? item.label : undefined}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs transition-all group cursor-pointer relative min-h-[42px] ${
-                    isActive
-                      ? 'bg-slate-900 text-white dark:bg-white/10 dark:text-white font-bold shadow-xs'
-                      : 'border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/5 font-semibold'
-                  } ${!showText ? 'justify-center px-0' : ''}`}
-                >
-                  <Icon
-                    className={`w-4 h-4 shrink-0 transition-transform ${
-                      isActive
-                        ? 'text-cyan-400 dark:text-[#00F0FF]'
-                        : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
-                    }`}
-                  />
+            return (
+              <div key={group.id} className="space-y-1">
+                {showText && (
+                  <div className="px-3 pb-1 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    {group.title}
+                  </div>
+                )}
+                {visibleItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = currentView === item.id;
 
-                  {showText && (
-                    <span className="flex-1 text-left truncate tracking-tight">{item.label}</span>
-                  )}
-
-                  {/* Dot on active item if no badge */}
-                  {isActive && item.badge === null && showText && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 dark:bg-[#00F0FF] shrink-0" />
-                  )}
-
-                  {/* Badges in Pink/Magenta exactly as in Images 1, 2, 3 */}
-                  {item.badge !== null && (
-                    <span
-                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#EC4899] text-white shadow-2xs ${
-                        !showText ? 'absolute top-1.5 right-2 w-2 h-2 p-0' : ''
-                      }`}
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleItemClick(item.id)}
+                      title={!showText ? item.label : undefined}
+                      className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs transition-all group cursor-pointer relative min-h-[38px] ${
+                        isActive
+                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF]/15 dark:text-[#00F0FF] dark:border dark:border-[#00F0FF]/30 font-bold shadow-2xs'
+                          : 'border border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100/80 dark:hover:bg-white/5 font-semibold'
+                      } ${!showText ? 'justify-center px-0' : ''}`}
                     >
-                      {showText && item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                      <Icon
+                        className={`w-4 h-4 shrink-0 transition-transform ${
+                          isActive
+                            ? 'text-white dark:text-[#00F0FF]'
+                            : 'text-slate-400 dark:text-slate-400 group-hover:text-slate-800 dark:group-hover:text-slate-200'
+                        }`}
+                      />
+
+                      {showText && (
+                        <span className="flex-1 text-left truncate tracking-tight">{item.label}</span>
+                      )}
+
+                      {item.badge !== null && showText && (
+                        <span
+                          className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                            isActive
+                              ? 'bg-white/20 text-white dark:bg-[#00F0FF] dark:text-slate-950'
+                              : 'bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
         </nav>
       </div>
 
-      {/* 3. BOTTOM FOOTER / USER, THEME, HELP & SUMMARY */}
-      <div className="p-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-[#0D0E15]/90 space-y-2.5">
-        {/* Switch Toggle: Modo Oscuro */}
-        {onToggleTheme && (
-          <div
-            onClick={onToggleTheme}
-            className={`w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer ${
-              isCollapsed && !isOpenMobile ? 'justify-center' : ''
-            }`}
-            title={isDark ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
-          >
-            <div className="flex items-center gap-2.5">
-              {isDark ? (
-                <Moon className="w-4 h-4 text-cyan-400 shrink-0" />
-              ) : (
-                <Sun className="w-4 h-4 text-amber-500 shrink-0" />
-              )}
-              {(!isCollapsed || isOpenMobile) && (
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Modo Oscuro
-                </span>
-              )}
-            </div>
-
-            {(!isCollapsed || isOpenMobile) && (
-              <div
-                className={`w-9 h-5 rounded-full p-0.5 transition-colors duration-200 relative ${
-                  isDark ? 'bg-cyan-500' : 'bg-slate-300 dark:bg-slate-700'
-                }`}
-              >
-                <div
-                  className={`w-4 h-4 rounded-full bg-white shadow-xs transition-transform duration-200 ${
-                    isDark ? 'translate-x-4' : 'translate-x-0'
-                  }`}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Onboarding Help Guide Button */}
-        {onOpenHelp && (
-          <button
-            type="button"
-            onClick={onOpenHelp}
-            title={isCollapsed && !isOpenMobile ? 'Guía rápida' : undefined}
-            className={`w-full flex items-center gap-2 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold py-2 rounded-xl transition-all cursor-pointer min-h-[40px] ${
-              isCollapsed && !isOpenMobile ? 'justify-center px-0' : 'px-3'
-            }`}
-          >
-            <HelpCircle className="w-4 h-4 text-cyan-600 dark:text-cyan-400 shrink-0" />
-            {(!isCollapsed || isOpenMobile) && <span>Guía rápida</span>}
-          </button>
-        )}
-
-        {/* Papelera de Reciclaje */}
-        {onOpenPapelera && (
-          <button
-            type="button"
-            onClick={() => {
-              onOpenPapelera();
-              if (onCloseMobile) onCloseMobile();
-            }}
-            title={isCollapsed && !isOpenMobile ? `Papelera (${papeleraCount})` : undefined}
-            className={`w-full flex items-center gap-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold py-2 rounded-xl transition-all cursor-pointer min-h-[40px] ${
-              isCollapsed && !isOpenMobile ? 'justify-center px-0' : 'px-3'
-            }`}
-          >
-            <div className="relative flex items-center justify-center">
-              <Trash2 className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
-              {papeleraCount > 0 && isCollapsed && !isOpenMobile && (
-                <span className="absolute -top-1.5 -right-2 min-w-[14px] h-3.5 px-0.5 rounded-full text-[8px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center">
-                  {papeleraCount}
-                </span>
-              )}
-            </div>
-            {(!isCollapsed || isOpenMobile) && (
-              <>
-                <span className="flex-1 text-left">Papelera</span>
-                {papeleraCount > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                    {papeleraCount}
-                  </span>
-                )}
-              </>
-            )}
-          </button>
-        )}
-
-        {/* Resumen Button */}
+      {/* 3. COMPACT UTILITY FOOTER */}
+      <div className="p-3 border-t border-slate-100 dark:border-white/5 bg-slate-50/60 dark:bg-[#0D0E15]/90 space-y-1.5 shrink-0">
+        {/* Resumen Diario Quick Drawer */}
         <button
           type="button"
           onClick={() => {
             onOpenMobileSummary();
             if (onCloseMobile) onCloseMobile();
           }}
-          title={isCollapsed && !isOpenMobile ? 'Ver Resumen Diario' : undefined}
-          className={`w-full flex items-center bg-slate-100/90 hover:bg-slate-200/80 dark:bg-[#161724] dark:hover:bg-[#1E1F30] border border-slate-200/90 dark:border-white/10 text-slate-800 dark:text-white text-xs font-bold py-2.5 rounded-xl shadow-2xs transition-all cursor-pointer min-h-[42px] ${
-            isCollapsed && !isOpenMobile ? 'justify-center px-0 relative' : 'gap-2 px-3.5'
+          title={!showText ? 'Ver Resumen Diario' : undefined}
+          className={`w-full flex items-center bg-white hover:bg-slate-100 dark:bg-[#161724] dark:hover:bg-[#1E1F30] border border-slate-200/90 dark:border-white/10 text-slate-800 dark:text-white text-xs font-bold py-2 rounded-xl shadow-2xs transition-all cursor-pointer min-h-[38px] ${
+            !showText ? 'justify-center px-0 relative' : 'gap-2.5 px-3'
           }`}
         >
-          <div className="relative flex items-center justify-center">
-            <FileText className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
-          </div>
-          {(!isCollapsed || isOpenMobile) && (
-            <span className="flex-1 text-left">Resumen Diario</span>
-          )}
+          <FileText className="w-4 h-4 text-sky-600 dark:text-[#00F0FF] shrink-0" />
+          {showText && <span className="flex-1 text-left">Resumen Diario</span>}
         </button>
 
-        {/* User Profile Card (As seen in Images 1, 2, 3) */}
-        {currentUser ? (
-          <div
-            className={`flex items-center gap-2 p-2 rounded-2xl bg-white dark:bg-[#161724] border border-slate-200/80 dark:border-white/8 shadow-2xs ${
-              isCollapsed && !isOpenMobile ? 'flex-col gap-2 py-2.5' : 'justify-between'
-            }`}
-          >
-            {/* Avatar Circle */}
-            <div
-              onClick={onOpenProfile}
-              className="w-9 h-9 rounded-2xl bg-[#00F0FF] text-slate-950 flex items-center justify-center text-xs font-black shrink-0 shadow-xs cursor-pointer hover:scale-105 transition-transform"
-              title={`Ver y editar perfil de ${currentUser.full_name}`}
+        {/* Compact Row of Utility Actions: Papelera, Guía, Tema, Salir */}
+        <div
+          className={`flex items-center ${
+            !showText ? 'flex-col gap-1' : 'justify-between gap-1 pt-1'
+          }`}
+        >
+          {onOpenPapelera && (
+            <button
+              type="button"
+              onClick={() => {
+                onOpenPapelera();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              title={`Papelera de reciclaje (${papeleraCount})`}
+              className="relative flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/5 transition-colors cursor-pointer"
             >
-              {currentUser.full_name.charAt(0).toUpperCase()}
-            </div>
-
-            {(!isCollapsed || isOpenMobile) && (
-              <div 
-                onClick={onOpenProfile}
-                className="flex-1 min-w-0 cursor-pointer group"
-                title="Clic para ver y editar mi perfil"
-              >
-                <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight block truncate group-hover:text-[#00F0FF] transition-colors">
-                  {currentUser.full_name}
+              <Trash2 className="w-4 h-4 shrink-0" />
+              {showText && <span className="text-[11px]">Papelera</span>}
+              {papeleraCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                  {papeleraCount}
                 </span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="inline-flex items-center gap-1 text-[9px] font-extrabold text-amber-500 uppercase tracking-wider">
-                    <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                    <span>{roleLabel}</span>
-                  </span>
-                  {(currentUser.team_name || 'Sistemas') && (
-                    <span className="text-[9px] text-slate-400 truncate max-w-[85px]">
-                      • {currentUser.team_name || 'Sistemas'}
-                    </span>
-                  )}
-                </div>
-              </div>
+              )}
+            </button>
+          )}
+
+          <div className={`flex items-center ${!showText ? 'flex-col gap-1' : 'gap-0.5'}`}>
+            {onOpenHelp && (
+              <button
+                type="button"
+                onClick={onOpenHelp}
+                title="Guía rápida del sistema"
+                aria-label="Guía rápida"
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-[#00F0FF] hover:bg-slate-200/60 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+              >
+                <HelpCircle className="w-4 h-4" />
+              </button>
             )}
 
-            {/* User action buttons */}
-            <div className="flex items-center gap-0.5 shrink-0">
-              {onOpenProfile && (
-                <button
-                  type="button"
-                  onClick={onOpenProfile}
-                  title="Ver y editar mi perfil"
-                  className="p-1.5 text-slate-400 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
-                >
-                  <UserIcon className="w-3.5 h-3.5" />
-                </button>
-              )}
+            {onToggleTheme && (
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                title={isDark ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+                aria-label={isDark ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-amber-500 dark:hover:text-[#00F0FF] hover:bg-slate-200/60 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+              >
+                {isDark ? (
+                  <Sun className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Moon className="w-4 h-4 text-slate-600" />
+                )}
+              </button>
+            )}
+
+            {currentUser ? (
               <button
                 type="button"
                 onClick={onLogout}
                 title="Cerrar sesión"
-                className="p-1.5 text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer min-w-[28px] min-h-[28px] flex items-center justify-center"
+                aria-label="Cerrar sesión"
+                className="p-2 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-4 h-4" />
               </button>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenLogin}
+                className="px-3 py-1.5 btn-pill-primary text-xs font-bold rounded-full"
+              >
+                Ingresar
+              </button>
+            )}
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onOpenLogin}
-            className="w-full btn-pill-primary text-xs font-bold py-2.5 rounded-full text-center min-h-[44px]"
-          >
-            Iniciar sesión
-          </button>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -447,8 +399,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <>
       {/* Desktop Sticky Sidebar */}
       <aside
-        className={`hidden md:flex bg-white dark:bg-[#0D0E15] border-r border-slate-200/80 dark:border-white/5 h-screen sticky top-0 flex-col justify-between transition-all duration-300 ease-in-out z-40 select-none shadow-[0_4px_20px_rgba(0,0,0,0.02)] shrink-0 ${
-          isCollapsed ? 'w-[72px]' : 'w-64'
+        className={`hidden md:flex bg-white dark:bg-[#0D0E15] border-r border-slate-200/80 dark:border-white/5 h-screen sticky top-0 flex-col justify-between transition-all duration-300 ease-in-out z-40 select-none shrink-0 ${
+          isCollapsed ? 'w-[68px]' : 'w-60'
         }`}
       >
         {sidebarContent}

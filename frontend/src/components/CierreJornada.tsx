@@ -1,5 +1,7 @@
-import React from 'react';
-import { CheckSquare, Sparkles, Send, Play, RefreshCw, UserCheck } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { CheckSquare, Sparkles, Play, RefreshCw, UserCheck } from 'lucide-react';
+import { Actividad } from '../types';
+import { stripHtml } from '../utils/formatters';
 
 interface CierreJornadaProps {
   pendientes: string;
@@ -11,6 +13,7 @@ interface CierreJornadaProps {
   onSubmit: () => void;
   isProxyMode?: boolean;
   proxyUserName?: string;
+  actividades?: Actividad[];
 }
 
 export const CierreJornada: React.FC<CierreJornadaProps> = ({
@@ -23,22 +26,59 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
   onSubmit,
   isProxyMode = false,
   proxyUserName,
+  actividades = [],
 }) => {
+  const openTasks = useMemo(
+    () =>
+      (actividades || []).filter(
+        (a) => !a.is_deleted && a.estado !== 'completada' && (a.descripcion || '').trim().length > 0
+      ),
+    [actividades]
+  );
+
+  const handleAutoFillFromOpenTasks = () => {
+    if (openTasks.length === 0) return;
+    const lines = openTasks.map((t) => {
+      const plain = stripHtml(t.descripcion || '').trim();
+      const statusLabel =
+        t.estado === 'en_revision' ? '[En revisión]' : t.estado === 'pendiente' ? '[Por iniciar]' : '[En proceso]';
+      return `• ${plain} ${statusLabel}`;
+    });
+    const combined = lines.join('\n');
+    onChange('pendientes', combined);
+    if (!prioridadSiguiente.trim()) {
+      const firstPlain = stripHtml(openTasks[0].descripcion || '').trim();
+      onChange('prioridad_siguiente', `Culminar: ${firstPlain}`);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 sm:p-6 shadow-sm transition-all duration-200">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-5 border-b border-slate-100 dark:border-[#252636]/60 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5 border-b border-slate-100 dark:border-[#252636]/60 pb-3">
         <div className="flex items-center gap-2.5 text-slate-800 dark:text-white">
           <div className="p-2 rounded-xl bg-gradient-to-br from-indigo-500/15 to-blue-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20">
             <CheckSquare className="w-4 h-4 stroke-[2.5]" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-extrabold tracking-tight">Cierre de jornada</h2>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500">
-              Registra los pendientes y prioridades para consolidar el reporte del día.
+            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              Si dejas los campos en blanco, se registrará automáticamente como jornada sin pendientes.
             </p>
           </div>
         </div>
+
+        {openTasks.length > 0 && (
+          <button
+            type="button"
+            onClick={handleAutoFillFromOpenTasks}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/60 transition-all cursor-pointer shadow-2xs"
+            title="Rellenar pendientes y prioridad automáticamente con las actividades aún no completadas de hoy"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+            <span>Autocompletar con {openTasks.length} tarea(s) en curso</span>
+          </button>
+        )}
       </div>
 
       {/* 2-Column Responsive Grid */}
@@ -46,30 +86,28 @@ export const CierreJornada: React.FC<CierreJornadaProps> = ({
         {/* Col 1: Pendientes */}
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Pendientes <span className="text-rose-500">*</span>
+            Pendientes <span className="text-slate-400 dark:text-slate-500 font-normal">(Opcional)</span>
           </label>
           <textarea
             rows={3}
             value={pendientes}
             onChange={(e) => onChange('pendientes', e.target.value)}
-            placeholder="¿Qué actividades o ajustes quedaron pendientes para la próxima jornada?..."
-            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
-            required
+            placeholder="Sin tareas pendientes para otra fecha (escribe aquí si algo quedó en curso)..."
+            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-sky-600 dark:focus:border-[#00F0FF] focus:ring-2 focus:ring-sky-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
 
         {/* Col 2: Prioridad para el siguiente día */}
         <div>
           <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Prioridad de mañana <span className="text-rose-500">*</span>
+            Prioridad de mañana <span className="text-slate-400 dark:text-slate-500 font-normal">(Opcional)</span>
           </label>
           <textarea
             rows={3}
             value={prioridadSiguiente}
             onChange={(e) => onChange('prioridad_siguiente', e.target.value)}
-            placeholder="¿Cuál será tu principal objetivo o tarea crítica a resolver mañana?..."
-            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-cyan-500 dark:focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
-            required
+            placeholder="Continuar con el plan de actividades programado (o especifica tu foco de mañana)..."
+            className="w-full px-3.5 py-2.5 bg-slate-50/70 hover:bg-slate-100/60 focus:bg-white dark:bg-[#161722] dark:hover:bg-[#1A1C29] dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-sky-600 dark:focus:border-[#00F0FF] focus:ring-2 focus:ring-sky-500/20 outline-hidden transition-all resize-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
           />
         </div>
       </div>

@@ -76,9 +76,9 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
       {/* Dynamic Background Glows */}
       {!isImageBg && (
         <>
-          <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#00C9A7]/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-teal-600/15 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#00C9A7]/5 rounded-full blur-[120px] pointer-events-none" />
+          <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#00F0FF]/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-sky-600/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#00F0FF]/5 rounded-full blur-[120px] pointer-events-none" />
         </>
       )}
 
@@ -94,7 +94,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
               />
             </div>
           ) : (
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00C9A7] to-[#00B894] text-white flex items-center justify-center shadow-lg shadow-[#00C9A7]/30">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center shadow-lg shadow-[#00F0FF]/30">
               <CalendarCheck className="w-5 h-5" />
             </div>
           )}
@@ -103,7 +103,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
               <span className="font-heading font-extrabold text-white text-lg tracking-tight">
                 {systemSettings?.login_heading || 'Bitácora'}
               </span>
-              <span className="text-[10px] font-bold text-[#00A88B] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-[#E6F9F5] border border-[#00C9A7]/20">
+              <span className="text-[10px] font-bold text-[#00F0FF] uppercase tracking-widest px-2.5 py-0.5 rounded-full bg-[#00F0FF]/15 border border-[#00F0FF]/30">
                 Oficial
               </span>
             </div>
@@ -172,7 +172,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100/70 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 rounded-full border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-3 focus:ring-[#00F0FF]/20 outline-hidden transition-all placeholder:text-slate-400"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100/70 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-3 focus:ring-[#00F0FF]/20 outline-hidden transition-all placeholder:text-slate-400"
                   placeholder="ej: admin, juan, maria"
                   required
                   autoFocus
@@ -190,7 +190,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess, systemSett
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100/70 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 rounded-full border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-3 focus:ring-[#00F0FF]/20 outline-hidden transition-all placeholder:text-slate-400"
+                  className="w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100/70 dark:hover:bg-[#1C1D2A] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-3 focus:ring-[#00F0FF]/20 outline-hidden transition-all placeholder:text-slate-400"
                   placeholder="Ingresa tu contraseña"
                   required
                 />

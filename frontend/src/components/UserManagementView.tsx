@@ -1082,39 +1082,45 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </div>
               </label>
 
-              {/* Acciones de Base de Datos y Purga */}
-              <div className="pt-3 border-t border-slate-100 dark:border-[#252636] flex items-center justify-between gap-3 flex-wrap">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                    Limpieza y Purga de Datos
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Vacía las bitácoras y colaboradores de prueba para dejar el sistema impecable en producción con únicamente el Administrador (Protegido por flag de servidor en producción).
-                  </p>
-                </div>
+              {/* Acciones de Base de Datos y Purga aisladas en acordeón de seguridad */}
+              <details className="pt-3 border-t border-slate-100 dark:border-[#252636] group">
+                <summary className="flex items-center justify-between gap-2 cursor-pointer list-none text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline py-1">
+                  <span>⚠️ Zona de Mantenimiento y Purga de Entorno (Avanzado)</span>
+                  <span className="text-[11px] text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="mt-3 p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/70 dark:border-rose-900/40 flex items-center justify-between gap-3 flex-wrap">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Limpieza y Purga de Datos de Demostración
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Vacía las bitácoras y colaboradores de prueba para dejar el sistema impecable en producción con únicamente el Administrador (Protegido por flag de servidor en producción).
+                    </p>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCleanConfirmModal(true)}
-                    disabled={cleaningData || seedingData}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>{cleaningData ? 'Purgando...' : 'Limpiar datos demo (Solo Admin)'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowCleanConfirmModal(true)}
+                      disabled={cleaningData || seedingData}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{cleaningData ? 'Purgando...' : 'Limpiar datos demo (Solo Admin)'}</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={handleSeedDemoData}
-                    disabled={cleaningData || seedingData}
-                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#161722] hover:bg-slate-200 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#252636] transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${seedingData ? 'animate-spin' : ''}`} />
-                    <span>{seedingData ? 'Cargando demo...' : 'Restaurar datos demo'}</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={handleSeedDemoData}
+                      disabled={cleaningData || seedingData}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#161722] hover:bg-slate-200 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-[#252636] transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${seedingData ? 'animate-spin' : ''}`} />
+                      <span>{seedingData ? 'Cargando demo...' : 'Restaurar datos demo'}</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </details>
             </div>
           </div>
 

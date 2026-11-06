@@ -15,7 +15,6 @@ const UserManagementView = lazy(() => import('./components/UserManagementView').
 const BuzonView = lazy(() => import('./components/BuzonView').then((m) => ({ default: m.BuzonView })));
 const VaultView = lazy(() => import('./components/VaultView').then((m) => ({ default: m.VaultView })));
 const ManualView = lazy(() => import('./components/ManualView').then((m) => ({ default: m.ManualView })));
-import { LoginModal } from './components/LoginModal';
 import { LoginPage } from './components/LoginPage';
 import { WhatsAppShareModal } from './components/WhatsAppShareModal';
 import { UserProfileModal } from './components/UserProfileModal';
@@ -32,292 +31,23 @@ import { api, getAuthToken } from './services/api';
 import { getTodayLocalDateStr } from './utils/formatters';
 import { confirmDialog, DialogHost } from './components/DialogHost';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
-
-const getDraftKey = (userId?: number, dateStr?: string) => `bitacora_draft_${userId || 'user'}_${dateStr || 'today'}`;
-
-// Firma canónica normalizada de la bitácora:
-// Compara únicamente los datos editados por el usuario, omitiendo timestamps (updated_at, created_at)
-// y metadatos volátiles para evitar bucles infinitos de auto-guardado continuo.
-const getBitacoraSignature = (b?: Partial<Bitacora> | null, defaultColab?: string, defaultUid?: number): string => {
-  if (!b) return '';
-  const uid = b.user_id || defaultUid || 0;
-  const colab = (b.colaborador || defaultColab || '').trim().toLowerCase();
-  const fecha = (b.fecha || '').trim();
-  const hora_inicio = (b.hora_inicio || '').trim();
-  const pendientes = (b.pendientes || '').trim();
-  const necesita_apoyo = (b.necesita_apoyo || 'No').trim();
-  const apoyo_detalle = (b.apoyo_detalle || '').trim();
-  const prioridad_siguiente = (b.prioridad_siguiente || '').trim();
-  const estado = (b.estado || 'generada').trim();
-
-  const acts = (b.actividades || [])
-    .filter((a) => !a.is_deleted)
-    .map((a, idx) => ({
-      id: a.id || null,
-      orden: typeof a.orden === 'number' ? a.orden : idx,
-      hora_inicio: (a.hora_inicio || '').trim(),
-      duracion_min: Number(a.duracion_min || 0),
-      tipo_trabajo: (a.tipo_trabajo || '').trim(),
-      descripcion: (a.descripcion || '').trim(),
-      para_cliente: (a.para_cliente || '').trim(),
-      estado: (a.estado || 'en_proceso').trim(),
-      comentarios: (a.comentarios || '').trim(),
-      parent_task_id: a.parent_task_id ? Number(a.parent_task_id) : null,
-      tipo_vinculo: (a.tipo_vinculo || 'continuacion').trim(),
-      shared_uuid: (a.shared_uuid || '').trim(),
-      shared_with: Array.isArray(a.shared_with) ? [...a.shared_with].sort() : [],
-      evidencias_count: Array.isArray(a.evidencias) ? a.evidencias.length : 0,
-    }));
-
-  return JSON.stringify({
-    uid,
-    colab,
-    fecha,
-    hora_inicio,
-    pendientes,
-    necesita_apoyo,
-    apoyo_detalle,
-    prioridad_siguiente,
-    estado,
-    acts,
-  });
-};
-
-// ID numérico = actividad ya persistida en el servidor. Los IDs `act-...` son temporales (creadas en el cliente).
-const isPersistedId = (id: unknown): boolean =>
-  id !== undefined && id !== null && /^\d+$/.test(String(id));
-
-const SYNC_HEADER_FIELDS = ['hora_inicio', 'area', 'pendientes', 'necesita_apoyo', 'apoyo_detalle', 'prioridad_siguiente', 'estado'] as const;
-
-const actContentSig = (a: Actividad): string =>
-  JSON.stringify([
-    (a.hora_inicio || '').trim(),
-    Number(a.duracion_min || 0),
-    (a.tipo_trabajo || '').trim(),
-    (a.descripcion || '').trim(),
-    (a.para_cliente || '').trim(),
-    a.estado || '',
-    (a.comentarios || '').trim(),
-    a.parent_task_id ? Number(a.parent_task_id) : null,
-    a.tipo_vinculo || '',
-    Array.isArray(a.evidencias) ? a.evidencias.length : 0,
-    Array.isArray(a.shared_with) ? [...a.shared_with].sort() : [],
-  ]);
-
-/**
- * Integra la respuesta del servidor a un guardado SIN perder lo que el usuario editó mientras
- * la petición estaba en vuelo:
- *  - Actividades no tocadas desde el envío -> versión del servidor (IDs reales, timestamps).
- *  - Actividades editadas durante el vuelo -> se conservan las ediciones locales sobre el ID real.
- *  - Actividades nuevas creadas durante el vuelo -> se conservan.
- *  - Actividades que sólo existen en el servidor (compartidas, apoyo, arrastre) -> se agregan.
- * Si el usuario cambió de fecha o de titular entretanto, la respuesta se ignora.
- */
-const mergeSavedBitacora = (
-  prev: Bitacora,
-  sent: Bitacora,
-  server: Bitacora,
-  pendingDeleted?: Set<string>
-): { bitacora: Bitacora; clean: boolean } => {
-  if (!server || prev.fecha !== sent.fecha || server.fecha !== sent.fecha) return { bitacora: prev, clean: false };
-  if (prev.user_id && sent.user_id && String(prev.user_id) !== String(sent.user_id)) return { bitacora: prev, clean: false };
-
-  const srvActs = (server.actividades || []).filter((a) => !pendingDeleted?.has(String(a.id)));
-  const srvById = new Map<string, Actividad>();
-  const srvByUid = new Map<string, Actividad>();
-  srvActs.forEach((a) => {
-    srvById.set(String(a.id), a);
-    if (a.client_uid) srvByUid.set(String(a.client_uid), a);
-  });
-  const sentRefs = new Set<Actividad>(sent.actividades || []);
-  const sentKeys = new Set<string>();
-  (sent.actividades || []).forEach((a) => {
-    if (a.id !== undefined && a.id !== null) sentKeys.add(String(a.id));
-    if (a.client_uid) sentKeys.add(String(a.client_uid));
-  });
-
-  let clean = true;
-  const used = new Set<Actividad>();
-  const out: Actividad[] = [];
-  for (const local of prev.actividades || []) {
-    const srv =
-      (isPersistedId(local.id) ? srvById.get(String(local.id)) : undefined) ||
-      (local.client_uid ? srvByUid.get(String(local.client_uid)) : undefined) ||
-      (!isPersistedId(local.id) && local.id ? srvByUid.get(String(local.id)) : undefined);
-    if (srv && !used.has(srv)) {
-      used.add(srv);
-      if (sentRefs.has(local)) {
-        out.push(srv);
-      } else {
-        clean = false;
-        out.push({ ...srv, ...local, id: srv.id, client_uid: srv.client_uid || local.client_uid, updated_at: srv.updated_at });
-      }
-      continue;
-    }
-    if (sentRefs.has(local)) {
-      // Enviada pero el servidor ya no la devuelve (eliminada en otro dispositivo o por el titular)
-      continue;
-    }
-    if (isPersistedId(local.id)) {
-      // Persistida pero ausente en el servidor: fue eliminada; no resucitarla
-      continue;
-    }
-    clean = false;
-    out.push(local); // creada mientras el guardado estaba en vuelo
-  }
-  for (const s of srvActs) {
-    if (used.has(s)) continue;
-    // Si correspondía a algo enviado que el usuario quitó durante el vuelo, no reinsertarla
-    if (sentKeys.has(String(s.id)) || (s.client_uid && sentKeys.has(String(s.client_uid)))) continue;
-    out.push(s);
-  }
-
-  const merged: any = { ...prev, id: server.id ?? prev.id, tiempo_total_min: server.tiempo_total_min ?? prev.tiempo_total_min };
-  for (const f of SYNC_HEADER_FIELDS) {
-    if ((prev as any)[f] === (sent as any)[f]) {
-      merged[f] = (server as any)[f] ?? (prev as any)[f];
-    } else {
-      clean = false;
-    }
-  }
-  merged.actividades = out;
-  return { bitacora: merged as Bitacora, clean };
-};
-
-/**
- * Reconcilia un borrador local con la versión fresca del servidor (al iniciar, cambiar de fecha o de titular).
- * El servidor es la base; del borrador sólo se rescata lo que realmente no llegó al servidor:
- *  - Actividades nuevas (ID temporal) no registradas aún.
- *  - Ediciones offline sobre actividades cuya versión en el servidor no cambió desde entonces.
- *  - Campos de cierre que en el servidor están vacíos.
- * Nunca resucita actividades eliminadas ni pisa cambios más recientes hechos desde otro dispositivo.
- */
-const reconcileDraftWithServer = (
-  server: Bitacora,
-  draft: Bitacora | null
-): { bitacora: Bitacora; hasLocalChanges: boolean } => {
-  if (!draft || draft.fecha !== server.fecha) return { bitacora: server, hasLocalChanges: false };
-  let changed = false;
-  const draftById = new Map<string, Actividad>();
-  (draft.actividades || []).forEach((a) => {
-    if (isPersistedId(a.id)) draftById.set(String(a.id), a);
-  });
-  const srvActs = server.actividades || [];
-  const acts = srvActs.map((s) => {
-    const l = draftById.get(String(s.id));
-    if (
-      l && !l.is_deleted && l.updated_at && s.updated_at &&
-      String(l.updated_at) === String(s.updated_at) &&
-      actContentSig(l) !== actContentSig(s)
-    ) {
-      changed = true;
-      return { ...s, ...l, id: s.id, updated_at: s.updated_at };
-    }
-    return s;
-  });
-  const srvUids = new Set(srvActs.filter((a) => a.client_uid).map((a) => String(a.client_uid)));
-  // Compatibilidad con borradores antiguos (antes de client_uid): evitar duplicar por descripción
-  const legacyDescs = new Set(
-    srvActs.filter((a) => !a.client_uid).map((a) => (a.descripcion || '').trim().toLowerCase()).filter(Boolean)
-  );
-  const unsynced = (draft.actividades || []).filter((a) => {
-    if (a.is_deleted || isPersistedId(a.id)) return false;
-    const uid = String(a.client_uid || a.id || '');
-    if (uid && srvUids.has(uid)) return false;
-    const desc = (a.descripcion || '').trim().toLowerCase();
-    if (desc && legacyDescs.has(desc)) return false;
-    return true;
-  });
-  if (unsynced.length > 0) changed = true;
-  const merged: any = { ...server, actividades: [...acts, ...unsynced] };
-  for (const f of ['pendientes', 'apoyo_detalle', 'prioridad_siguiente'] as const) {
-    if (!(merged[f] || '').trim() && ((draft as any)[f] || '').trim()) {
-      merged[f] = (draft as any)[f];
-      changed = true;
-    }
-  }
-  return { bitacora: merged as Bitacora, hasLocalChanges: changed };
-};
-
-const isClosedEstado = (e?: string) => e === 'generada' || e === 'cerrada' || e === 'cerrada_sistema';
-
-// Busca el borrador local más completo (evita que datos incompletos del servidor pisen el trabajo local)
-// Aislamiento estricto por usuario: NUNCA mezclar o retornar borradores pertenecientes a otro usuario
-const getBestLocalDraft = (userId?: number, dateStr?: string, userName?: string): Bitacora | null => {
-  const candidates: Bitacora[] = [];
-  
-  const isValidCandidate = (b: any): b is Bitacora => {
-    if (!b || b.fecha !== dateStr || !Array.isArray(b.actividades)) return false;
-    // Si se especificó userId, el borrador debe pertenecer a este usuario
-    if (userId) {
-      if (b.user_id && b.user_id !== userId) return false;
-      if (userName && b.colaborador && b.colaborador.toLowerCase() !== userName.toLowerCase() && b.user_id !== userId) return false;
-    }
-    return true;
-  };
-
-  if (userId) {
-    try {
-      const str = localStorage.getItem(getDraftKey(userId, dateStr));
-      if (str) {
-        const parsed = JSON.parse(str);
-        if (isValidCandidate(parsed)) {
-          candidates.push(parsed);
-        }
-      }
-    } catch (e) {}
-  }
-
-  try {
-    const str = localStorage.getItem('active_bitacora');
-    if (str) {
-      const parsed = JSON.parse(str);
-      if (isValidCandidate(parsed)) {
-        candidates.push(parsed);
-      }
-    }
-  } catch (e) {}
-
-  try {
-    const str = localStorage.getItem('bitacoras_history');
-    if (str) {
-      const list: Bitacora[] = JSON.parse(str);
-      if (Array.isArray(list)) {
-        const match = list.find(b => isValidCandidate(b));
-        if (match) {
-          candidates.push(match);
-        }
-      }
-    }
-  } catch (e) {}
-
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('bitacora_recovery_backup_')) {
-        try {
-          const parsed = JSON.parse(localStorage.getItem(key) || '');
-          if (isValidCandidate(parsed)) {
-            candidates.push(parsed);
-          }
-        } catch (e) {}
-      }
-    }
-  } catch (e) {}
-
-  if (candidates.length === 0) return null;
-
-  candidates.sort((a, b) => {
-    const countA = (a.actividades || []).filter(act => !act.is_deleted).length;
-    const countB = (b.actividades || []).filter(act => !act.is_deleted).length;
-    return countB - countA;
-  });
-
-  return candidates[0];
-};
+import {
+  getDraftKey,
+  getBitacoraSignature,
+  isPersistedId,
+  mergeSavedBitacora,
+  reconcileDraftWithServer,
+  isClosedEstado,
+  getBestLocalDraft,
+} from './utils/bitacoraSync';
+import {
+  getInitialViewFromUrl,
+  getInitialDateFromUrl,
+  useUrlNavigation,
+} from './hooks/useUrlNavigation';
 
 export function App() {
-  const [viewMode, setViewMode] = useState<ViewMode>('lista');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewFromUrl('lista'));
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   // Aviso para la pantalla de login (sesión expirada / actualización de seguridad)
   const [sessionNotice, setSessionNotice] = useState<string | null>(() =>
@@ -344,18 +74,18 @@ export function App() {
   const [syncNudge, setSyncNudge] = useState(0);
 
   const [bitacora, setBitacora] = useState<Bitacora>(() => {
-    const todayStr = getTodayLocalDateStr();
+    const initialDateStr = getInitialDateFromUrl(getTodayLocalDateStr());
     const savedUser = localStorage.getItem('auth_user') ? JSON.parse(localStorage.getItem('auth_user')!) : null;
     const userUid = savedUser?.id;
 
-    const bestDraft = getBestLocalDraft(userUid, todayStr, savedUser?.full_name);
+    const bestDraft = getBestLocalDraft(userUid, initialDateStr, savedUser?.full_name);
     if (bestDraft) {
       return bestDraft;
     }
 
     return {
       ...defaultBitacora,
-      fecha: todayStr,
+      fecha: initialDateStr,
       colaborador: savedUser?.full_name || '',
       user_id: savedUser?.id,
       area: savedUser?.team_name || 'Sistemas',
@@ -703,7 +433,7 @@ export function App() {
       }
       refreshPapeleraCount();
 
-      const todayStr = getTodayLocalDateStr();
+      const todayStr = getInitialDateFromUrl(getTodayLocalDateStr());
       const defaultStart = sysSettings?.hora_inicio_default || '08:30';
 
       if (activeUser) {
@@ -958,6 +688,15 @@ export function App() {
       }, 50);
     }
   };
+
+  // Sincronización bidireccional con la URL (?view=...&fecha=...) para soportar F5 y botones Atrás/Adelante
+  useUrlNavigation({
+    viewMode,
+    setViewMode,
+    fecha: bitacora.fecha,
+    onDateChange: handleDateChange,
+    enabled: Boolean(currentUser),
+  });
 
   // Auto-detectar cambio de día al volver a la pestaña (evita registrar tareas en el día de ayer por error)
   useEffect(() => {
@@ -1299,10 +1038,7 @@ export function App() {
       const updatedHistory = await api.getBitacoras(undefined, undefined, undefined, currentUser?.id);
       setHistorial(updatedHistory);
 
-      // Open WhatsApp Share Modal so user can send link immediately
-      setWhatsAppModalOpen(true);
-
-      // Desplegar panel lateral de resumen automáticamente al generar bitácora
+      // Desplegar panel lateral de resumen ejecutivo (desde ahí el usuario puede copiar o compartir por WhatsApp en 1 clic)
       setMobileDrawerOpen(true);
     } catch (e: any) {
       console.error('Error generando bitacora', e);
@@ -1476,6 +1212,7 @@ export function App() {
         {/* Top Header Bar */}
         <TopHeader
           currentView={viewMode}
+          onViewChange={setViewMode}
           currentUser={currentUser}
           bitacoraFecha={bitacora.fecha}
           activitiesCount={bitacora.actividades.length}
@@ -1594,6 +1331,7 @@ export function App() {
                 onSubmit={handleGenerateBitacora}
                 isProxyMode={Boolean(activeProxyUser)}
                 proxyUserName={activeProxyUser?.full_name}
+                actividades={bitacora.actividades}
               />
             </div>
           )}
@@ -1718,14 +1456,6 @@ export function App() {
         bitacora={bitacora}
         isGenerated={isGenerated}
         onOpenWhatsApp={() => setWhatsAppModalOpen(true)}
-      />
-
-      {/* Login Modal */}
-      <LoginModal
-        isOpen={loginModalOpen}
-        onClose={() => setLoginModalOpen(false)}
-        onLoginSuccess={handleLoginSuccess}
-        systemSettings={systemSettings || undefined}
       />
 
       {/* WhatsApp Share Modal with leader, collaborator, or custom number options */}

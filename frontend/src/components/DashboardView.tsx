@@ -22,7 +22,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { DashboardStats, Team, User } from '../types';
-import { formatDuration, formatHoursClean, formatDateDisplay } from '../utils/formatters';
+import { formatDuration, formatHoursClean, formatDateDisplay, getTodayLocalDateStr, shiftDateByDays } from '../utils/formatters';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 import { SplineAreaChart, GradientBarChart, CyberDonutChart } from './CyberCharts';
@@ -68,6 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   }, [teams, currentUser, selectedTeamId]);
 
   const [loading, setLoading] = useState(true);
+  const [periodRange, setPeriodRange] = useState<'today' | '7d' | '30d' | 'all'>('30d');
 
   // Controles de gráficos interactivos
   const [splineMetric, setSplineMetric] = useState<'actividades' | 'minutos'>('actividades');
@@ -83,11 +84,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
         ? (selectedTeamId ? Number(selectedTeamId) : (currentUser?.role === 'lider' ? (leaderTeam?.id || currentUser?.team_id) : undefined))
         : undefined;
 
+      const todayStr = getTodayLocalDateStr();
+      let fechaExacta: string | undefined;
+      let fechaDesde: string | undefined;
+      let fechaHasta: string | undefined;
+
+      if (periodRange === 'today') {
+        fechaExacta = todayStr;
+      } else if (periodRange === '7d') {
+        fechaDesde = shiftDateByDays(todayStr, -6);
+        fechaHasta = todayStr;
+      } else if (periodRange === '30d') {
+        fechaDesde = shiftDateByDays(todayStr, -29);
+        fechaHasta = todayStr;
+      }
+
       const data = await api.getDashboardStats(
         activeTeamId,
-        undefined,
+        fechaExacta,
         currentUser?.id,
-        isPersonalScope ? currentUser?.id : undefined
+        isPersonalScope ? currentUser?.id : undefined,
+        fechaDesde,
+        fechaHasta
       );
       setStats(data);
     } catch (e) {
@@ -99,7 +117,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   useEffect(() => {
     fetchStats();
-  }, [selectedTeamId, viewScope, currentUser?.id]);
+  }, [selectedTeamId, viewScope, periodRange, currentUser?.id]);
 
   const totalMinutos = stats?.resumen?.total_minutos || 0;
   const totalBitacoras = stats?.resumen?.total_bitacoras || 0;
@@ -211,19 +229,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full sm:w-auto self-end sm:self-center flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto self-end sm:self-center flex-wrap">
+          {/* Selector de Periodo Temporal */}
+          <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-xl border border-slate-200 dark:border-white/10 shrink-0">
+            {[
+              { id: 'today', label: 'Hoy' },
+              { id: '7d', label: '7 Días' },
+              { id: '30d', label: '30 Días' },
+              { id: 'all', label: 'Histórico' },
+            ].map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPeriodRange(p.id as any)}
+                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  periodRange === p.id
+                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-2xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
           {/* Selector de Ámbito: Global vs Personal (Solo para Líderes y Admin) */}
           {isLiderOrAdmin && (
-            <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 shrink-0">
+            <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-xl border border-slate-200 dark:border-white/10 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   setViewScope('global');
                   setBarMetricType('colaboradores');
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   viewScope === 'global'
-                    ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -235,9 +276,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   setViewScope('personal');
                   setBarMetricType('horarios');
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                   viewScope === 'personal'
-                    ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -252,7 +293,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             title="Actualizar datos"
             className="p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-sky-600 dark:text-[#00F0FF]' : ''}`} />
           </button>
 
           {/* Filtro por equipo si es admin y está en vista global */}
@@ -320,20 +361,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <div className="absolute -right-6 -bottom-6 w-36 h-36 bg-white/20 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform" />
 
               <div className="flex items-center justify-between relative z-10">
-                <div className="w-10 h-10 rounded-2xl bg-black/20 text-[#0B0C13] flex items-center justify-center backdrop-blur-xs">
+                <div className="w-10 h-10 rounded-2xl bg-white/15 dark:bg-black/20 text-white dark:text-[#0B0C13] flex items-center justify-center backdrop-blur-xs">
                   {isPersonalScope ? <Calendar className="w-5 h-5" /> : <Users className="w-5 h-5" />}
                 </div>
-                <span className="text-[11px] font-extrabold text-[#0B0C13]/90 uppercase tracking-widest bg-black/15 px-3 py-0.5 rounded-full font-mono">
+                <span className="text-[11px] font-extrabold text-white dark:text-[#0B0C13]/90 uppercase tracking-widest bg-white/15 dark:bg-black/15 px-3 py-0.5 rounded-full font-mono">
                   {isPersonalScope ? 'JORNADAS' : 'EQUIPO ACTIVO'}
                 </span>
               </div>
               <div className="relative z-10">
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-[#0B0C13] tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-white dark:text-[#0B0C13] tracking-tight font-heading truncate">
                   {isPersonalScope ? `${totalBitacoras} registradas` : totalColaboradores}
                 </div>
-                <div className="text-xs text-[#0B0C13]/85 font-bold mt-1 truncate">
+                <div className="text-xs text-white/90 dark:text-[#0B0C13]/85 font-bold mt-1 truncate">
                   {isPersonalScope
-                    ? 'Días con bitácora guardada en el sistema'
+                    ? 'Días con bitácora guardada en el periodo'
                     : 'Colaboradores supervisados con actividad'}
                 </div>
               </div>
@@ -384,19 +425,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="saas-card p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                    Promedio por Jornada
+                    Promedio Diario vs Meta (8h)
                   </span>
-                  <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
-                    {formatHoursClean(promedioJornada)}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
+                      {formatHoursClean(promedioJornada)}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      promedioJornada >= 450
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        : promedioJornada >= 360
+                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                        : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'
+                    }`}>
+                      {Math.min(100, Math.round((promedioJornada / 480) * 100))}% de 8h
+                    </span>
+                  </div>
                 </div>
               </div>
-              <span className="text-[11px] text-slate-400 font-medium">/ día</span>
+              <span className="text-[11px] text-slate-400 font-medium">/ jornada</span>
             </div>
 
             <div className="saas-card p-4 flex items-center justify-between">
@@ -541,7 +593,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   onClick={() => setSplineMetric('actividades')}
                   className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
                     splineMetric === 'actividades'
-                      ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -552,7 +604,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   onClick={() => setSplineMetric('minutos')}
                   className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
                     splineMetric === 'minutos'
-                      ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -651,7 +703,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                         onClick={() => setBarMetricType('colaboradores')}
                         className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
                           barMetricType === 'colaboradores'
-                            ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                            ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
@@ -663,7 +715,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                       onClick={() => setBarMetricType('horarios')}
                       className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
                         barMetricType === 'horarios'
-                          ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -674,7 +726,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                       onClick={() => setBarMetricType('clientes')}
                       className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
                         barMetricType === 'clientes'
-                          ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >

@@ -506,10 +506,19 @@ export const api = {
   },
 
   // ================= DASHBOARD =================
-  async getDashboardStats(teamId?: number, fecha?: string, requestingUserId?: number, userId?: number): Promise<DashboardStats> {
+  async getDashboardStats(
+    teamId?: number,
+    fecha?: string,
+    requestingUserId?: number,
+    userId?: number,
+    fechaDesde?: string,
+    fechaHasta?: string
+  ): Promise<DashboardStats> {
     const params = new URLSearchParams();
     if (teamId) params.append('team_id', String(teamId));
     if (fecha) params.append('fecha', fecha);
+    if (fechaDesde) params.append('fecha_desde', fechaDesde);
+    if (fechaHasta) params.append('fecha_hasta', fechaHasta);
     if (requestingUserId) params.append('requesting_user_id', String(requestingUserId));
     if (userId) params.append('user_id', String(userId));
     const res = await authFetch(`${API_BASE}/dashboard/stats?${params.toString()}`);
