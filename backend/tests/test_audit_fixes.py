@@ -157,3 +157,50 @@ def test_pendientes_scoping_analista(client, make_user):
     descs = [item['descripcion'] for item in r.json]
     assert 'Pendiente de a1' in descs
     assert 'Pendiente de a2' not in descs
+
+
+def test_admin_hot_backup_download_and_rbac(client, make_user):
+    """El respaldo en caliente SQLite solo puede ser descargado por admin y entrega un binario SQLite válido."""
+    analista = make_user(role='analista')
+    admin = make_user(role='admin')
+
+    # Analista no puede descargar backup
+    r_forbid = client.get('/api/admin/backup-db', headers=analista['h'])
+    assert r_forbid.status_code == 403
+
+    # Admin descarga un archivo SQLite íntegro
+    r_ok = client.get('/api/admin/backup-db', headers=admin['h'])
+    assert r_ok.status_code == 200
+    assert r_ok.data[:16] == b'SQLite format 3\x00'
+    r_ok.close()
+
+    # El listado de backups incluye el respaldo recién generado
+    r_list = client.get('/api/admin/backups', headers=admin['h'])
+    assert r_list.status_code == 200
+    assert r_list.json['total'] >= 1
+
+
+def test_clientes_sugerencias_normalizacion(client, make_user):
+    """Normaliza espacios en para_cliente al guardar y deduplica sugerencias ignorando mayúsculas."""
+    u = make_user()
+    res = client.post('/api/bitacoras', json={
+        'fecha': '2026-10-22',
+        'colaborador': u['user']['full_name'],
+        'user_id': u['user']['id'],
+        'actividades': [
+            {'id': 'c1', 'descripcion': 'T1', 'para_cliente': '  Marketing   Alterno  ', 'duracion_min': 20, 'hora_inicio': '08:30', 'estado': 'completada'},
+            {'id': 'c2', 'descripcion': 'T2', 'para_cliente': 'Marketing Alterno', 'duracion_min': 30, 'hora_inicio': '09:00', 'estado': 'completada'},
+            {'id': 'c3', 'descripcion': 'T3', 'para_cliente': 'marketing alterno', 'duracion_min': 15, 'hora_inicio': '09:30', 'estado': 'completada'},
+        ],
+    }, headers=u['h'])
+    assert res.status_code == 200
+    saved_acts = res.json['bitacora']['actividades']
+    assert saved_acts[0]['para_cliente'] == 'Marketing Alterno'
+
+    sug = client.get('/api/clientes/sugerencias', headers=u['h'])
+    assert sug.status_code == 200
+    clientes = sug.json['clientes']
+    assert 'Marketing Alterno' in clientes
+    # No debe duplicarse en minúsculas
+    assert sum(1 for c in clientes if c.lower() == 'marketing alterno') == 1
+

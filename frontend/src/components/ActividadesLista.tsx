@@ -32,10 +32,12 @@ import {
   Play,
   Square,
   Check,
+  X,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
 import { formatDuration, calculateHoraFin } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
+import { api } from '../services/api';
 import { ActividadModal } from './ActividadModal';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
@@ -101,9 +103,36 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   const [quickDesc, setQuickDesc] = useState('');
   const [quickDuration, setQuickDuration] = useState<number>(30);
   const [quickTipo, setQuickTipo] = useState<string>('Desarrollo');
-  const [quickCliente, setQuickCliente] = useState<string>('Interno TI');
+  const [quickCliente, setQuickCliente] = useState<string>('');
+  const [clientSuggestions, setClientSuggestions] = useState<string[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState<boolean>(false);
+
+  // Cargar sugerencias normalizadas de clientes para evitar duplicados por escritura
+  useEffect(() => {
+    let mounted = true;
+    api.getClientesSugerencias().then((list) => {
+      if (mounted && list.length > 0) setClientSuggestions(list);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [actividades.length]);
+
+  const mergedClientSuggestions = useMemo(() => {
+    const map = new Map<string, string>();
+    clientSuggestions.forEach((c) => {
+      const clean = c.trim();
+      if (clean) map.set(clean.toLowerCase(), clean);
+    });
+    actividades.forEach((a) => {
+      const clean = (a.para_cliente || '').trim();
+      if (clean && !map.has(clean.toLowerCase())) {
+        map.set(clean.toLowerCase(), clean);
+      }
+    });
+    return Array.from(map.values());
+  }, [clientSuggestions, actividades]);
 
   // Live Timer: se guarda el instante de inicio (no un contador) para que no se atrase
   // cuando el navegador frena la pestaña en segundo plano y para sobrevivir a recargas.
@@ -123,6 +152,24 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     const interval = setInterval(() => setTimerNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, [isTimerRunning]);
+
+  // Reflejar el cronómetro activo en el título de la pestaña del navegador
+  useEffect(() => {
+    if (!isTimerRunning) return;
+    const prevTitle = document.title;
+    const m = Math.floor(timerSeconds / 60);
+    const s = timerSeconds % 60;
+    const clock = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    document.title = `⏱ ${clock} · ${quickDesc.trim() || 'Cronómetro Bitácora'}`;
+    return () => {
+      document.title = prevTitle;
+    };
+  }, [isTimerRunning, timerSeconds, quickDesc]);
+
+  const handleCancelTimer = () => {
+    localStorage.removeItem(timerStorageKey);
+    setTimerStartedAt(null);
+  };
 
   // Compute tasks that reference other tasks in the current day (reverse linkages)
   const childTasksMap = useMemo(() => {
@@ -743,8 +790,23 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             </div>
           </div>
 
-          {/* Right Controls: Category + Quick Submit + Live Timer + Presets Toggle */}
+          {/* Right Controls: Client Autocomplete + Category + Quick Submit + Live Timer + Presets Toggle */}
           <div className="flex flex-wrap items-center gap-1.5">
+            <input
+              type="text"
+              list="quick-clientes-datalist"
+              value={quickCliente}
+              onChange={(e) => setQuickCliente(e.target.value)}
+              placeholder="Cliente / Área (opc.)"
+              className="w-36 sm:w-40 text-xs font-medium px-2.5 py-2 rounded-xl bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] focus:outline-none focus:border-sky-600 dark:focus:border-[#00F0FF] shadow-2xs min-h-[36px] placeholder:text-slate-400"
+              title="Cliente o área (con autocompletado de nombres existentes)"
+            />
+            <datalist id="quick-clientes-datalist">
+              {mergedClientSuggestions.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
+
             <select
               value={quickTipo}
               onChange={(e) => setQuickTipo(e.target.value)}
@@ -770,23 +832,31 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 type="button"
                 onClick={handleStartTimer}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] hover:border-sky-500/50 shadow-2xs transition-all cursor-pointer min-h-[36px]"
-                title="Iniciar cronómetro en vivo para medir una actividad"
+                title="Iniciar cronómetro en vivo para medir una actividad (persiste aunque recargues la página)"
               >
                 <Play className="w-3 h-3 text-sky-600 dark:text-[#00F0FF] fill-current" />
                 <span>Cronómetro</span>
               </button>
             ) : (
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 shadow-xs animate-pulse min-h-[36px]">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 shadow-xs min-h-[36px]">
                 <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
                 <span className="font-mono">{formatTimerClock(timerSeconds)}</span>
                 <button
                   type="button"
                   onClick={handleStopTimer}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[11px] font-bold hover:bg-rose-500 cursor-pointer shadow-2xs"
-                  title="Detener cronómetro y registrar actividad"
+                  title="Detener cronómetro y registrar actividad con el tiempo real"
                 >
                   <Square className="w-2.5 h-2.5 fill-current" />
                   <span>Guardar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelTimer}
+                  className="p-0.5 text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 cursor-pointer"
+                  title="Descartar cronómetro"
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}

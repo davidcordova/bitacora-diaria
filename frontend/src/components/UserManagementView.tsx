@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Search,
+  Download,
 } from 'lucide-react';
 import { User, Team, UserRole, SystemSettings, UserDelegation } from '../types';
 import { api } from '../services/api';
@@ -1081,6 +1082,35 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   </span>
                 </div>
               </label>
+
+              {/* Respaldo en Caliente de Base de Datos (Producción / Coolify) */}
+              <div className="p-4 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/50 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Respaldo de Seguridad en Caliente (SQLite Snapshot)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                    Genera una copia exacta y consistente de <code className="font-mono">/data/bitacora.db</code> sin interrumpir a los usuarios conectados. Además, el sistema guarda respaldos automáticos antes de cada actualización de esquema.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.downloadDatabaseBackup();
+                      setFeedbackMsg('💾 Respaldo SQLite descargado correctamente.');
+                      setTimeout(() => setFeedbackMsg(''), 4000);
+                    } catch (err: any) {
+                      await alertDialog(err?.message || 'No se pudo descargar el respaldo de base de datos.');
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs transition-all cursor-pointer shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Descargar Respaldo (.db)</span>
+                </button>
+              </div>
 
               {/* Acciones de Base de Datos y Purga aisladas en acordeón de seguridad */}
               <details className="pt-3 border-t border-slate-100 dark:border-[#252636] group">

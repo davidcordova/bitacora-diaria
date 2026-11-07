@@ -66,7 +66,19 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [refSearch, setRefSearch] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [clientSuggestions, setClientSuggestions] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    api.getClientesSugerencias().then((list) => {
+      if (mounted) setClientSuggestions(list);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [isOpen]);
 
   const loadReferencias = async (query = '') => {
     try {
@@ -515,11 +527,17 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               <div className="relative">
                 <input
                   type="text"
+                  list="modal-clientes-datalist"
                   value={paraCliente}
                   onChange={(e) => setParaCliente(e.target.value)}
                   placeholder="Ej: AlphaStudio, RRHH..."
                   className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#161722] text-xs font-medium text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200 dark:border-[#252636] focus:bg-white dark:focus:bg-[#161722] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
                 />
+                <datalist id="modal-clientes-datalist">
+                  {clientSuggestions.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
                 <UserCheck className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
               </div>
             </div>

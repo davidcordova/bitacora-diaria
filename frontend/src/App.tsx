@@ -15,14 +15,14 @@ const UserManagementView = lazy(() => import('./components/UserManagementView').
 const BuzonView = lazy(() => import('./components/BuzonView').then((m) => ({ default: m.BuzonView })));
 const VaultView = lazy(() => import('./components/VaultView').then((m) => ({ default: m.VaultView })));
 const ManualView = lazy(() => import('./components/ManualView').then((m) => ({ default: m.ManualView })));
+const WhatsAppShareModal = lazy(() => import('./components/WhatsAppShareModal').then((m) => ({ default: m.WhatsAppShareModal })));
+const UserProfileModal = lazy(() => import('./components/UserProfileModal').then((m) => ({ default: m.UserProfileModal })));
+const HelpGuideModal = lazy(() => import('./components/HelpGuideModal').then((m) => ({ default: m.HelpGuideModal })));
+const PapeleraModal = lazy(() => import('./components/PapeleraModal').then((m) => ({ default: m.PapeleraModal })));
+const NotificationsModal = lazy(() => import('./components/NotificationsModal').then((m) => ({ default: m.NotificationsModal })));
+const ErrorReportModal = lazy(() => import('./components/ErrorReportModal').then((m) => ({ default: m.ErrorReportModal })));
 import { LoginPage } from './components/LoginPage';
-import { WhatsAppShareModal } from './components/WhatsAppShareModal';
-import { UserProfileModal } from './components/UserProfileModal';
 import { BottomNav } from './components/BottomNav';
-import { HelpGuideModal } from './components/HelpGuideModal';
-import { PapeleraModal } from './components/PapeleraModal';
-import { NotificationsModal } from './components/NotificationsModal';
-import { ErrorReportModal } from './components/ErrorReportModal';
 import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
@@ -1443,12 +1443,6 @@ export function App() {
         />
       )}
 
-      {/* 3-Step Visual Help & Onboarding Guide Modal */}
-      <HelpGuideModal
-        isOpen={helpModalOpen}
-        onClose={() => setHelpModalOpen(false)}
-      />
-
       {/* Panel Lateral Desplegable de Resumen (Slide-over para Desktop y Móvil) */}
       <SummaryDrawer
         isOpen={mobileDrawerOpen}
@@ -1458,57 +1452,72 @@ export function App() {
         onOpenWhatsApp={() => setWhatsAppModalOpen(true)}
       />
 
-      {/* WhatsApp Share Modal with leader, collaborator, or custom number options */}
-      <WhatsAppShareModal
-        isOpen={whatsAppModalOpen}
-        onClose={() => setWhatsAppModalOpen(false)}
-        bitacora={bitacora}
-        currentUser={currentUser}
-        users={users}
-        teams={teams}
-      />
+      {/* Modales secundarios cargados bajo demanda (code-splitting) */}
+      <Suspense fallback={null}>
+        {helpModalOpen && (
+          <HelpGuideModal
+            isOpen={helpModalOpen}
+            onClose={() => setHelpModalOpen(false)}
+          />
+        )}
 
-      {/* Consolidated User Profile & Account Settings Modal */}
-      <UserProfileModal
-        isOpen={userProfileModalOpen}
-        onClose={() => setUserProfileModalOpen(false)}
-        currentUser={currentUser}
-        teams={teams}
-        onUserUpdated={handleUserUpdated}
-      />
+        {whatsAppModalOpen && (
+          <WhatsAppShareModal
+            isOpen={whatsAppModalOpen}
+            onClose={() => setWhatsAppModalOpen(false)}
+            bitacora={bitacora}
+            currentUser={currentUser}
+            users={users}
+            teams={teams}
+          />
+        )}
 
-      {/* Papelera Modal with Smart Restoring */}
-      <PapeleraModal
-        isOpen={papeleraModalOpen}
-        onClose={() => setPapeleraModalOpen(false)}
-        currentUser={currentUser}
-        onActivityRestored={handleActivityRestoredFromPapelera}
-        currentBitacoraFecha={bitacora.fecha}
-        currentBitacoraId={typeof bitacora.id === 'number' ? bitacora.id : undefined}
-      />
+        {userProfileModalOpen && (
+          <UserProfileModal
+            isOpen={userProfileModalOpen}
+            onClose={() => setUserProfileModalOpen(false)}
+            currentUser={currentUser}
+            teams={teams}
+            onUserUpdated={handleUserUpdated}
+          />
+        )}
 
-      {/* Notifications Drawer / Modal */}
-      <NotificationsModal
-        isOpen={notificationsModalOpen}
-        onClose={() => setNotificationsModalOpen(false)}
-        notifications={notifications}
-        onMarkAsRead={handleMarkNotificationAsRead}
-        onMarkAllAsRead={handleMarkAllNotificationsAsRead}
-        onClearAll={handleClearAllNotifications}
-        onRemoveNotification={handleRemoveNotification}
-      />
+        {papeleraModalOpen && (
+          <PapeleraModal
+            isOpen={papeleraModalOpen}
+            onClose={() => setPapeleraModalOpen(false)}
+            currentUser={currentUser}
+            onActivityRestored={handleActivityRestoredFromPapelera}
+            currentBitacoraFecha={bitacora.fecha}
+            currentBitacoraId={typeof bitacora.id === 'number' ? bitacora.id : undefined}
+          />
+        )}
 
-      {/* Modal de Diagnóstico y Reporte Técnico de Errores con Captura de Pantalla */}
-      <ErrorReportModal
-        isOpen={errorReportModalOpen}
-        onClose={() => setErrorReportModalOpen(false)}
-        errorMessage={lastSyncErrorMessage}
-        currentUser={currentUser}
-        onRetrySync={async () => {
-          await handleForceSyncCloud();
-          setErrorReportModalOpen(false);
-        }}
-      />
+        {notificationsModalOpen && (
+          <NotificationsModal
+            isOpen={notificationsModalOpen}
+            onClose={() => setNotificationsModalOpen(false)}
+            notifications={notifications}
+            onMarkAsRead={handleMarkNotificationAsRead}
+            onMarkAllAsRead={handleMarkAllNotificationsAsRead}
+            onClearAll={handleClearAllNotifications}
+            onRemoveNotification={handleRemoveNotification}
+          />
+        )}
+
+        {errorReportModalOpen && (
+          <ErrorReportModal
+            isOpen={errorReportModalOpen}
+            onClose={() => setErrorReportModalOpen(false)}
+            errorMessage={lastSyncErrorMessage}
+            currentUser={currentUser}
+            onRetrySync={async () => {
+              await handleForceSyncCloud();
+              setErrorReportModalOpen(false);
+            }}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

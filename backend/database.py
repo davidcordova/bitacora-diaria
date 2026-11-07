@@ -844,9 +844,115 @@ def _mig_001_flag_weak_passwords(cursor):
                 break
 
 
+def _mig_002_normalize_client_names(cursor):
+    """Normaliza espacios múltiples en nombres de clientes existentes tras crear backup automático."""
+    rows = cursor.execute(
+        "SELECT id, para_cliente FROM actividades WHERE para_cliente IS NOT NULL AND TRIM(para_cliente) != ''"
+    ).fetchall()
+    for row in rows:
+        aid, raw_val = row[0], row[1]
+        cleaned = ' '.join(str(raw_val).strip().split())
+        if cleaned != raw_val:
+            cursor.execute("UPDATE actividades SET para_cliente = ? WHERE id = ?", (cleaned, aid))
+
+
 MIGRATIONS = [
     (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
+    (2, 'normalize_existing_client_names', _mig_002_normalize_client_names),
 ]
+
+
+def get_backups_dir():
+    base_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    backups_dir = os.path.join(base_dir, 'backups')
+    os.makedirs(backups_dir, exist_ok=True)
+    return backups_dir
+
+
+def create_hot_backup(reason='manual', max_backups=10):
+    """
+    Crea un respaldo atómico en caliente de la base SQLite usando la API nativa
+    sqlite3.Connection.backup() (seguro con modo WAL y transacciones activas).
+    Retorna la ruta absoluta del archivo respaldado o None si no aplica.
+    """
+    if not DB_PATH or DB_PATH == ':memory:' or not os.path.exists(DB_PATH):
+        return None
+    try:
+        if os.path.getsize(DB_PATH) == 0:
+            return None
+    except OSError:
+        return None
+
+    safe_reason = ''.join(c if c.isalnum() or c in ('_', '-') else '_' for c in str(reason or 'backup'))[:32]
+    ts = get_peru_now().strftime('%Y%m%d_%H%M%S')
+    backups_dir = get_backups_dir()
+    backup_filename = f"bitacora_{safe_reason}_{ts}.db"
+    backup_path = os.path.join(backups_dir, backup_filename)
+
+    src_conn = None
+    dst_conn = None
+    try:
+        src_conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        dst_conn = sqlite3.connect(backup_path, timeout=30.0)
+        src_conn.backup(dst_conn)
+        logger.info("[DB Backup] Respaldo en caliente creado: %s", backup_path)
+    except Exception as e:
+        logger.warning("[DB Backup] No se pudo crear respaldo automático (%s): %s", reason, e)
+        return None
+    finally:
+        if dst_conn:
+            try:
+                dst_conn.close()
+            except Exception:
+                pass
+        if src_conn:
+            try:
+                src_conn.close()
+            except Exception:
+                pass
+
+    # Rotación automática: conservar los últimos max_backups archivos .db
+    try:
+        files = [
+            os.path.join(backups_dir, f)
+            for f in os.listdir(backups_dir)
+            if f.startswith('bitacora_') and f.endswith('.db')
+        ]
+        files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        for old_file in files[max_backups:]:
+            try:
+                os.remove(old_file)
+            except OSError:
+                pass
+    except Exception as e:
+        logger.warning("[DB Backup] Error rotando respaldos antiguos: %s", e)
+
+    return backup_path
+
+
+def list_backups():
+    """Lista los respaldos disponibles en el directorio de backups ordenados del más reciente al más antiguo."""
+    backups_dir = get_backups_dir()
+    result = []
+    try:
+        for fname in os.listdir(backups_dir):
+            if not (fname.startswith('bitacora_') and fname.endswith('.db')):
+                continue
+            fpath = os.path.join(backups_dir, fname)
+            try:
+                st = os.stat(fpath)
+                result.append({
+                    'filename': fname,
+                    'size_bytes': st.st_size,
+                    'created_at': datetime.fromtimestamp(st.st_mtime, PERU_TZ).strftime('%Y-%m-%d %H:%M:%S')
+                    if PERU_TZ else datetime.fromtimestamp(st.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                })
+            except OSError:
+                continue
+        result.sort(key=lambda x: x['created_at'], reverse=True)
+    except Exception:
+        pass
+    return result
 
 
 def run_migrations(cursor):
@@ -858,9 +964,11 @@ def run_migrations(cursor):
         )
     ''')
     applied = {r[0] for r in cursor.execute("SELECT version FROM schema_migrations").fetchall()}
-    for version, name, fn in MIGRATIONS:
-        if version in applied:
-            continue
+    pending = [(v, n, fn) for (v, n, fn) in MIGRATIONS if v not in applied]
+    if pending:
+        # Antes de aplicar cualquier migración nueva, tomar snapshot automático de seguridad
+        create_hot_backup(reason=f"pre_mig_v{pending[0][0]}")
+    for version, name, fn in pending:
         fn(cursor)
         cursor.execute(
             "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",

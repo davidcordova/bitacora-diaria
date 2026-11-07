@@ -1311,6 +1311,35 @@ export const api = {
     return await res.json();
   },
 
+  async downloadDatabaseBackup(): Promise<void> {
+    const res = await authFetch(`${API_BASE}/admin/backup-db`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al generar el respaldo SQLite' }));
+      throw new Error(err.error || 'Error al generar el respaldo SQLite');
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const today = new Date().toISOString().slice(0, 10);
+    a.download = `bitacora_backup_${today}.db`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+  async getClientesSugerencias(): Promise<string[]> {
+    try {
+      const res = await authFetch(`${API_BASE}/clientes/sugerencias`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data?.clientes) ? data.clientes : [];
+    } catch {
+      return [];
+    }
+  },
+
   saveToLocalStorage(bitacora: Bitacora) {
     try {
       const existingStr = localStorage.getItem('bitacoras_history');

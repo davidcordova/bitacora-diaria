@@ -34,6 +34,7 @@ from security import (
     issue_vault_token, vault_unlocked, VAULT_UNLOCK_SECONDS, VAULT_MAX_FAILED_UNLOCKS,
     user_can_review_owner,
 )
+from routes.system_routes import system_bp, normalize_client_name
 
 logging.basicConfig(
     level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
@@ -44,6 +45,7 @@ logger = logging.getLogger('bitacora')
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 register_security(app)
+app.register_blueprint(system_bp)
 
 
 def validate_new_password(password):
@@ -1996,7 +1998,7 @@ def save_bitacora():
                     duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
-                    act.get('para_cliente', ''),
+                    normalize_client_name(act.get('para_cliente', '')),
                     estado_to_write,
                     evidencias_json,
                     shared_with_json,
@@ -2030,7 +2032,7 @@ def save_bitacora():
                     duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
-                    act.get('para_cliente', ''),
+                    normalize_client_name(act.get('para_cliente', '')),
                     act.get('estado', 'completada'),
                     evidencias_json,
                     shared_with_json,
@@ -2419,7 +2421,7 @@ def update_actividad_detalle(act_id):
             data.get('duracion_min'),
             data.get('tipo_trabajo'),
             data.get('descripcion'),
-            data.get('para_cliente'),
+            normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
             data.get('estado'),
             evidencias_json,
             now_peru,
@@ -2449,7 +2451,7 @@ def update_actividad_detalle(act_id):
             data.get('duracion_min'),
             data.get('tipo_trabajo'),
             data.get('descripcion'),
-            data.get('para_cliente'),
+            normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
             data.get('estado'),
             evidencias_json,
             shared_with_json,
