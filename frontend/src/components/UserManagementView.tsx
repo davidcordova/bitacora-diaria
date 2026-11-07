@@ -37,6 +37,7 @@ import { User, Team, UserRole, SystemSettings, UserDelegation } from '../types';
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 import { confirmDialog, alertDialog } from './DialogHost';
+import { McpIntegrationPanel } from './McpIntegrationPanel';
 
 interface UserManagementViewProps {
   teams: Team[];
@@ -1153,6 +1154,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </details>
             </div>
           </div>
+
+          {/* CARD MCP: SERVIDOR MCP Y PUENTE PARA IA EXTERNA */}
+          <McpIntegrationPanel />
 
           {/* CARD 1: IDENTIDAD VISUAL Y MARCA */}
           <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-6 shadow-sm">

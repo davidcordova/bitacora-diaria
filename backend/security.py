@@ -167,7 +167,7 @@ def clear_login_failures(username):
 def _is_public(path, method):
     if method == 'OPTIONS':
         return True
-    if path in ('/api/health', '/api/auth/login'):
+    if path in ('/api/health', '/api/auth/login', '/api/mcp/openapi.json'):
         return True
     if path == '/api/settings' and method == 'GET':
         return True
@@ -371,12 +371,36 @@ def register_security(app):
 
         auth = request.headers.get('Authorization', '')
         token = auth[7:].strip() if auth.lower().startswith('bearer ') else ''
+        mcp_header_key = (request.headers.get('X-MCP-API-Key') or request.args.get('api_key') or '').strip()
+        candidate_mcp_key = mcp_header_key if mcp_header_key.startswith('mcp_bita_') else (token if token.startswith('mcp_bita_') else '')
+
+        if candidate_mcp_key:
+            if not path.startswith('/api/mcp'):
+                return jsonify({'error': 'La clave MCP solo está autorizada para endpoints /api/mcp*', 'code': 'mcp_scope_error'}), 403
+            from routes.mcp_routes import verify_mcp_api_key
+            ok, mode_or_err = verify_mcp_api_key(candidate_mcp_key)
+            if not ok:
+                return jsonify({'error': mode_or_err, 'code': 'mcp_auth_invalid'}), 401
+            g.current_user = {
+                'id': 1,
+                'username': 'mcp_agent',
+                'full_name': 'Agente IA (MCP)',
+                'role': 'admin',
+                'is_mcp': True,
+                'mcp_mode': mode_or_err,
+            }
+            return None
+
         if not token:
             return jsonify({'error': 'Autenticación requerida', 'code': 'auth_required'}), 401
 
         user, err = _load_user_from_token(token)
         if not user:
             return jsonify({'error': err, 'code': 'auth_invalid'}), 401
+        if path.startswith('/api/mcp'):
+            from routes.mcp_routes import get_or_init_mcp_settings
+            cfg = get_or_init_mcp_settings()
+            user['mcp_mode'] = cfg['access_mode']
         g.current_user = user
 
         # Contraseña temporal o por defecto: solo lectura hasta que el usuario la cambie

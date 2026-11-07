@@ -1340,6 +1340,63 @@ export const api = {
     }
   },
 
+  async getMcpConfig(): Promise<{
+    enabled: boolean;
+    access_mode: 'read_only' | 'read_write';
+    api_key: string;
+    api_key_masked: string;
+    server_name: string;
+    protocol_version: string;
+    tools: { name: string; description: string }[];
+    resources: { uri: string; name: string; description: string }[];
+    prompts: { name: string; description: string }[];
+  }> {
+    const res = await authFetch(`${API_BASE}/admin/mcp/config`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al cargar configuración MCP' }));
+      throw new Error(err.error || 'Error al cargar configuración MCP');
+    }
+    return res.json();
+  },
+
+  async updateMcpConfig(payload: { enabled?: boolean; access_mode?: 'read_only' | 'read_write' }) {
+    const res = await authFetch(`${API_BASE}/admin/mcp/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar configuración MCP' }));
+      throw new Error(err.error || 'Error al actualizar configuración MCP');
+    }
+    return res.json();
+  },
+
+  async rotateMcpApiKey(): Promise<{ ok: boolean; api_key: string; api_key_masked: string; message: string }> {
+    const res = await authFetch(`${API_BASE}/admin/mcp/rotate-key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al regenerar API Key MCP' }));
+      throw new Error(err.error || 'Error al regenerar API Key MCP');
+    }
+    return res.json();
+  },
+
+  async testMcpTool(tool: string, args: Record<string, any> = {}): Promise<any> {
+    const res = await authFetch(`${API_BASE}/mcp/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, arguments: args }),
+    });
+    const data = await res.json().catch(() => ({ ok: false, error: 'Respuesta inválida del servidor MCP' }));
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error || 'Error al probar herramienta MCP');
+    }
+    return data.result;
+  },
+
   saveToLocalStorage(bitacora: Bitacora) {
     try {
       const existingStr = localStorage.getItem('bitacoras_history');

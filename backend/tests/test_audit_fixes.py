@@ -204,3 +204,85 @@ def test_clientes_sugerencias_normalizacion(client, make_user):
     # No debe duplicarse en minúsculas
     assert sum(1 for c in clientes if c.lower() == 'marketing alterno') == 1
 
+
+def test_mcp_server_jsonrpc_rest_and_security(client, make_user):
+    """Verifica el servidor MCP (JSON-RPC 2.0, puente REST, OpenAPI, aislamiento de clave y modos de acceso)."""
+    admin = make_user(role='admin')
+    analista = make_user(role='analista')
+
+    # 1. Analista no puede leer la configuración MCP de admin
+    assert client.get('/api/admin/mcp/config', headers=analista['h']).status_code == 403
+
+    # 2. Admin obtiene la configuración MCP e inicializa la API Key
+    r_cfg = client.get('/api/admin/mcp/config', headers=admin['h'])
+    assert r_cfg.status_code == 200
+    mcp_key = r_cfg.json['api_key']
+    assert mcp_key.startswith('mcp_bita_')
+    assert r_cfg.json['access_mode'] == 'read_only'
+
+    mcp_headers = {'Authorization': f'Bearer {mcp_key}'}
+
+    # 3. La API Key MCP NO puede usarse fuera de /api/mcp*
+    r_outside = client.get('/api/users', headers=mcp_headers)
+    assert r_outside.status_code == 403
+
+    # 4. JSON-RPC 2.0: initialize, tools/list, tools/call y resources/read
+    r_init = client.post('/api/mcp', json={
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'initialize',
+        'params': {'protocolVersion': '2024-11-05'},
+    }, headers=mcp_headers)
+    assert r_init.status_code == 200
+    assert r_init.json['result']['serverInfo']['name'] == 'bitacora-mkt-mcp'
+
+    r_tools = client.post('/api/mcp', json={
+        'jsonrpc': '2.0',
+        'id': 2,
+        'method': 'tools/list',
+    }, headers=mcp_headers)
+    assert r_tools.status_code == 200
+    tool_names = [t['name'] for t in r_tools.json['result']['tools']]
+    assert 'resumen_ejecutivo_equipo' in tool_names
+    assert 'consultar_actividades' in tool_names
+
+    r_call = client.post('/api/mcp', json={
+        'jsonrpc': '2.0',
+        'id': 3,
+        'method': 'tools/call',
+        'params': {'name': 'resumen_ejecutivo_equipo', 'arguments': {'periodo': 'hoy'}},
+    }, headers=mcp_headers)
+    assert r_call.status_code == 200
+    assert r_call.json['result']['isError'] is False
+    assert 'kpis' in r_call.json['result']['structuredContent']
+
+    # 5. En modo read_only, registrar_actividad_bitacora es rechazado
+    r_write_denied = client.post('/api/mcp/query', json={
+        'tool': 'registrar_actividad_bitacora',
+        'arguments': {'colaborador': analista['user']['username'], 'descripcion': 'Tarea desde IA'},
+    }, headers=mcp_headers)
+    assert r_write_denied.status_code == 403
+
+    # 6. Admin habilita read_write y el agente IA registra actividad
+    client.post('/api/admin/mcp/config', json={'access_mode': 'read_write'}, headers=admin['h'])
+    r_write_ok = client.post('/api/mcp/query', json={
+        'tool': 'registrar_actividad_bitacora',
+        'arguments': {
+            'colaborador': analista['user']['username'],
+            'descripcion': 'Tarea creada por Agente IA MCP',
+            'para_cliente': 'SOLOPROMO',
+            'duracion_min': 45,
+        },
+    }, headers=mcp_headers)
+    assert r_write_ok.status_code == 200
+    assert r_write_ok.json['result']['status'] == 'created'
+
+    # 7. Rotación de clave invalida la anterior inmediatamente
+    r_rot = client.post('/api/admin/mcp/rotate-key', headers=admin['h'])
+    assert r_rot.status_code == 200
+    new_key = r_rot.json['api_key']
+    assert new_key != mcp_key
+    assert client.get('/api/mcp', headers=mcp_headers).status_code == 401
+    assert client.get('/api/mcp', headers={'Authorization': f'Bearer {new_key}'}).status_code == 200
+
+
