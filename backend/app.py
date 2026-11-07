@@ -350,7 +350,7 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-MCP-API-Key,X-Vault-Token,Mcp-Session-Id'
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS,PATCH'
-    response.headers['Access-Control-Expose-Headers'] = 'Mcp-Session-Id'
+    response.headers['Access-Control-Expose-Headers'] = 'Mcp-Session-Id,WWW-Authenticate'
     return response
 
 def get_default_hora_inicio(cursor=None):

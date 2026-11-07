@@ -12,11 +12,15 @@ Soporta:
 
 import re
 import json
+import base64
 import hashlib
 import secrets
+import urllib.parse
 from datetime import datetime, timedelta
 from collections import Counter, defaultdict
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request, g, redirect, make_response
+from werkzeug.security import check_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from database import (
     get_db,
@@ -25,13 +29,25 @@ from database import (
     get_peru_today_str,
 )
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
+from security import _get_secret_key
 from routes.system_routes import normalize_client_name
 
 mcp_bp = Blueprint('mcp_bp', __name__)
 
-MCP_PROTOCOL_VERSION = '2024-11-05'
+MCP_PROTOCOL_VERSION = '2025-03-26'
+MCP_OAUTH_CLIENT_ID = 'bitacora-mcp'
+MCP_OAUTH_CODE_SALT = 'bitacora-mcp-oauth-code-v1'
 MCP_SERVER_NAME = 'bitacora-mkt-mcp'
 MCP_SERVER_VERSION = '2.3.0'
+
+
+def _get_public_base_url():
+    """Determina la URL pública base (garantizando HTTPS en dominios productivos detrás de proxy)."""
+    host = request.host or 'sistemasmkt.net.pe'
+    proto = request.headers.get('X-Forwarded-Proto') or request.scheme or 'https'
+    if not host.startswith(('localhost', '127.0.0.1', '192.168.')):
+        proto = 'https'
+    return f"{proto}://{host}"
 
 _HTML_RE = re.compile(r'<[^>]+>')
 
@@ -1250,9 +1266,9 @@ def _handle_jsonrpc_message(msg):
 
     try:
         if method == 'initialize':
-            client_version = params.get('protocolVersion') or MCP_PROTOCOL_VERSION
-            supported = ('2025-03-26', '2024-11-05')
-            negotiated = client_version if client_version in supported else MCP_PROTOCOL_VERSION
+            client_version = str(params.get('protocolVersion') or MCP_PROTOCOL_VERSION).strip()
+            supported = ('2025-06-18', '2025-03-26', '2024-11-05')
+            negotiated = client_version if (client_version in supported or client_version.startswith(('2024-', '2025-'))) else MCP_PROTOCOL_VERSION
             return {
                 'jsonrpc': '2.0',
                 'id': req_id,
@@ -1352,7 +1368,7 @@ def _handle_jsonrpc_message(msg):
         }
 
 
-@mcp_bp.route('/api/mcp', methods=['GET', 'POST', 'OPTIONS'])
+@mcp_bp.route('/api/mcp', methods=['GET', 'POST', 'DELETE', 'OPTIONS'])
 def mcp_streamable_endpoint():
     """
     Endpoint principal Model Context Protocol (MCP) sobre HTTP.
@@ -1362,9 +1378,14 @@ def mcp_streamable_endpoint():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
+    if request.method == 'DELETE':
+        return '', 204
+
+    session_id = request.headers.get('Mcp-Session-Id') or 'bitacora-mcp-session-v1'
+
     if request.method == 'GET':
         actor = getattr(g, 'current_user', None) or {}
-        return jsonify({
+        resp = jsonify({
             'server': MCP_SERVER_NAME,
             'version': MCP_SERVER_VERSION,
             'protocolVersion': MCP_PROTOCOL_VERSION,
@@ -1380,7 +1401,9 @@ def mcp_streamable_endpoint():
                 'tools_catalog': '/api/mcp/tools',
                 'openapi_spec': '/api/mcp/openapi.json',
             },
-        }), 200
+        })
+        resp.headers['Mcp-Session-Id'] = session_id
+        return resp, 200
 
     payload = request.get_json(silent=True)
     if payload is None:
@@ -1397,13 +1420,370 @@ def mcp_streamable_endpoint():
             if res is not None:
                 responses.append(res)
         if not responses:
-            return '', 202
-        return jsonify(responses), 200
+            r202 = make_response('', 202)
+            r202.headers['Mcp-Session-Id'] = session_id
+            return r202
+        resp = jsonify(responses)
+        resp.headers['Mcp-Session-Id'] = session_id
+        return resp, 200
 
     response_obj = _handle_jsonrpc_message(payload)
     if response_obj is None:
-        return '', 202
-    return jsonify(response_obj), 200
+        r202 = make_response('', 202)
+        r202.headers['Mcp-Session-Id'] = session_id
+        return r202
+    resp = jsonify(response_obj)
+    resp.headers['Mcp-Session-Id'] = session_id
+    return resp, 200
+
+
+# ============================================================================
+# DESCUBRIMIENTO Y FLUJO OAUTH 2.0 / 2.1 PARA GEMINI WEB Y CLAUDE WEB
+# (RFC 8414, RFC 9728, RFC 7591 & PKCE S256)
+# ============================================================================
+
+@mcp_bp.route('/.well-known/oauth-protected-resource', methods=['GET', 'OPTIONS'])
+@mcp_bp.route('/.well-known/oauth-protected-resource/<path:subpath>', methods=['GET', 'OPTIONS'])
+def oauth_protected_resource_metadata(subpath=None):
+    """RFC 9728: Metadatos del recurso protegido MCP para descubrimiento automático de Gemini y Claude."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    base_url = _get_public_base_url()
+    return jsonify({
+        'resource': f'{base_url}/api/mcp',
+        'authorization_servers': [base_url],
+        'bearer_methods_supported': ['header'],
+        'scopes_supported': ['mcp', 'read', 'write'],
+    }), 200
+
+
+@mcp_bp.route('/.well-known/oauth-authorization-server', methods=['GET', 'OPTIONS'])
+@mcp_bp.route('/.well-known/oauth-authorization-server/<path:subpath>', methods=['GET', 'OPTIONS'])
+@mcp_bp.route('/.well-known/openid-configuration', methods=['GET', 'OPTIONS'])
+@mcp_bp.route('/.well-known/openid-configuration/<path:subpath>', methods=['GET', 'OPTIONS'])
+def oauth_authorization_server_metadata(subpath=None):
+    """RFC 8414: Metadatos del servidor de autorización OAuth 2.0 / 2.1 integrado."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    base_url = _get_public_base_url()
+    return jsonify({
+        'issuer': base_url,
+        'authorization_endpoint': f'{base_url}/api/mcp/oauth/authorize',
+        'token_endpoint': f'{base_url}/api/mcp/oauth/token',
+        'registration_endpoint': f'{base_url}/api/mcp/oauth/register',
+        'response_types_supported': ['code'],
+        'grant_types_supported': ['authorization_code', 'refresh_token', 'client_credentials'],
+        'token_endpoint_auth_methods_supported': ['client_secret_post', 'client_secret_basic', 'none'],
+        'code_challenge_methods_supported': ['S256', 'plain'],
+        'scopes_supported': ['mcp', 'read', 'write'],
+    }), 200
+
+
+@mcp_bp.route('/api/mcp/oauth/register', methods=['POST', 'OPTIONS'])
+def oauth_dynamic_client_register():
+    """RFC 7591: Registro dinámico de clientes OAuth para conectores MCP que no piden Client ID manual."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    body = request.get_json(silent=True) or {}
+    cfg = get_or_init_mcp_settings()
+    return jsonify({
+        'client_id': MCP_OAUTH_CLIENT_ID,
+        'client_secret': cfg['api_key'],
+        'client_name': body.get('client_name', 'MCP AI Client'),
+        'redirect_uris': body.get('redirect_uris', []),
+        'grant_types': ['authorization_code', 'refresh_token', 'client_credentials'],
+        'response_types': ['code'],
+        'token_endpoint_auth_method': body.get('token_endpoint_auth_method', 'client_secret_post'),
+    }), 201
+
+
+def _issue_oauth_code(payload):
+    s = URLSafeTimedSerializer(_get_secret_key(), salt=MCP_OAUTH_CODE_SALT)
+    return s.dumps(payload)
+
+
+def _load_oauth_code(code_str):
+    s = URLSafeTimedSerializer(_get_secret_key(), salt=MCP_OAUTH_CODE_SALT)
+    return s.loads(code_str, max_age=600)
+
+
+def _render_oauth_authorize_html(params, error_msg=None):
+    hidden_inputs = '\n'.join(
+        f'<input type="hidden" name="{k}" value="{str(v or "").replace(chr(34), "&quot;")}" />'
+        for k, v in params.items()
+    )
+    err_block = (
+        f'<div style="background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:14px;">{error_msg}</div>'
+        if error_msg
+        else ''
+    )
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Autorizar Conexión MCP — Bitácora Digital</title>
+  <style>
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #090D16 0%, #111827 60%, #0E2A38 100%);
+      color: #0F172A;
+      padding: 16px;
+    }}
+    .card {{
+      background: #FFFFFF;
+      width: 100%;
+      max-width: 410px;
+      border-radius: 20px;
+      padding: 28px 26px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.45);
+    }}
+    .badge {{
+      display: inline-block;
+      background: #ECFEFF;
+      color: #0E7490;
+      border: 1px solid #A5F3FC;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }}
+    h1 {{
+      margin: 0 0 6px 0;
+      font-size: 20px;
+      font-weight: 800;
+      color: #0F172A;
+    }}
+    p {{
+      margin: 0 0 18px 0;
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.45;
+    }}
+    label {{
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #334155;
+      margin-bottom: 5px;
+    }}
+    input[type="text"], input[type="password"] {{
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #CBD5E1;
+      font-size: 13px;
+      margin-bottom: 14px;
+      outline: none;
+    }}
+    input:focus {{
+      border-color: #06B6D4;
+      box-shadow: 0 0 0 3px rgba(6,182,212,0.18);
+    }}
+    .divider {{
+      text-align: center;
+      font-size: 11px;
+      color: #94A3B8;
+      margin: 6px 0 12px 0;
+      font-weight: 700;
+      text-transform: uppercase;
+    }}
+    button {{
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #06B6D4, #0891B2);
+      color: #FFFFFF;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+    }}
+    button:hover {{
+      filter: brightness(1.06);
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="badge">OAuth 2.0 • Model Context Protocol</span>
+    <h1>Conectar Bitácora Digital con IA</h1>
+    <p>Autoriza el acceso seguro al servidor MCP de <strong>Marketing Alterno Perú</strong> ingresando tus credenciales de Administrador o tu MCP API Key.</p>
+    {err_block}
+    <form method="POST" action="/api/mcp/oauth/authorize">
+      {hidden_inputs}
+      <label>Usuario Administrador</label>
+      <input type="text" name="username" placeholder="admin" value="admin" autocomplete="username" />
+      <label>Contraseña de Administrador</label>
+      <input type="password" name="password" placeholder="Tu contraseña de Bitácora" autocomplete="current-password" />
+      <div class="divider">— O usa directamente tu clave MCP —</div>
+      <label>MCP API Key (Opcional si ingresas contraseña)</label>
+      <input type="password" name="mcp_api_key" placeholder="mcp_bita_..." />
+      <button type="submit">Autorizar y Conectar →</button>
+    </form>
+  </div>
+</body>
+</html>"""
+
+
+@mcp_bp.route('/api/mcp/oauth/authorize', methods=['GET', 'POST', 'OPTIONS'])
+def oauth_authorize_endpoint():
+    """
+    Endpoint interactivo OAuth 2.0 Authorization Code + PKCE para Gemini y Claude.
+    Permite autorizar la conexión iniciando sesión como admin o con la MCP API Key.
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    src = request.values
+    oauth_params = {
+        'response_type': src.get('response_type', 'code'),
+        'client_id': src.get('client_id', MCP_OAUTH_CLIENT_ID),
+        'redirect_uri': src.get('redirect_uri', ''),
+        'state': src.get('state', ''),
+        'scope': src.get('scope', 'mcp'),
+        'code_challenge': src.get('code_challenge', ''),
+        'code_challenge_method': src.get('code_challenge_method', 'S256'),
+    }
+
+    if request.method == 'GET':
+        return _render_oauth_authorize_html(oauth_params), 200, {'Content-Type': 'text/html; charset=utf-8'}
+
+    # POST: validar credenciales de admin o MCP API Key
+    mcp_key_input = (request.form.get('mcp_api_key') or '').strip()
+    username = (request.form.get('username') or '').strip()
+    password = request.form.get('password') or ''
+
+    authorized = False
+    if mcp_key_input:
+        ok, _ = verify_mcp_api_key(mcp_key_input)
+        authorized = ok
+
+    if not authorized and username and password:
+        conn = get_db()
+        try:
+            row = conn.execute(
+                "SELECT id, role, is_active, password_hash FROM users WHERE LOWER(username) = LOWER(?) LIMIT 1",
+                (username,),
+            ).fetchone()
+            if row and row['is_active'] and row['role'] == 'admin' and check_password_hash(row['password_hash'], password):
+                authorized = True
+        finally:
+            conn.close()
+
+    if not authorized:
+        return (
+            _render_oauth_authorize_html(oauth_params, 'Credenciales inválidas. Verifica la contraseña de admin o la MCP API Key.'),
+            401,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
+
+    code = _issue_oauth_code({
+        'client_id': oauth_params['client_id'],
+        'redirect_uri': oauth_params['redirect_uri'],
+        'code_challenge': oauth_params['code_challenge'],
+        'code_challenge_method': oauth_params['code_challenge_method'],
+    })
+
+    redirect_uri = oauth_params['redirect_uri']
+    if not redirect_uri:
+        return jsonify({'code': code, 'state': oauth_params['state']}), 200
+
+    sep = '&' if '?' in redirect_uri else '?'
+    target = f"{redirect_uri}{sep}code={urllib.parse.quote(code)}"
+    if oauth_params['state']:
+        target += f"&state={urllib.parse.quote(oauth_params['state'])}"
+    return redirect(target, code=302)
+
+
+@mcp_bp.route('/api/mcp/oauth/token', methods=['POST', 'OPTIONS'])
+def oauth_token_endpoint():
+    """
+    Endpoint OAuth 2.0 Token (`authorization_code`, `refresh_token`, `client_credentials`).
+    Compatible con envío por formulario URL-encoded, JSON o HTTP Basic Auth, y PKCE S256/plain.
+    """
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = {}
+    if request.is_json:
+        data.update(request.get_json(silent=True) or {})
+    if request.form:
+        data.update(request.form.to_dict())
+
+    grant_type = (data.get('grant_type') or 'authorization_code').strip()
+    cfg = get_or_init_mcp_settings()
+    if not cfg['enabled']:
+        return jsonify({'error': 'access_denied', 'error_description': 'MCP server is disabled'}), 403
+
+    # Extraer client_secret desde Basic Auth si fue enviado en cabecera Authorization
+    client_secret = (data.get('client_secret') or '').strip()
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.lower().startswith('basic '):
+        try:
+            decoded = base64.b64decode(auth_header[6:].strip()).decode('utf-8', errors='ignore')
+            if ':' in decoded:
+                _, basic_secret = decoded.split(':', 1)
+                if not client_secret:
+                    client_secret = basic_secret.strip()
+        except Exception:
+            pass
+
+    if grant_type == 'authorization_code':
+        code_str = (data.get('code') or '').strip()
+        if not code_str:
+            return jsonify({'error': 'invalid_request', 'error_description': 'Missing authorization code'}), 400
+        try:
+            code_data = _load_oauth_code(code_str)
+        except (BadSignature, SignatureExpired):
+            return jsonify({'error': 'invalid_grant', 'error_description': 'Invalid or expired authorization code'}), 400
+
+        # Verificar PKCE si el cliente envió code_challenge durante /authorize
+        code_challenge = code_data.get('code_challenge') or ''
+        code_verifier = (data.get('code_verifier') or '').strip()
+        if code_challenge and code_verifier:
+            method = (code_data.get('code_challenge_method') or 'S256').upper()
+            if method == 'S256':
+                digest = hashlib.sha256(code_verifier.encode('ascii')).digest()
+                computed = base64.urlsafe_b64encode(digest).rstrip(b'=').decode('ascii')
+            else:
+                computed = code_verifier
+            if not secrets.compare_digest(computed, code_challenge):
+                return jsonify({'error': 'invalid_grant', 'error_description': 'PKCE verification failed'}), 400
+
+    elif grant_type == 'client_credentials':
+        ok, _ = verify_mcp_api_key(client_secret)
+        if not ok:
+            return jsonify({'error': 'invalid_client', 'error_description': 'Invalid client_secret (use your MCP API Key)'}), 401
+
+    elif grant_type == 'refresh_token':
+        refresh_tok = (data.get('refresh_token') or client_secret).strip()
+        ok, _ = verify_mcp_api_key(refresh_tok)
+        if not ok:
+            return jsonify({'error': 'invalid_grant', 'error_description': 'Invalid refresh token'}), 400
+    else:
+        return jsonify({'error': 'unsupported_grant_type'}), 400
+
+    resp = jsonify({
+        'access_token': cfg['api_key'],
+        'token_type': 'Bearer',
+        'expires_in': 2592000,
+        'refresh_token': cfg['api_key'],
+        'scope': 'mcp read write',
+    })
+    resp.headers['Cache-Control'] = 'no-store'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp, 200
 
 
 # ============================================================================

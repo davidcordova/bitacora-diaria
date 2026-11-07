@@ -285,4 +285,40 @@ def test_mcp_server_jsonrpc_rest_and_security(client, make_user):
     assert client.get('/api/mcp', headers=mcp_headers).status_code == 401
     assert client.get('/api/mcp', headers={'Authorization': f'Bearer {new_key}'}).status_code == 200
 
+    # 8. Descubrimiento y flujo OAuth 2.0 / 2.1 para Gemini Web / Claude Web
+    r_unauth = client.post('/api/mcp', json={'jsonrpc': '2.0', 'id': 1, 'method': 'ping'})
+    assert r_unauth.status_code == 401
+    assert 'resource_metadata=' in r_unauth.headers.get('WWW-Authenticate', '')
+
+    r_prm = client.get('/.well-known/oauth-protected-resource')
+    assert r_prm.status_code == 200
+    assert r_prm.json['resource'].endswith('/api/mcp')
+
+    r_as = client.get('/.well-known/oauth-authorization-server')
+    assert r_as.status_code == 200
+    assert r_as.json['authorization_endpoint'].endswith('/api/mcp/oauth/authorize')
+    assert r_as.json['token_endpoint'].endswith('/api/mcp/oauth/token')
+
+    r_auth_post = client.post('/api/mcp/oauth/authorize', data={
+        'response_type': 'code',
+        'client_id': 'bitacora-mcp',
+        'redirect_uri': 'https://gemini.google.com/callback',
+        'state': 'xyz123',
+        'mcp_api_key': new_key,
+    })
+    assert r_auth_post.status_code == 302
+    loc = r_auth_post.headers['Location']
+    assert 'https://gemini.google.com/callback?code=' in loc
+    code_val = loc.split('code=')[1].split('&')[0]
+
+    r_tok = client.post('/api/mcp/oauth/token', data={
+        'grant_type': 'authorization_code',
+        'code': code_val,
+        'client_id': 'bitacora-mcp',
+        'client_secret': new_key,
+    })
+    assert r_tok.status_code == 200
+    assert r_tok.json['access_token'] == new_key
+
+
 

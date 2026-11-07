@@ -169,6 +169,8 @@ def _is_public(path, method):
         return True
     if path in ('/api/health', '/api/auth/login', '/api/mcp/openapi.json'):
         return True
+    if path.startswith('/api/mcp/oauth/') or path.startswith('/.well-known/'):
+        return True
     if path == '/api/settings' and method == 'GET':
         return True
     if path.startswith('/api/uploads/') and method == 'GET':
@@ -392,7 +394,16 @@ def register_security(app):
             return None
 
         if not token:
-            return jsonify({'error': 'Autenticación requerida', 'code': 'auth_required'}), 401
+            resp = jsonify({'error': 'Autenticación requerida', 'code': 'auth_required'})
+            resp.status_code = 401
+            if path.startswith('/api/mcp'):
+                proto = request.headers.get('X-Forwarded-Proto', request.scheme)
+                base_url = f"{proto}://{request.host}"
+                resp.headers['WWW-Authenticate'] = (
+                    f'Bearer realm="bitacora-mcp", '
+                    f'resource_metadata="{base_url}/.well-known/oauth-protected-resource"'
+                )
+            return resp
 
         user, err = _load_user_from_token(token)
         if not user:
