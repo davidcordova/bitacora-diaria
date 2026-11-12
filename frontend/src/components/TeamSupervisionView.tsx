@@ -50,6 +50,7 @@ import { api } from '../services/api';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 import { RevisionModal, RevisionBadge } from './RevisionModal';
 import type { RevisionDecision, RevisionResult } from '../types';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface TeamSupervisionViewProps {
   currentUser: User | null;
@@ -104,6 +105,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   const [teamTab, setTeamTab] = useState<'feed' | 'semaforo' | 'kanban'>('feed');
   // Side drawer for inspecting a member's activities without switching view
   const [drawerMemberId, setDrawerMemberId] = useState<number | null>(null);
+  useModalBehavior(drawerMemberId !== null, () => setDrawerMemberId(null));
 
   const [teamBitacoras, setTeamBitacoras] = useState<Bitacora[]>([]);
   const [liveActivities, setLiveActivities] = useState<LiveFeedActividad[]>([]);
@@ -175,8 +177,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   }, [accessibleTeams, users, currentUser, selectedTeamFilter, teamsMap]);
 
   // Load bitacoras and live activities for all members in the accessible teams
-  const loadAllTeamData = async () => {
-    setLoading(true);
+  const loadAllTeamData = async (silent: boolean | unknown = false) => {
+    const isSilent = silent === true;
+    if (!isSilent) setLoading(true);
     try {
       const teamIdParam = selectedTeamFilter !== 'all' ? selectedTeamFilter : undefined;
       const [bitacorasList, liveRes] = await Promise.all([
@@ -207,20 +210,20 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     } catch (e) {
       console.error('Error fetching team bitacoras', e);
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
 
   // Immediate fetch on mount, date change, or team filter change
   useEffect(() => {
-    loadAllTeamData();
+    loadAllTeamData(false);
   }, [selectedDate, selectedTeamFilter, currentUser?.id]);
 
-  // Auto-refresh cada 20 s solo mientras la pestaña está visible; al volver se refresca al instante.
+  // Auto-refresh silencioso cada 20 s solo mientras la pestaña está visible; al volver se refresca sin parpadeo.
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
     const start = () => {
-      if (!interval) interval = setInterval(loadAllTeamData, 20000);
+      if (!interval) interval = setInterval(() => loadAllTeamData(true), 20000);
     };
     const stop = () => {
       if (interval) clearInterval(interval);
@@ -228,7 +231,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     };
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
-        loadAllTeamData();
+        loadAllTeamData(true);
         start();
       } else {
         stop();
@@ -1605,7 +1608,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                         );
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                       }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 text-slate-950 rounded-full font-bold shadow-xs cursor-pointer min-h-[40px]"
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 dark:text-slate-950 rounded-full font-bold shadow-xs cursor-pointer min-h-[40px]"
                     >
                       <MessageCircle className="w-4 h-4" />
                       <span>Contactar por WhatsApp</span>
@@ -1706,7 +1709,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   setSelectedMemberId(drawerWorkload.member.id);
                   setDrawerMemberId(null);
                 }}
-                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 rounded-full text-xs font-bold shadow-sm transition-all text-center cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 rounded-full text-xs font-bold shadow-sm transition-all text-center cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5"
               >
                 <span>Ver en Pantalla Completa</span>
                 <ExternalLink className="w-3.5 h-3.5" />

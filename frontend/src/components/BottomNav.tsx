@@ -23,17 +23,44 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const isAdmin = role === 'admin';
   const isLider = role === 'lider' || currentUser?.is_leader || isAdmin;
 
+  const secondaryLabels: Partial<Record<ViewMode, string>> = {
+    dashboard: 'Métricas',
+    vault: 'Accesos',
+    buzon: 'Buzón',
+    gestion: 'Gestión',
+    manual: 'Guía',
+    ...(isLider ? { historial: 'Historial' } : {}),
+  };
+  const activeSecondaryLabel = secondaryLabels[currentView];
+  const isMoreActive = Boolean(activeSecondaryLabel);
+
+  const navItemClass = (active: boolean) =>
+    `flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer relative min-h-[44px] ${
+      active
+        ? 'text-sky-600 dark:text-[#00F0FF] font-bold bg-sky-500/10 dark:bg-[#00F0FF]/10'
+        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+    }`;
+
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#13141F]/95 backdrop-blur-md border-t border-slate-200/90 dark:border-[#252636] py-1.5 px-1 flex items-center justify-around shadow-lg shadow-slate-900/10 safe-area-bottom">
+    <nav
+      aria-label="Navegación móvil principal"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#12141E]/95 backdrop-blur-md border-t border-slate-200/90 dark:border-white/10 py-1.5 px-1 flex items-center justify-around shadow-lg shadow-slate-900/10 safe-area-bottom"
+    >
       {/* 1. Mi Bitácora */}
       <button
         type="button"
         onClick={() => onViewChange('lista')}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer min-h-[44px] ${
-          currentView === 'lista' ? 'text-cyan-600 dark:text-[#00F0FF] font-bold' : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-        }`}
+        aria-current={currentView === 'lista' ? 'page' : undefined}
+        className={navItemClass(currentView === 'lista')}
       >
-        <LayoutList className="w-5 h-5" />
+        <div className="relative">
+          <LayoutList className="w-5 h-5" />
+          {activitiesCount > 0 && (
+            <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[15px] h-[15px] rounded-full bg-sky-600 dark:bg-[#00F0FF] text-white dark:text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
+              {activitiesCount > 99 ? '99+' : activitiesCount}
+            </span>
+          )}
+        </div>
         <span className="text-[10px] mt-0.5">Bitácora</span>
       </button>
 
@@ -41,13 +68,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       <button
         type="button"
         onClick={() => onViewChange('kanban')}
-        className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer relative min-h-[44px] ${
-          currentView === 'kanban' ? 'text-cyan-600 dark:text-[#00F0FF] font-bold' : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-        }`}
+        aria-current={currentView === 'kanban' ? 'page' : undefined}
+        className={navItemClass(currentView === 'kanban')}
       >
-        <div className="relative">
-          <Kanban className="w-5 h-5" />
-        </div>
+        <Kanban className="w-5 h-5" />
         <span className="text-[10px] mt-0.5">Tablero</span>
       </button>
 
@@ -56,9 +80,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           onClick={() => onViewChange('equipo')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer min-h-[44px] ${
-            currentView === 'equipo' ? 'text-cyan-600 dark:text-[#00F0FF] font-bold' : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-          }`}
+          aria-current={currentView === 'equipo' ? 'page' : undefined}
+          className={navItemClass(currentView === 'equipo')}
         >
           <Users className="w-5 h-5" />
           <span className="text-[10px] mt-0.5">Equipo</span>
@@ -67,9 +90,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <button
           type="button"
           onClick={() => onViewChange('historial')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer min-h-[44px] ${
-            currentView === 'historial' ? 'text-cyan-600 dark:text-[#00F0FF] font-bold' : 'text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-          }`}
+          aria-current={currentView === 'historial' ? 'page' : undefined}
+          className={navItemClass(currentView === 'historial')}
         >
           <History className="w-5 h-5" />
           <span className="text-[10px] mt-0.5">Historial</span>
@@ -80,20 +102,23 @@ export const BottomNav: React.FC<BottomNavProps> = ({
       <button
         type="button"
         onClick={onOpenSummary}
-        className="flex flex-col items-center justify-center py-1 px-2.5 text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer min-h-[44px]"
+        className="flex flex-col items-center justify-center py-1 px-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer min-h-[44px]"
       >
-        <FileText className="w-5 h-5 text-cyan-600 dark:text-[#00F0FF]" />
+        <FileText className="w-5 h-5 text-sky-600 dark:text-[#00F0FF]" />
         <span className="text-[10px] mt-0.5">Resumen</span>
       </button>
 
-      {/* 5. Más (Abre Drawer de Menú) */}
+      {/* 5. Más (Abre Drawer de Menú e indica vista secundaria activa) */}
       <button
         type="button"
         onClick={onToggleMobileMenu}
-        className="flex flex-col items-center justify-center py-1 px-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer min-h-[44px]"
+        aria-current={isMoreActive ? 'page' : undefined}
+        className={navItemClass(isMoreActive)}
       >
         <Menu className="w-5 h-5" />
-        <span className="text-[10px] mt-0.5">Más</span>
+        <span className="text-[10px] mt-0.5 truncate max-w-[56px]">
+          {activeSecondaryLabel || 'Más'}
+        </span>
       </button>
     </nav>
   );

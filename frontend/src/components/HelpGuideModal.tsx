@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, CheckCircle2, ListChecks, Users, Send, Sparkles, BookOpen } from 'lucide-react';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface HelpGuideModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface HelpGuideModalProps {
 }
 
 export const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ isOpen, onClose }) => {
+  useModalBehavior(isOpen, onClose);
   if (!isOpen) return null;
 
   const steps = [

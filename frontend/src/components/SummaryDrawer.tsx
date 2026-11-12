@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { X, FileText, Sparkles } from 'lucide-react';
 import { ResumenPreview } from './ResumenPreview';
 import { Bitacora } from '../types';
 import { formatDuration } from '../utils/formatters';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface SummaryDrawerProps {
   isOpen: boolean;
@@ -19,28 +20,7 @@ export const SummaryDrawer: React.FC<SummaryDrawerProps> = ({
   isGenerated,
   onOpenWhatsApp,
 }) => {
-  // Close on Escape key press
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
-
-  // Lock body scroll when drawer is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
+  useModalBehavior(isOpen, onClose);
 
   if (!isOpen) return null;
 

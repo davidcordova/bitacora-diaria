@@ -21,6 +21,7 @@ import {
   BookOpen,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface SidebarProps {
   currentView: ViewMode;
@@ -28,7 +29,6 @@ interface SidebarProps {
   activitiesCount: number;
   onOpenMobileSummary: () => void;
   currentUser: User | null;
-  onOpenLogin: () => void;
   onLogout: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
@@ -63,7 +63,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activitiesCount,
   onOpenMobileSummary,
   currentUser,
-  onOpenLogin,
   onLogout,
   isCollapsed,
   onToggleCollapse,
@@ -76,6 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenPapelera,
   papeleraCount = 0,
 }) => {
+  useModalBehavior(Boolean(isOpenMobile), onCloseMobile);
   const role = currentUser?.role || 'analista';
   const isAdmin = role === 'admin';
   const isLider = role === 'lider' || currentUser?.is_leader || isAdmin;
@@ -370,7 +370,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
 
-            {currentUser ? (
+            {currentUser && (
               <button
                 type="button"
                 onClick={onLogout}
@@ -379,14 +379,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="p-2 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onOpenLogin}
-                className="px-3 py-1.5 btn-pill-primary text-xs font-bold rounded-full"
-              >
-                Ingresar
               </button>
             )}
           </div>

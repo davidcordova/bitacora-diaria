@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
-import confetti from 'canvas-confetti';
 
 import { Sidebar } from './components/Sidebar';
 import { ActividadesLista } from './components/ActividadesLista';
@@ -101,7 +100,6 @@ export function App() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [helpModalOpen, setHelpModalOpen] = useState(false);
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [userProfileModalOpen, setUserProfileModalOpen] = useState(false);
   const [papeleraModalOpen, setPapeleraModalOpen] = useState(false);
@@ -830,7 +828,8 @@ export function App() {
 
   const handleUserUpdated = (updatedUser: User) => {
     setCurrentUser(updatedUser);
-    localStorage.setItem('bitacora_user', JSON.stringify(updatedUser));
+    localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+    localStorage.removeItem('bitacora_user');
     if (bitacora.user_id === updatedUser.id) {
       setBitacora((prev) => ({ ...prev, colaborador: updatedUser.full_name }));
     }
@@ -909,35 +908,116 @@ export function App() {
 
   const handleUpdateActividadDetalle = async (index: number, updatedData: Partial<Actividad>) => {
     const current = bitacora.actividades[index];
-    setBitacora((prev) => {
-      const updated = [...prev.actividades];
-      updated[index] = {
-        ...updated[index],
-        ...updatedData,
-      };
-      return {
-        ...prev,
-        actividades: updated,
-      };
-    });
-    if (current && current.id && !String(current.id).startsWith('act-') && !isNaN(Number(current.id))) {
-      await api.updateActividadDetalle(Number(current.id), updatedData);
-      showToast('success', 'Detalle de actividad guardado');
+    if (!current) return;
+
+    const previousBitacora = bitacora;
+    const updatedActs = [...bitacora.actividades];
+    updatedActs[index] = {
+      ...updatedActs[index],
+      ...updatedData,
+    };
+    const nextBitacora: Bitacora = {
+      ...bitacora,
+      actividades: updatedActs,
+    };
+
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    const persisted = isPersistedId(current.id);
+
+    if (persisted && uid) {
+      // Suprimir el POST /api/bitacoras redundante del debounce: la edición viaja por PUT atómico
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, colab, uid);
+    }
+    setBitacora(nextBitacora);
+
+    if (persisted) {
+      try {
+        setAutoSaveStatus('saving');
+        await api.updateActividadDetalle(Number(current.id), updatedData);
+        setAutoSaveStatus('saved');
+        setLastSavedTime(new Date());
+        showToast('success', 'Detalle de actividad guardado');
+      } catch (err: any) {
+        const msg = err?.message || 'Error al guardar el detalle de la actividad';
+        if (err?.status === 400 || err?.status === 403 || err?.status === 404) {
+          if (uid) {
+            lastSavedSignature.current = getBitacoraSignature(previousBitacora, colab, uid);
+          }
+          setBitacora(previousBitacora);
+          setAutoSaveStatus('saved');
+          showToast('error', msg, 'Acción no permitida');
+        } else {
+          // Fallo de red: habilitar auto-guardado diferido para reintentar automáticamente
+          lastSavedSignature.current = '';
+          setAutoSaveStatus('error');
+          setLastSyncErrorMessage(msg);
+          showToast('info', 'Cambio guardado localmente; se sincronizará al recuperar conexión');
+        }
+      }
+    } else {
+      showToast('success', 'Detalle de actividad actualizado');
     }
   };
 
   const handleUpdateEstado = async (index: number, nuevoEstado: EstadoActividad) => {
     const act = bitacora.actividades[index];
-    handleUpdateActividad(index, 'estado', nuevoEstado);
-    const label =
-      nuevoEstado === 'completada'
-        ? 'Completada'
-        : nuevoEstado === 'en_revision'
-        ? 'En Revisión'
-        : 'En Proceso';
-    showToast('info', `Tarea marcada como "${label}"`);
-    if (act && act.id && !String(act.id).startsWith('act-') && !isNaN(Number(act.id))) {
-      await api.updateActividadEstado(Number(act.id), nuevoEstado);
+    if (!act || act.estado === nuevoEstado) return;
+
+    const labelMap: Record<EstadoActividad, string> = {
+      pendiente: 'Por Iniciar',
+      en_proceso: 'En Proceso',
+      en_revision: 'En Revisión',
+      completada: 'Completada',
+    };
+    const label = labelMap[nuevoEstado] || 'Actualizada';
+
+    const previousBitacora = bitacora;
+    const updatedActs = [...bitacora.actividades];
+    updatedActs[index] = {
+      ...updatedActs[index],
+      estado: nuevoEstado,
+    };
+    const nextBitacora: Bitacora = {
+      ...bitacora,
+      actividades: updatedActs,
+    };
+
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    const persisted = isPersistedId(act.id);
+
+    if (persisted && uid) {
+      // Evitar doble escritura concurrente entre PATCH /estado y POST /api/bitacoras
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, colab, uid);
+    }
+    setBitacora(nextBitacora);
+
+    if (persisted) {
+      try {
+        await api.updateActividadEstado(Number(act.id), nuevoEstado);
+        setAutoSaveStatus('saved');
+        setLastSavedTime(new Date());
+        showToast('info', `Tarea marcada como "${label}"`);
+      } catch (err: any) {
+        const msg = err?.message || 'No se pudo actualizar el estado de la tarea';
+        if (err?.status === 400 || err?.status === 403 || err?.status === 404) {
+          if (uid) {
+            lastSavedSignature.current = getBitacoraSignature(previousBitacora, colab, uid);
+          }
+          setBitacora(previousBitacora);
+          showToast('error', msg, 'Cambio rechazado');
+        } else {
+          lastSavedSignature.current = '';
+          setAutoSaveStatus('error');
+          setLastSyncErrorMessage(msg);
+          showToast('info', `Tarea marcada como "${label}" (pendiente de sincronización)`);
+        }
+      }
+    } else {
+      showToast('info', `Tarea marcada como "${label}"`);
     }
   };
 
@@ -1024,14 +1104,16 @@ export function App() {
       await syncNow(payload);
       setIsGenerated(true);
 
-      try {
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#2563eb', '#38bdf8', '#10b981', '#f59e0b'],
-        });
-      } catch (e) {}
+      import('canvas-confetti')
+        .then(({ default: confetti }) => {
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#0284c7', '#38bdf8', '#10b981', '#f59e0b'],
+          });
+        })
+        .catch(() => {});
 
       showToast('success', '¡Bitácora guardada exitosamente en el servidor!', 'Jornada Registrada');
 
@@ -1059,9 +1141,13 @@ export function App() {
 
   const handleDeleteBitacora = async (id: number) => {
     if (await confirmDialog('¿Deseas eliminar este registro del historial?')) {
-      await api.deleteBitacora(id);
-      setHistorial((prev) => prev.filter((b) => b.id !== id));
-      showToast('info', 'Registro eliminado del historial');
+      try {
+        await api.deleteBitacora(id);
+        setHistorial((prev) => prev.filter((b) => b.id !== id));
+        showToast('info', 'Registro eliminado del historial');
+      } catch (err: any) {
+        showToast('error', err?.message || 'No se pudo eliminar el registro del historial');
+      }
     }
   };
 
@@ -1103,6 +1189,7 @@ export function App() {
     setDelegatedTargets([]);
     setCurrentUser(null);
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('bitacora_user');
     
     // 2. Limpiar borradores globales para evitar sangrado o residuos hacia el siguiente usuario
     localStorage.removeItem('active_bitacora');
@@ -1184,7 +1271,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7F9] dark:bg-[#0B0F17] text-slate-800 dark:text-slate-100 flex flex-row font-sans transition-colors duration-250">
+    <div className="min-h-screen bg-[#F4F7F9] dark:bg-[#0B0C13] text-slate-800 dark:text-slate-100 flex flex-row font-sans transition-colors duration-250">
       {/* Collapsible Sidebar Navigation with Mobile Drawer */}
       <Sidebar
         currentView={viewMode}
@@ -1192,7 +1279,6 @@ export function App() {
         activitiesCount={bitacora.actividades.length}
         onOpenMobileSummary={() => setMobileDrawerOpen(true)}
         currentUser={currentUser}
-        onOpenLogin={() => setLoginModalOpen(true)}
         onLogout={handleLogout}
         isCollapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
@@ -1232,7 +1318,7 @@ export function App() {
           <Suspense
             fallback={
               <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
-                <div className="w-8 h-8 rounded-full border-4 border-slate-300 dark:border-slate-700 border-t-indigo-500 animate-spin" />
+                <div className="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-sky-600 dark:border-t-[#00F0FF] animate-spin" />
                 <span className="sr-only">Cargando vista…</span>
               </div>
             }

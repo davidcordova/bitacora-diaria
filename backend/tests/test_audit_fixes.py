@@ -322,3 +322,45 @@ def test_mcp_server_jsonrpc_rest_and_security(client, make_user):
 
 
 
+
+def test_migration_v3_and_dashboard_indexed_queries(client, make_user, admin):
+    """Verifica migración v3 (backfill seguro de user_id sin colisión única) y consultas optimizadas de Dashboard."""
+    from database import _mig_003_backfill_bitacora_user_ids_and_indexes, get_schema_version
+    assert get_schema_version() >= 3
+
+    u = make_user()
+    team_id = _make_team(u['user']['id'], 'Escuadron Optimizacion')
+
+    # Insertar una bitácora legacy sin user_id y otra con colisión en misma fecha para verificar ausencia de IntegrityError
+    conn = _db()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO bitacoras (user_id, fecha, colaborador, area, necesita_apoyo, apoyo_detalle, tiempo_total_min) VALUES (NULL, '2026-11-10', ?, 'Sistemas', 'Si', 'Acceso VPN', 60)",
+        (u['user']['full_name'],),
+    )
+    orphan_id = cur.lastrowid
+    cur.execute(
+        "INSERT INTO actividades (bitacora_id, descripcion, duracion_min, estado, hora_inicio) VALUES (?, 'Revision de servidores', 60, 'completada', '09:00')",
+        (orphan_id,),
+    )
+    # Fecha con fila canónica ya existente + fila huérfana duplicada
+    cur.execute(
+        "INSERT INTO bitacoras (user_id, fecha, colaborador, area, tiempo_total_min) VALUES (?, '2026-11-11', ?, 'Sistemas', 30)",
+        (u['user']['id'], u['user']['full_name']),
+    )
+    cur.execute(
+        "INSERT INTO bitacoras (user_id, fecha, colaborador, area, tiempo_total_min) VALUES (NULL, '2026-11-11', ?, 'Sistemas', 0)",
+        (u['user']['full_name'],),
+    )
+    _mig_003_backfill_bitacora_user_ids_and_indexes(cur)
+    conn.commit()
+
+    fixed_row = cur.execute("SELECT user_id FROM bitacoras WHERE id = ?", (orphan_id,)).fetchone()
+    conn.close()
+    assert fixed_row['user_id'] == u['user']['id']
+
+    # Consultar Dashboard filtrado por team_id (usa el JOIN indexado b.user_id = u.id)
+    r_dash = client.get(f'/api/dashboard/stats?team_id={team_id}', headers=admin['h'])
+    assert r_dash.status_code == 200
+    assert r_dash.json['resumen']['total_bitacoras'] >= 2
+    assert any(c['colaborador'] == u['user']['full_name'] for c in r_dash.json['por_colaborador'])

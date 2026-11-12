@@ -38,6 +38,7 @@ import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 import { confirmDialog, alertDialog } from './DialogHost';
 import { McpIntegrationPanel } from './McpIntegrationPanel';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface UserManagementViewProps {
   teams: Team[];
@@ -130,6 +131,25 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [deletingUser, setDeletingUser] = useState(false);
 
   const [feedbackMsg, setFeedbackMsg] = useState('');
+
+  const anyAdminModalOpen =
+    showUserModal ||
+    showTeamModal ||
+    showDeleteUserModal ||
+    showDelegationModal ||
+    showDeleteDelegationModal ||
+    showRevokeAllModal ||
+    showCleanConfirmModal;
+
+  useModalBehavior(anyAdminModalOpen, () => {
+    if (showDeleteDelegationModal) setShowDeleteDelegationModal(false);
+    else if (showRevokeAllModal) setShowRevokeAllModal(false);
+    else if (showDeleteUserModal) setShowDeleteUserModal(false);
+    else if (showCleanConfirmModal) setShowCleanConfirmModal(false);
+    else if (showDelegationModal) setShowDelegationModal(false);
+    else if (showTeamModal) setShowTeamModal(false);
+    else if (showUserModal) setShowUserModal(false);
+  });
 
   const loadUsers = async () => {
     setLoading(true);
@@ -580,7 +600,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               onClick={() => setActiveTab('usuarios')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeTab === 'usuarios'
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -592,7 +612,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               onClick={() => setActiveTab('equipos')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeTab === 'equipos'
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -604,7 +624,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               onClick={() => setActiveTab('delegaciones')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeTab === 'delegaciones'
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -617,7 +637,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               onClick={() => setActiveTab('configuracion')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                 activeTab === 'configuracion'
-                  ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -630,7 +650,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="button"
               onClick={handleOpenNewUser}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Nuevo Usuario</span>
@@ -641,7 +661,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="button"
               onClick={handleOpenNewTeam}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
             >
               <FolderPlus className="w-3.5 h-3.5" />
               <span>Nuevo Equipo</span>
@@ -652,7 +672,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="button"
               onClick={() => handleOpenNewDelegation()}
-              className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer shrink-0"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Asignar Apoyo</span>
@@ -1394,7 +1414,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         type="button"
                         disabled={uploadingTarget === 'loginBg'}
                         onClick={() => loginBgInputRef.current?.click()}
-                        className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-bold py-2 px-4 rounded-full text-xs flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-sm hover:brightness-110"
+                        className="bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:text-slate-950 font-bold py-2 px-4 rounded-full text-xs flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-sm dark:hover:brightness-110 transition-colors"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>{uploadingTarget === 'loginBg' ? 'Subiendo wallpaper...' : 'Subir Wallpaper'}</span>
@@ -1601,7 +1621,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="submit"
               disabled={savingSettings}
-              className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-7 py-3 text-sm rounded-full shadow-md transition-all cursor-pointer flex items-center gap-2"
+              className="bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 font-bold px-7 py-3 text-sm rounded-full shadow-md transition-all cursor-pointer flex items-center gap-2"
             >
               <Check className="w-4 h-4" />
               <span>{savingSettings ? 'Guardando cambios...' : 'Guardar Toda la Configuración'}</span>
@@ -1632,7 +1652,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenNewDelegation()}
-                className="flex items-center gap-1.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
+                className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 px-4 py-2 rounded-full text-xs font-bold shadow-sm transition-all cursor-pointer self-start sm:self-auto shrink-0"
               >
                 <UserPlus className="w-3.5 h-3.5" />
                 <span>Asignar Nuevo Apoyo</span>
@@ -1656,7 +1676,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleOpenNewDelegation()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#00F0FF] text-slate-950 text-xs font-bold hover:brightness-110 transition-all cursor-pointer"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-sky-600 hover:bg-sky-500 text-white dark:bg-[#00F0FF] dark:text-slate-950 text-xs font-bold dark:hover:brightness-110 transition-all cursor-pointer"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>Asignar Primer Usuario de Apoyo</span>
@@ -1875,7 +1895,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       onClick={() => setDelegationModalTeamFilter('all')}
                       className={`px-2.5 py-0.5 rounded-full transition-all shrink-0 cursor-pointer ${
                         delegationModalTeamFilter === 'all'
-                          ? 'bg-[#00F0FF] text-slate-950 font-bold'
+                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-bold'
                           : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                       }`}
                     >
@@ -1888,7 +1908,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         onClick={() => setDelegationModalTeamFilter(t.id)}
                         className={`px-2.5 py-0.5 rounded-full transition-all shrink-0 cursor-pointer ${
                           delegationModalTeamFilter === t.id
-                            ? 'bg-[#00F0FF] text-slate-950 font-bold'
+                            ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-bold'
                             : 'bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
                         }`}
                       >
@@ -2016,7 +2036,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <button
                   type="submit"
                   disabled={savingDelegation}
-                  className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-5 py-2 rounded-full text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
+                  className="bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 font-bold px-5 py-2 rounded-full text-xs shadow-md transition-all cursor-pointer flex items-center gap-1.5"
                 >
                   <Check className="w-3.5 h-3.5" />
                   <span>
@@ -2261,7 +2281,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm cursor-pointer"
+                  className="bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm cursor-pointer"
                 >
                   Guardar
                 </button>
@@ -2423,7 +2443,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm cursor-pointer"
+                  className="bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm cursor-pointer"
                 >
                   Guardar Equipo
                 </button>

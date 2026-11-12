@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { Bitacora, User, Team } from '../types';
 import { generateSummaryText, copyToClipboard } from '../utils/formatters';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface WhatsAppShareModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
   users,
   teams,
 }) => {
+  useModalBehavior(isOpen, onClose);
   const [recipientMode, setRecipientMode] = useState<RecipientMode>('lider');
   const [selectedColabId, setSelectedColabId] = useState<number | ''>('');
   const [customPhone, setCustomPhone] = useState('');
@@ -336,9 +338,9 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 e.preventDefault();
               }
             }}
-            className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 ${
+            className={`w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 ${
               !isValidPhone ? 'opacity-50 pointer-events-none' : ''
-            } text-slate-950 py-2.5 sm:py-3 px-4 rounded-full text-xs sm:text-sm font-bold shadow-md shadow-[#00F0FF]/20 transition-all cursor-pointer min-h-[40px]`}
+            } text-white dark:text-slate-950 py-2.5 sm:py-3 px-4 rounded-full text-xs sm:text-sm font-bold shadow-md shadow-sky-600/20 dark:shadow-[#00F0FF]/20 transition-all cursor-pointer min-h-[40px]`}
           >
             <Send className="w-4 h-4 shrink-0" />
             <span className="truncate">Enviar por WhatsApp a {activeRecipient.name}</span>

@@ -254,7 +254,9 @@ def init_db():
     # 4.1. Crear índices de rendimiento para consultas concurrentes, búsqueda y rollover
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha ON bitacoras(fecha)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_user ON bitacoras(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha_userid ON bitacoras(fecha, user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_bitacora ON actividades(bitacora_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_bitacora_deleted_estado ON actividades(bitacora_id, is_deleted, estado)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_parent ON actividades(parent_task_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_shared ON actividades(shared_uuid)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_estado ON actividades(estado)")
@@ -856,9 +858,35 @@ def _mig_002_normalize_client_names(cursor):
             cursor.execute("UPDATE actividades SET para_cliente = ? WHERE id = ?", (cleaned, aid))
 
 
+def _mig_003_backfill_bitacora_user_ids_and_indexes(cursor):
+    """Vincula bitácoras huérfanas con su usuario canónico (respetando ux_bitacoras_user_fecha) y crea índices compuestos."""
+    orphans = cursor.execute(
+        "SELECT id, fecha, colaborador FROM bitacoras WHERE user_id IS NULL AND colaborador IS NOT NULL AND TRIM(colaborador) != ''"
+    ).fetchall()
+    for row in orphans:
+        b_id, b_fecha, b_colab = row[0], row[1], row[2]
+        u_row = cursor.execute(
+            "SELECT id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) OR LOWER(TRIM(username)) = LOWER(TRIM(?)) LIMIT 1",
+            (b_colab, b_colab),
+        ).fetchone()
+        if not u_row:
+            continue
+        uid = u_row[0]
+        existing = cursor.execute(
+            "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? LIMIT 1",
+            (uid, b_fecha),
+        ).fetchone()
+        if not existing:
+            cursor.execute("UPDATE OR IGNORE bitacoras SET user_id = ? WHERE id = ?", (uid, b_id))
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_bitacoras_fecha_userid ON bitacoras(fecha, user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_bitacora_deleted_estado ON actividades(bitacora_id, is_deleted, estado)")
+
+
 MIGRATIONS = [
     (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
     (2, 'normalize_existing_client_names', _mig_002_normalize_client_names),
+    (3, 'backfill_bitacora_user_ids_and_indexes', _mig_003_backfill_bitacora_user_ids_and_indexes),
 ]
 
 

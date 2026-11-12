@@ -35,7 +35,7 @@ import {
   X,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
-import { formatDuration, calculateHoraFin } from '../utils/formatters';
+import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { api } from '../services/api';
 import { ActividadModal } from './ActividadModal';
@@ -108,7 +108,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   const [recentFeedback, setRecentFeedback] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState<boolean>(false);
 
-  // Cargar sugerencias normalizadas de clientes para evitar duplicados por escritura
+  // Cargar sugerencias normalizadas de clientes una sola vez al montar (las nuevas se fusionan con useMemo)
   useEffect(() => {
     let mounted = true;
     api.getClientesSugerencias().then((list) => {
@@ -117,7 +117,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     return () => {
       mounted = false;
     };
-  }, [actividades.length]);
+  }, []);
 
   const mergedClientSuggestions = useMemo(() => {
     const map = new Map<string, string>();
@@ -277,35 +277,17 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
   const isToday = (dateStr?: string) => {
     if (!dateStr) return false;
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    return dateStr === `${yyyy}-${mm}-${dd}`;
+    return dateStr === getTodayLocalDateStr();
   };
 
   const changeDayByOffset = (offset: number) => {
     if (!fecha || !onDateChange) return;
-    try {
-      const parts = fecha.split('-');
-      if (parts.length === 3) {
-        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-        d.setDate(d.getDate() + offset);
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        onDateChange(`${yyyy}-${mm}-${dd}`);
-      }
-    } catch (e) {}
+    onDateChange(shiftDateByDays(fecha, offset));
   };
 
   const goToToday = () => {
     if (!onDateChange) return;
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    onDateChange(`${yyyy}-${mm}-${dd}`);
+    onDateChange(getTodayLocalDateStr());
   };
 
   const handleOpenCreateModal = () => {

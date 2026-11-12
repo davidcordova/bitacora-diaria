@@ -289,49 +289,55 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
         </button>
 
         {/* Context Selector / Modo Apoyo */}
-        {(delegatedTargets.length > 0 || activeProxyUser || currentUser?.role === 'admin') &&
+        {(delegatedTargets.length > 0 || activeProxyUser) &&
           onSelectProxyUser && (
             <div className="relative" ref={proxyMenuRef}>
-              <button
-                type="button"
-                onClick={() => setProxyMenuOpen(!proxyMenuOpen)}
-                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-full border text-xs font-semibold transition-all cursor-pointer shadow-2xs ${
+              <div
+                className={`inline-flex items-center rounded-full border text-xs font-semibold transition-all shadow-2xs ${
                   activeProxyUser
-                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20'
+                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-400'
                     : 'bg-slate-100/80 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:border-sky-500/40'
                 }`}
-                title={
-                  activeProxyUser
-                    ? `Registrando tareas en apoyo a: ${activeProxyUser.full_name}. Clic para cambiar o salir.`
-                    : 'Modo Apoyo: registrar tareas para otro colaborador'
-                }
               >
-                <UserCheck
-                  className={`w-3.5 h-3.5 ${activeProxyUser ? 'text-amber-500' : 'text-sky-600 dark:text-[#00F0FF]'}`}
-                />
-                <span className="hidden sm:inline font-medium">
-                  {activeProxyUser
-                    ? `Apoyando: ${activeProxyUser.full_name.split(' ')[0]}`
-                    : 'Modo Apoyo'}
-                </span>
-                {activeProxyUser ? (
-                  <span
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectProxyUser(null);
-                    }}
-                    className="p-0.5 hover:bg-amber-500/30 rounded-full transition-colors cursor-pointer text-amber-600 dark:text-amber-300 inline-flex items-center"
+                <button
+                  type="button"
+                  onClick={() => setProxyMenuOpen(!proxyMenuOpen)}
+                  className={`flex items-center gap-1.5 sm:gap-2 pl-2.5 sm:pl-3 py-1.5 rounded-l-full transition-colors cursor-pointer ${
+                    activeProxyUser ? 'pr-1.5 hover:bg-amber-500/15' : 'pr-2.5 sm:pr-3 rounded-r-full'
+                  }`}
+                  title={
+                    activeProxyUser
+                      ? `Registrando tareas en apoyo a: ${activeProxyUser.full_name}. Clic para cambiar colaborador.`
+                      : 'Modo Apoyo: registrar tareas para otro colaborador'
+                  }
+                >
+                  <UserCheck
+                    className={`w-3.5 h-3.5 ${activeProxyUser ? 'text-amber-500' : 'text-sky-600 dark:text-[#00F0FF]'}`}
+                  />
+                  <span className="hidden sm:inline font-medium">
+                    {activeProxyUser
+                      ? `Apoyando: ${activeProxyUser.full_name.split(' ')[0]}`
+                      : 'Modo Apoyo'}
+                  </span>
+                  {!activeProxyUser && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/15 text-sky-700 dark:text-[#00F0FF] font-bold">
+                      {delegatedTargets.length}
+                    </span>
+                  )}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </button>
+                {activeProxyUser && (
+                  <button
+                    type="button"
+                    onClick={() => onSelectProxyUser(null)}
+                    aria-label="Volver a mi bitácora personal"
                     title="Volver a mi bitácora personal"
+                    className="pr-2 pl-1 py-1.5 hover:bg-amber-500/25 rounded-r-full transition-colors cursor-pointer text-amber-600 dark:text-amber-300 inline-flex items-center"
                   >
-                    <X className="w-3 h-3" />
-                  </span>
-                ) : (
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-sky-500/15 text-sky-700 dark:text-[#00F0FF] font-bold">
-                    {delegatedTargets.length}
-                  </span>
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </button>
+              </div>
 
               {proxyMenuOpen && (
                 <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#12131C] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">

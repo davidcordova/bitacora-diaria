@@ -14,6 +14,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { SystemNotification } from '../types';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface NotificationsModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
   onClearAll,
   onRemoveNotification,
 }) => {
+  useModalBehavior(isOpen, onClose);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
   if (!isOpen) return null;

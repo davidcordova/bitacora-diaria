@@ -18,6 +18,7 @@ import { api } from '../services/api';
 import { formatDateDisplay, formatDuration, stripHtml } from '../utils/formatters';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 import { confirmDialog } from './DialogHost';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface PapeleraModalProps {
   currentUser: User | null;
@@ -36,6 +37,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
   currentBitacoraFecha,
   currentBitacoraId,
 }) => {
+  useModalBehavior(isOpen, onClose);
   const [items, setItems] = useState<ActividadPapelera[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

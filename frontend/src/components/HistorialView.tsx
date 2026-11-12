@@ -431,7 +431,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 title="Vista de Lista"
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   displayMode === 'list'
-                    ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -444,7 +444,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 title="Vista de Cuadrícula / Tarjetas"
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   displayMode === 'grid'
-                    ? 'bg-[#00F0FF] text-slate-950 font-extrabold shadow-sm'
+                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -563,7 +563,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                             <>
                               {actsToShow.slice(0, 2).map((act, aIdx) => (
                                 <div key={aIdx} className="text-xs text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600 dark:bg-[#00F0FF] shrink-0" />
                                   <span className="truncate">{stripHtml(act.descripcion)}</span>
                                 </div>
                               ))}

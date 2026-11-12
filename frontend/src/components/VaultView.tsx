@@ -73,6 +73,7 @@ import {
   CorporateEntity,
 } from '../utils/itAccountHelpers';
 import { confirmDialog } from './DialogHost';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface VaultViewProps {
   currentUser?: UserType | null;
@@ -258,6 +259,31 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
   // Contador de revelaciones por minuto (alerta de consultas masivas)
   const [recentRevealsTimestamps, setRecentRevealsTimestamps] = useState<number[]>([]);
+
+  const anyVaultModalOpen =
+    isUnlockModalOpen ||
+    isPinConfigModalOpen ||
+    isResetModalOpen ||
+    isPermModalOpen ||
+    isGenModalOpen ||
+    isImportModalOpen ||
+    isCatalogModalOpen ||
+    isUserModalOpen ||
+    isCredModalOpen ||
+    isLinkModalOpen;
+
+  useModalBehavior(anyVaultModalOpen, () => {
+    if (isUnlockModalOpen) setIsUnlockModalOpen(false);
+    else if (isPinConfigModalOpen) setIsPinConfigModalOpen(false);
+    else if (isResetModalOpen) setIsResetModalOpen(false);
+    else if (isPermModalOpen) setIsPermModalOpen(false);
+    else if (isGenModalOpen) setIsGenModalOpen(false);
+    else if (isImportModalOpen) setIsImportModalOpen(false);
+    else if (isCatalogModalOpen) setIsCatalogModalOpen(false);
+    else if (isUserModalOpen) setIsUserModalOpen(false);
+    else if (isCredModalOpen) setIsCredModalOpen(false);
+    else if (isLinkModalOpen) setIsLinkModalOpen(false);
+  });
 
   const isAdminOrLeader = currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader;
 

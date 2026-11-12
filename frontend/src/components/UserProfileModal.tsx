@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { User, Team } from '../types';
 import { api } from '../services/api';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   teams = [],
   onUserUpdated,
 }) => {
+  useModalBehavior(isOpen, onClose);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -410,7 +412,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               if (form) form.requestSubmit();
             }}
             disabled={loading}
-            className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-[#00F0FF]/25 cursor-pointer min-h-[38px]"
+            className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs font-bold text-white dark:text-slate-950 bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-sky-600/20 dark:shadow-[#00F0FF]/25 cursor-pointer min-h-[38px]"
           >
             <Save className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Guardando...' : 'Guardar Cambios'}</span>

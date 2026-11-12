@@ -155,11 +155,37 @@ export const getRefrigerioMinutos = (
 };
 
 /**
- * Retorna la hora actual local formateada en HH:MM.
+ * Retorna la hora actual en zona horaria de Perú (America/Lima) formateada en HH:MM.
  */
 export const getCurrentTimeStr = (): string => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Lima',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(new Date());
+    const hh = parts.find((p) => p.type === 'hour')?.value;
+    const mm = parts.find((p) => p.type === 'minute')?.value;
+    if (hh && mm) return `${hh === '24' ? '00' : hh}:${mm}`;
+  } catch {
+    // Fallback al reloj local si Intl no soporta la zona
+  }
   const now = new Date();
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+};
+
+/**
+ * Retorna la hora actual en zona horaria de Perú redondeada hacia abajo al múltiplo de minutos indicado.
+ */
+export const getCurrentRoundedTimeStr = (stepMinutes = 5): string => {
+  const current = getCurrentTimeStr();
+  const [hStr, mStr] = current.split(':');
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return '08:30';
+  const roundedM = Math.floor(m / stepMinutes) * stepMinutes;
+  return `${String(h).padStart(2, '0')}:${String(roundedM).padStart(2, '0')}`;
 };
 
 
@@ -190,6 +216,20 @@ export const formatDateLong = (dateStr: string): string => {
 };
 
 export const getTodayLocalDateStr = (): string => {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Lima',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    if (y && m && d) return `${y}-${m}-${d}`;
+  } catch {
+    // Fallback al reloj local
+  }
   const d = new Date();
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -229,7 +269,7 @@ export const getEstadoBadgeInfo = (estado: string) => {
       return {
         label: 'En proceso',
         bg: 'bg-sky-50 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border-sky-200 dark:border-[#00F0FF]/30',
-        dot: 'bg-[#00F0FF]',
+        dot: 'bg-sky-600 dark:bg-[#00F0FF]',
         icon: '⏳',
       };
     case 'en_revision':

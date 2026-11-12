@@ -3,6 +3,7 @@ import { CheckCircle2, CheckCheck, CornerUpLeft, ClipboardCheck, X, Loader2 } fr
 import { Actividad, RevisionDecision, RevisionResult } from '../types';
 import { api } from '../services/api';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 /**
  * Revisión del líder sobre una tarea "En revisión".
@@ -62,14 +63,9 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
     setError('');
   }, [actividad?.id, initialDecision]);
 
-  useEffect(() => {
-    if (!actividad) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !saving) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [actividad, saving, onClose]);
+  useModalBehavior(Boolean(actividad), () => {
+    if (!saving) onClose();
+  });
 
   useEffect(() => {
     if (decision === 'devuelta') textareaRef.current?.focus();

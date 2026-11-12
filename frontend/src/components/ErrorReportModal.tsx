@@ -16,6 +16,7 @@ import { User, Evidencia } from '../types';
 import { api } from '../services/api';
 import { copyToClipboard } from '../utils/formatters';
 import { alertDialog } from './DialogHost';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface ErrorReportModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export const ErrorReportModal: React.FC<ErrorReportModalProps> = ({
   onRetrySync,
   isRetrying = false,
 }) => {
+  useModalBehavior(isOpen, onClose);
   const [copied, setCopied] = useState(false);
   const [comentario, setComentario] = useState('');
   const [evidenciaScreenshot, setEvidenciaScreenshot] = useState<Evidencia | null>(null);

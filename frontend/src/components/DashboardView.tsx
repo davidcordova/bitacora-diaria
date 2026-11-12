@@ -150,8 +150,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       pendiente: 'Por Iniciar',
     };
     const colors: Record<string, string> = {
-      completada: '#00F0FF',
-      en_proceso: '#6366F1',
+      completada: '#10B981',
+      en_proceso: 'var(--accent-primary)',
       en_revision: '#F59E0B',
       pendiente: '#94A3B8',
     };
@@ -213,7 +213,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       {/* ================= BARRA SUPERIOR DE DASHBOARD ================= */}
       <div className="saas-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-[#00F0FF]/15 text-[#00F0FF] flex items-center justify-center shrink-0 shadow-xs border border-[#00F0FF]/25">
+          <div className="w-10 h-10 rounded-2xl bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-600 dark:text-[#00F0FF] flex items-center justify-center shrink-0 shadow-xs border border-sky-500/25 dark:border-[#00F0FF]/25">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
@@ -221,8 +221,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
                 {isPersonalScope ? 'Mi Rendimiento' : 'Dashboard'}
               </h2>
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
-                <span className="w-2 h-2 rounded-full bg-[#00F0FF] beacon-pulse" />
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border border-sky-500/25 dark:border-[#00F0FF]/30">
+                <span className="w-2 h-2 rounded-full bg-sky-600 dark:bg-[#00F0FF] beacon-pulse" />
                 <span>{isPersonalScope ? 'Personal' : 'En vivo'}</span>
               </div>
             </div>
@@ -330,14 +330,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           onAction={selectedTeamId && !isPersonalScope ? () => setSelectedTeamId('') : undefined}
         />
       ) : (
-        <>
+        <div className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-65 pointer-events-none' : 'opacity-100'}`}>
           {/* ================= 4 METRIC CARDS DE ALTO IMPACTO (ASPECT RATIO OPTIMIZADO) ================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {/* Card 1: Horas Totales */}
             <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/10">
-                  <Clock className="w-5 h-5 text-[#00F0FF]" />
+                  <Clock className="w-5 h-5 text-sky-600 dark:text-[#00F0FF]" />
                 </div>
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
                   {isPersonalScope ? 'MI VOLUMEN' : 'VOLUMEN'}
@@ -348,7 +348,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   {formatHoursClean(totalMinutos)}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 flex items-center gap-1.5 truncate">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF] shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600 dark:bg-[#00F0FF] shrink-0" />
                   <span>
                     {totalMinutos.toLocaleString('es-PE')} min en {totalBitacoras} {totalBitacoras === 1 ? 'jornada' : 'jornadas'}
                   </span>
@@ -403,15 +403,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             {/* Card 4: Tasa de Completitud & Eficiencia */}
             <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-2xl bg-[#00F0FF]/15 text-[#00F0FF] flex items-center justify-center border border-[#00F0FF]/30">
+                <div className="w-10 h-10 rounded-2xl bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-600 dark:text-[#00F0FF] flex items-center justify-center border border-sky-500/25 dark:border-[#00F0FF]/30">
                   <CheckCircle2 className="w-5 h-5" />
                 </div>
-                <span className="text-[11px] font-bold text-[#00A3BF] dark:text-[#00F0FF] uppercase tracking-wider bg-[#00F0FF]/10 px-2.5 py-0.5 rounded-full font-mono">
+                <span className="text-[11px] font-bold text-sky-700 dark:text-[#00F0FF] uppercase tracking-wider bg-sky-500/10 dark:bg-[#00F0FF]/10 px-2.5 py-0.5 rounded-full font-mono">
                   {porcentajeCompletadas}% META
                 </span>
               </div>
               <div>
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-[#00A3BF] dark:text-[#00F0FF] tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-sky-600 dark:text-[#00F0FF] tracking-tight font-heading truncate">
                   {porcentajeCompletadas}%
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
@@ -883,17 +883,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.bitacoras_count}</td>
                             <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">{formatHoursClean(c.total_minutos)}</td>
                             <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.total_actividades}</td>
-                            <td className="py-3.5 text-[#00A3BF] dark:text-[#00F0FF] font-bold font-mono">
+                            <td className="py-3.5 text-sky-700 dark:text-[#00F0FF] font-bold font-mono">
                               {c.actividades_completadas}
                             </td>
                             <td className="py-3.5 text-right">
                               <span
                                 className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
                                   rate >= 80
-                                    ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                                    ? 'bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border border-sky-500/25 dark:border-[#00F0FF]/30'
                                     : rate >= 50
-                                    ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
-                                    : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
+                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                                    : 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border border-slate-500/30'
                                 }`}
                               >
                                 {rate}%
@@ -914,7 +914,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

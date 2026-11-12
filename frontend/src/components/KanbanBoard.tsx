@@ -34,6 +34,7 @@ import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 import { HtmlEditor } from './HtmlEditor';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface KanbanBoardProps {
   actividades: Actividad[];
@@ -68,9 +69,9 @@ const COLUMNS: ColumnConfig[] = [
   {
     id: 'en_proceso',
     title: 'En Proceso',
-    badgeColor: 'bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/30',
-    icon: <PlayCircle className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF]" />,
-    borderColor: 'border-t-[#00F0FF]',
+    badgeColor: 'bg-sky-50 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border-sky-200 dark:border-[#00F0FF]/30',
+    icon: <PlayCircle className="w-4 h-4 text-sky-600 dark:text-[#00F0FF]" />,
+    borderColor: 'border-t-sky-500 dark:border-t-[#00F0FF]',
   },
   {
     id: 'en_revision',
@@ -113,6 +114,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   // Edit card modal state
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<Actividad>>({});
+  useModalBehavior(editingIndex !== null, () => setEditingIndex(null));
 
   // Mobile active column selector ('todas' or specific status)
   const [mobileColumnFilter, setMobileColumnFilter] = useState<EstadoActividad | 'todas'>('todas');
@@ -200,12 +202,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   return (
     <div className="space-y-4">
       {/* Informative Business Rules Notice Bar */}
-      <div className="bg-white dark:bg-[#13141F] border border-slate-200/90 dark:border-[#252636] border-l-4 border-l-[#00F0FF] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm transition-all duration-200">
+      <div className="bg-white dark:bg-[#13141F] border border-slate-200/90 dark:border-[#252636] border-l-4 border-l-sky-600 dark:border-l-[#00F0FF] rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-sm transition-all duration-200">
         <div className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
-          <Info className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF] shrink-0" />
+          <Info className="w-4 h-4 text-sky-600 dark:text-[#00F0FF] shrink-0" />
           <span>
             <strong className="text-slate-900 dark:text-white">Flujo de Actividades:</strong> Las tareas que no estén en estado{' '}
-            <span className="font-bold underline text-[#00A3BF] dark:text-[#00F0FF]">Completada</span> continúan activas, pueden seguir
+            <span className="font-bold underline text-sky-700 dark:text-[#00F0FF]">Completada</span> continúan activas, pueden seguir
             editándose y se consideran para tu siguiente bitácora.
           </span>
         </div>
@@ -214,7 +216,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <button
             type="button"
             onClick={onSyncWithBitacora}
-            className="flex items-center gap-1.5 bg-[#00F0FF] hover:bg-[#00D8E6] active:scale-95 text-slate-950 px-4 py-1.5 rounded-full text-xs font-extrabold shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all shrink-0 cursor-pointer"
+            className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 dark:bg-[#00F0FF] dark:hover:bg-[#00D8E6] active:scale-95 text-white dark:text-slate-950 px-4 py-1.5 rounded-full text-xs font-extrabold shadow-sm shadow-sky-600/20 dark:shadow-[#00F0FF]/25 transition-all shrink-0 cursor-pointer"
           >
             <RefreshCw className="w-3.5 h-3.5 stroke-[2.5]" />
             <span>Sincronizar {pendingCount} activas a Bitácora</span>
@@ -231,7 +233,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar actividades por texto, cliente..."
-              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="w-full pl-8 pr-3 py-1.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-sky-500 dark:focus:border-[#00F0FF] focus:ring-1 focus:ring-sky-500/30 dark:focus:ring-[#00F0FF]/30 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
           </div>
@@ -240,7 +242,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             <select
               value={filterTipo}
               onChange={(e) => setFilterTipo(e.target.value)}
-              className="px-3 py-1.5 bg-slate-50 dark:bg-[#161722] text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] outline-hidden cursor-pointer"
+              className="px-3 py-1.5 bg-slate-50 dark:bg-[#161722] text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-sky-500 dark:focus:border-[#00F0FF] outline-hidden cursor-pointer"
             >
               <option value="" className="bg-white dark:bg-[#161722]">Todos los tipos</option>
               {uniqueTipos.map((t) => (
@@ -254,7 +256,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
         <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 w-full sm:w-auto justify-between sm:justify-end">
           <span className="font-semibold text-slate-700 dark:text-slate-300">
-            Colaborador: <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">{colaborador}</span>
+            Colaborador: <span className="text-sky-700 dark:text-[#00F0FF] font-bold">{colaborador}</span>
           </span>
           <span className="text-slate-400 dark:text-slate-500">
             {pendingCount} pendientes • {actividades.length - pendingCount} completadas
@@ -269,7 +271,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           onClick={() => setMobileColumnFilter('todas')}
           className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer min-h-[34px] ${
             mobileColumnFilter === 'todas'
-              ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+              ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
               : 'bg-white dark:bg-[#13141F] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]'
           }`}
         >
@@ -284,12 +286,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onClick={() => setMobileColumnFilter(c.id)}
               className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1.5 min-h-[34px] ${
                 mobileColumnFilter === c.id
-                  ? 'bg-[#00F0FF] text-slate-950 shadow-xs'
+                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
                   : 'bg-white dark:bg-[#13141F] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]'
               }`}
             >
               <span>{c.title}</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-slate-200">
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-black/10 dark:bg-white/15">
                 {count}
               </span>
             </button>
@@ -341,7 +343,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <button
                 type="button"
                 onClick={() => onAddActividadConEstado(col.id)}
-                className="w-full mb-3 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-dashed border-slate-300 dark:border-[#252636] hover:border-[#00F0FF] dark:hover:border-[#00F0FF] bg-white dark:bg-[#161722] hover:bg-slate-50 dark:hover:bg-[#1C1D2A] text-slate-600 dark:text-slate-300 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] text-xs font-bold transition-all cursor-pointer shadow-2xs"
+                className="w-full mb-3 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-dashed border-slate-300 dark:border-[#252636] hover:border-sky-500 dark:hover:border-[#00F0FF] bg-white dark:bg-[#161722] hover:bg-slate-50 dark:hover:bg-[#1C1D2A] text-slate-600 dark:text-slate-300 hover:text-sky-700 dark:hover:text-[#00F0FF] text-xs font-bold transition-all cursor-pointer shadow-2xs"
               >
                 <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                 <span>Añadir a {col.title}</span>
@@ -620,11 +622,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
       {/* MODAL EDICIÓN DE ACTIVIDAD DIRECTA DESDE KANBAN */}
       {editingIndex !== null && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in">
-          <div className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto">
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setEditingIndex(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-[#252636] max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto"
+          >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-[#252636]">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-[#00F0FF]" />
+                <Edit2 className="w-4 h-4 text-sky-600 dark:text-[#00F0FF]" />
                 <span>Editar Actividad</span>
               </h3>
               <button
@@ -747,7 +757,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm shadow-[#00F0FF]/20 cursor-pointer transition-all"
+                  className="bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 text-white dark:text-slate-950 font-bold px-6 py-2.5 rounded-full shadow-sm shadow-sky-600/20 dark:shadow-[#00F0FF]/20 cursor-pointer transition-all"
                 >
                   Guardar Cambios
                 </button>

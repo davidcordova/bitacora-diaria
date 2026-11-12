@@ -21,7 +21,8 @@ import {
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
-import { calculateHoraFin, calculateDuracionMin, getCurrentTimeStr, getRefrigerioMinutos } from '../utils/formatters';
+import { calculateHoraFin, calculateDuracionMin, getCurrentTimeStr, getCurrentRoundedTimeStr, getRefrigerioMinutos } from '../utils/formatters';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { HtmlEditor } from './HtmlEditor';
 import { api } from '../services/api';
@@ -113,11 +114,8 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setParentTaskDesc(actividadToEdit.parent_task_desc || '');
         setTipoVinculo(actividadToEdit.tipo_vinculo || 'continuacion');
       } else {
-        // Defaults for new activity
-        const now = new Date();
-        const hh = String(now.getHours()).padStart(2, '0');
-        const mm = String(Math.floor(now.getMinutes() / 5) * 5).padStart(2, '0');
-        const hIni = `${hh}:${mm}`;
+        // Defaults for new activity (hora actual en Perú redondeada a 5 min)
+        const hIni = getCurrentRoundedTimeStr(5);
         setHoraInicio(hIni);
         setDuracionMin(30);
         setHoraFin(calculateHoraFin(hIni, 30, fecha));
@@ -138,19 +136,20 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     }
   }, [isOpen, actividadToEdit]);
 
-  // Handle escape key & Ctrl+Enter / Cmd+Enter fast submit
+  // Bloqueo de scroll del body y cierre por tecla Escape
+  useModalBehavior(isOpen, onClose);
+
+  // Atajo Ctrl+Enter / Cmd+Enter para envío rápido
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isOpen) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && isOpen) {
         e.preventDefault();
         formRef.current?.requestSubmit();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   // Interceptar Ctrl+V global en el modal para capturas de pantalla (solo fuera de campos de texto y del editor)
   useEffect(() => {
@@ -828,7 +827,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 sm:px-6 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-full shadow-sm shadow-[#00F0FF]/25 hover:shadow-[0_0_15px_rgba(0,240,255,0.4)] transition-all cursor-pointer min-h-[38px]"
+              className="flex items-center gap-1.5 px-5 sm:px-6 py-2 text-xs font-bold text-white dark:text-slate-950 bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 rounded-full shadow-sm shadow-sky-600/20 dark:shadow-[#00F0FF]/25 transition-all cursor-pointer min-h-[38px]"
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{editIndex !== null ? 'Actualizar' : 'Guardar'}</span>

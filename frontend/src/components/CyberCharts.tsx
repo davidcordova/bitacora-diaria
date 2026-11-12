@@ -111,11 +111,11 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
         onMouseLeave={() => setHoveredIdx(null)}
       >
         <defs>
-          {/* Degradado Neón para el Área de Relleno */}
+          {/* Degradado adaptable al tema para el Área de Relleno */}
           <linearGradient id="cyberAreaGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00F0FF" stopOpacity="0.32" />
+            <stop offset="0%" stopColor="var(--accent-primary)" stopOpacity="0.28" />
             <stop offset="70%" stopColor="#8B5CF6" stopOpacity="0.08" />
-            <stop offset="100%" stopColor="#0B0C13" stopOpacity="0" />
+            <stop offset="100%" stopColor="var(--bg-surface)" stopOpacity="0" />
           </linearGradient>
 
           {/* Filtro de resplandor neón */}
@@ -166,7 +166,7 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
           <path
             d={linePath}
             fill="none"
-            stroke="#00F0FF"
+            stroke="var(--accent-primary)"
             strokeWidth="3"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -184,7 +184,7 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
               textAnchor="middle"
               className={`text-[10px] font-semibold transition-colors ${
                 hoveredIdx === i
-                  ? 'fill-[#00F0FF] font-bold'
+                  ? 'fill-sky-600 dark:fill-[#00F0FF] font-bold'
                   : 'fill-slate-500 dark:fill-slate-400'
               }`}
             >
@@ -211,7 +211,7 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
                   cx={pt.x}
                   cy={pt.y}
                   r="10"
-                  fill="#00F0FF"
+                  fill="var(--accent-primary)"
                   fillOpacity="0.25"
                   className="animate-ping"
                 />
@@ -222,8 +222,8 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
                 cx={pt.x}
                 cy={pt.y}
                 r={isHovered ? 7 : 4.5}
-                fill={isHovered ? '#00F0FF' : '#0B0C13'}
-                stroke="#00F0FF"
+                fill={isHovered ? 'var(--accent-primary)' : 'var(--bg-surface)'}
+                stroke="var(--accent-primary)"
                 strokeWidth={isHovered ? 2.5 : 2}
                 className="transition-all duration-200"
               />
@@ -246,7 +246,7 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
             y1={padding.top}
             x2={activePoint.x}
             y2={padding.top + chartH}
-            stroke="#00F0FF"
+            stroke="var(--accent-primary)"
             strokeWidth="1.5"
             strokeDasharray="3 3"
             className="opacity-70 pointer-events-none"
@@ -350,12 +350,12 @@ export const GradientBarChart: React.FC<GradientBarChartProps> = ({
       >
         <defs>
           <linearGradient id="cyberBarGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#00F0FF" />
+            <stop offset="0%" stopColor="var(--accent-primary)" />
             <stop offset="100%" stopColor="#6366F1" />
           </linearGradient>
 
           <linearGradient id="cyberBarHoverGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#3DF3FF" />
+            <stop offset="0%" stopColor="#38BDF8" />
             <stop offset="100%" stopColor="#EC4899" />
           </linearGradient>
         </defs>
@@ -421,7 +421,7 @@ export const GradientBarChart: React.FC<GradientBarChartProps> = ({
                 y={y - 6}
                 textAnchor="middle"
                 className={`text-[10px] font-extrabold transition-colors ${
-                  isHovered ? 'fill-[#00F0FF]' : 'fill-slate-700 dark:fill-slate-300'
+                  isHovered ? 'fill-sky-600 dark:fill-[#00F0FF]' : 'fill-slate-700 dark:fill-slate-300'
                 }`}
               >
                 {valueFormatter(item.value)}
@@ -433,7 +433,7 @@ export const GradientBarChart: React.FC<GradientBarChartProps> = ({
                 y={padding.top + chartH + 18}
                 textAnchor="middle"
                 className={`text-[10px] font-semibold transition-colors ${
-                  isHovered ? 'fill-[#00F0FF] font-bold' : 'fill-slate-500 dark:fill-slate-400'
+                  isHovered ? 'fill-sky-600 dark:fill-[#00F0FF] font-bold' : 'fill-slate-500 dark:fill-slate-400'
                 }`}
               >
                 {item.label.length > 12 ? `${item.label.slice(0, 10)}..` : item.label}
@@ -476,13 +476,13 @@ interface CyberDonutChartProps {
   valueFormatter?: (val: number) => string;
 }
 
-// Paleta Cyberpunk neón para rebanadas de dona
+// Paleta adaptable con contraste ejecutivo en claro y ciber en oscuro
 const CYBER_PALETTE = [
-  '#00F0FF', // Electric Cyan
-  '#EC4899', // Vivid Magenta
+  'var(--accent-primary)',
   '#8B5CF6', // Radiant Indigo
   '#10B981', // Emerald
   '#F59E0B', // Amber
+  '#EC4899', // Vivid Magenta
   '#06B6D4', // Deep Cyan
   '#F43F5E', // Rose
   '#6366F1', // Indigo
@@ -596,7 +596,7 @@ export const CyberDonutChart: React.FC<CyberDonutChartProps> = ({
             <span
               className="text-[11px] font-bold px-2 py-0.5 rounded-full mt-1"
               style={{
-                backgroundColor: `${activeSlice.color}25`,
+                backgroundColor: `color-mix(in srgb, ${activeSlice.color} 16%, transparent)`,
                 color: activeSlice.color,
               }}
             >
@@ -617,7 +617,7 @@ export const CyberDonutChart: React.FC<CyberDonutChartProps> = ({
               onMouseLeave={() => setActiveIdx(null)}
               className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between text-xs ${
                 isHovered
-                  ? 'bg-slate-50 dark:bg-white/8 border-[#00F0FF]/40 shadow-xs'
+                  ? 'bg-slate-50 dark:bg-white/8 border-sky-500/40 dark:border-[#00F0FF]/40 shadow-xs'
                   : 'bg-transparent border-slate-100 dark:border-white/5 hover:border-slate-200 dark:hover:border-white/10'
               }`}
             >
@@ -646,7 +646,7 @@ export const CyberDonutChart: React.FC<CyberDonutChartProps> = ({
                 <span
                   className="text-[10px] font-bold px-1.5 py-0.2 rounded-full"
                   style={{
-                    backgroundColor: `${slice.color}20`,
+                    backgroundColor: `color-mix(in srgb, ${slice.color} 15%, transparent)`,
                     color: slice.color,
                   }}
                 >

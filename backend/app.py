@@ -951,6 +951,11 @@ def admin_users():
             VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
         ''', (username, email, phone, p_hash, full_name, role, team_id))
         user_id = cursor.lastrowid
+        # Vincular bitácoras previas huérfanas que coincidan por nombre o usuario
+        cursor.execute(
+            "UPDATE OR IGNORE bitacoras SET user_id = ? WHERE user_id IS NULL AND (LOWER(TRIM(colaborador)) = LOWER(TRIM(?)) OR LOWER(TRIM(colaborador)) = LOWER(TRIM(?)))",
+            (user_id, full_name, username),
+        )
         conn.commit()
         
         new_u = cursor.execute("SELECT id, username, email, phone, full_name, role, team_id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1575,7 +1580,7 @@ def get_bitacoras():
     query = '''
         SELECT b.*, u.team_id, t.nombre as team_name
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE 1=1
     '''
@@ -2579,7 +2584,7 @@ def get_papelera():
                    u.team_id, t.nombre as team_name
             FROM actividades a
             JOIN bitacoras b ON a.bitacora_id = b.id
-            LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+            LEFT JOIN users u ON b.user_id = u.id
             LEFT JOIN teams t ON u.team_id = t.id
             WHERE a.is_deleted = 1
         '''
@@ -2823,7 +2828,7 @@ def get_equipo_actividades_en_vivo():
                u.team_id, t.nombre as team_name, u.full_name as user_full_name, u.phone as colaborador_phone
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE b.fecha = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
     '''
@@ -2918,7 +2923,7 @@ def get_dashboard_stats():
                COALESCE(SUM(b.tiempo_total_min), 0) as total_minutos,
                COUNT(DISTINCT b.colaborador) as total_colaboradores
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter}
     '''
     totales = cursor.execute(total_query, params).fetchone()
@@ -2928,7 +2933,7 @@ def get_dashboard_stats():
         SELECT a.estado, COUNT(a.id) as cantidad, COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY a.estado
     '''
@@ -2941,7 +2946,7 @@ def get_dashboard_stats():
                COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY tipo
         ORDER BY minutos DESC
@@ -2955,7 +2960,7 @@ def get_dashboard_stats():
                COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         GROUP BY cliente
         ORDER BY minutos DESC
@@ -2974,7 +2979,7 @@ def get_dashboard_stats():
                COUNT(a.id) as total_actividades,
                SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN teams t ON u.team_id = t.id
         LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         {base_filter}
@@ -2983,17 +2988,18 @@ def get_dashboard_stats():
     '''
     colab_stats = cursor.execute(colab_query, params).fetchall()
     
-    # 5. Colaboradores que requieren apoyo / bloqueos activos (últimos 7 días)
+    # 5. Colaboradores que requieren apoyo / bloqueos activos (últimos 7 días en hora Perú)
+    seven_days_ago_peru = (get_peru_now() - timedelta(days=7)).strftime('%Y-%m-%d')
     apoyo_query = f'''
         SELECT b.id, b.fecha, b.colaborador, b.apoyo_detalle, b.pendientes, t.nombre as team_name
         FROM bitacoras b
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         LEFT JOIN teams t ON u.team_id = t.id
-        {base_filter} AND b.necesita_apoyo = 'Si' AND b.fecha >= date('now', '-7 days')
+        {base_filter} AND b.necesita_apoyo = 'Si' AND b.fecha >= ?
         ORDER BY b.fecha DESC, b.id DESC
         LIMIT 10
     '''
-    alertas_apoyo = cursor.execute(apoyo_query, params).fetchall()
+    alertas_apoyo = cursor.execute(apoyo_query, [*params, seven_days_ago_peru]).fetchall()
 
     # 6. Tendencia cronológica diaria (últimas fechas para gráfico Spline/Líneas)
     tendencia_query = f'''
@@ -3003,7 +3009,7 @@ def get_dashboard_stats():
                SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as completadas
         FROM bitacoras b
         LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter}
         GROUP BY b.fecha
         ORDER BY b.fecha ASC
@@ -3026,7 +3032,7 @@ def get_dashboard_stats():
             COALESCE(SUM(a.duracion_min), 0) as minutos
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE LOWER(full_name) = LOWER(b.colaborador) OR LOWER(username) = LOWER(b.colaborador) LIMIT 1)) = u.id
+        LEFT JOIN users u ON b.user_id = u.id
         {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0) AND a.hora_inicio IS NOT NULL AND a.hora_inicio != ''
         GROUP BY franja
         ORDER BY MIN(a.hora_inicio) ASC
@@ -3054,7 +3060,7 @@ def get_dashboard_stats():
                    SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
             FROM bitacoras b
             LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-            LEFT JOIN users u ON COALESCE(b.user_id, (SELECT id FROM users WHERE full_name = b.colaborador LIMIT 1)) = u.id
+            LEFT JOIN users u ON b.user_id = u.id
             {base_filter}
             GROUP BY b.id
             ORDER BY b.fecha DESC
