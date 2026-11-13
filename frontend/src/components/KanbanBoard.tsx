@@ -34,6 +34,7 @@ import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 import { HtmlEditor } from './HtmlEditor';
+import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface KanbanBoardProps {
@@ -111,7 +112,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [selectedEvidencias, setSelectedEvidencias] = useState<Evidencia[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // Edit card modal state
+  // Detail & Edit card modal state
+  const [detailIndex, setDetailIndex] = useState<number | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<Actividad>>({});
   useModalBehavior(editingIndex !== null, () => setEditingIndex(null));
@@ -252,7 +254,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </div>
 
       {/* Mobile-Only Status Tabs (< 768px) */}
-      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto pb-1 select-none">
+      <div className="md:hidden flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 select-none">
         <button
           type="button"
           onClick={() => setMobileColumnFilter('todas')}
@@ -304,7 +306,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               key={col.id}
               onDragOver={handleDragOver}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`bg-slate-50/70 dark:bg-[#141720] border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-3 flex-col min-h-[480px] transition-colors border-t-2 ${col.borderColor} ${
+              className={`bg-slate-50/70 dark:bg-[#141720] border border-slate-200/80 dark:border-white/[0.07] rounded-xl p-3 flex-col min-h-[220px] md:min-h-[460px] min-w-0 overflow-hidden transition-colors border-t-2 ${col.borderColor} ${
                 isHiddenOnMobile ? 'hidden md:flex' : 'flex'
               }`}
             >
@@ -336,7 +338,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </button>
 
               {/* Cards Container */}
-              <div className="space-y-2.5 flex-1 overflow-y-auto max-h-[600px] pr-0.5">
+              <div className="space-y-2.5 flex-1 overflow-y-auto overflow-x-hidden max-h-[600px] pr-0.5">
                 {colActivities.map(({ act, index }) => {
                   const isFirst = columnOrder.indexOf(col.id) === 0;
                   const isLast = columnOrder.indexOf(col.id) === columnOrder.length - 1;
@@ -349,7 +351,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       key={act.id || index}
                       draggable
                       onDragStart={(e) => handleDragStart(e, index)}
-                      className={`bg-white dark:bg-[#1A1E29] rounded-lg border p-3 shadow-2xs hover:border-slate-300 dark:hover:border-white/15 transition-all cursor-grab active:cursor-grabbing relative group ${
+                      onClick={() => setDetailIndex(index)}
+                      className={`bg-white dark:bg-[#1A1E29] rounded-lg border p-3 shadow-2xs hover:border-slate-300 dark:hover:border-white/15 transition-all cursor-pointer active:cursor-grabbing relative group min-w-0 overflow-hidden ${
                         timeInfo.isStalled && !isCompleted
                           ? 'border-amber-300 dark:border-amber-500/40'
                           : 'border-slate-200/80 dark:border-white/[0.07]'
@@ -423,7 +426,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-0.5 shrink-0">
+                        <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(index)}
@@ -499,7 +502,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       )}
 
                       {/* Quick Column Move Footer */}
-                      <div className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-1">
+                      <div
+                        className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-1"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <button
                           type="button"
                           disabled={isFirst}
@@ -585,7 +591,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#161922] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto"
+            className="bg-white dark:bg-[#161922] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto overflow-x-hidden"
           >
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-white/[0.07]">
               <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
@@ -721,6 +727,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           </div>
         </div>
       )}
+
+      {/* MODAL DETALLE DE ACTIVIDAD DESDE KANBAN */}
+      <ActividadDetalleModal
+        isOpen={detailIndex !== null}
+        onClose={() => setDetailIndex(null)}
+        actividad={detailIndex !== null ? actividades[detailIndex] || null : null}
+        index={detailIndex}
+        onEdit={(_act, idx) => handleOpenEdit(idx)}
+        onUpdateEstado={onUpdateEstado}
+      />
 
       {/* Evidence Viewer Lightbox Modal */}
       <EvidenceViewerModal

@@ -64,7 +64,7 @@ export const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ isOpen, onClose 
           </button>
         </div>
 
-        <div className="space-y-3 sm:space-y-4 my-2 overflow-y-auto min-h-0 flex-1 pr-1">
+        <div className="space-y-3 sm:space-y-4 my-2 overflow-y-auto overflow-x-hidden min-h-0 flex-1 pr-1">
           {steps.map((st) => {
             return (
               <div

@@ -301,7 +301,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         </div>
 
         {/* Content list */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-3">
           {loading && items.length === 0 ? (
             <div className="py-16 text-center text-slate-400 dark:text-slate-500">
               <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-slate-300 dark:text-slate-600" />

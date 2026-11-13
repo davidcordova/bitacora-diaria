@@ -593,12 +593,12 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
         </div>
 
         {/* Tab switcher & action buttons */}
-        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-          <div className="bg-slate-100 dark:bg-[#1E222D] p-1 rounded-full border border-slate-200/80 dark:border-white/[0.08] flex items-center">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap min-w-0 max-w-full">
+          <div className="bg-slate-100 dark:bg-[#1E222D] p-1 rounded-full border border-slate-200/80 dark:border-white/[0.08] flex items-center overflow-x-auto max-w-full no-scrollbar">
             <button
               type="button"
               onClick={() => setActiveTab('usuarios')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'usuarios'
                   ? 'bg-sky-600 text-white font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -610,7 +610,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('equipos')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+              className={`shrink-0 whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'equipos'
                   ? 'bg-sky-600 text-white font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -622,26 +622,26 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('delegaciones')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+              className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'delegaciones'
                   ? 'bg-sky-600 text-white font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <UserCheck className="w-3.5 h-3.5" />
+              <UserCheck className="w-3.5 h-3.5 shrink-0" />
               <span>Usuarios de Apoyo ({delegations.length})</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('configuracion')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
+              className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 activeTab === 'configuracion'
                   ? 'bg-sky-600 text-white font-extrabold shadow-sm'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
-              <Settings className="w-3.5 h-3.5" />
+              <Settings className="w-3.5 h-3.5 shrink-0" />
               <span>Configuración</span>
             </button>
           </div>

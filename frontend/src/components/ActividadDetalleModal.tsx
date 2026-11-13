@@ -25,6 +25,7 @@ import { Actividad, EstadoActividad, Evidencia } from '../types';
 import { formatDuration, getTimeInStatusInfo, stripHtml, calculateHoraFin, copyToClipboard } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface ActividadDetalleModalProps {
   isOpen: boolean;
@@ -50,6 +51,8 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  useModalBehavior(isOpen && Boolean(actividad), onClose);
 
   // Filtrar evidencias adjuntas para evitar mostrar dos veces imágenes/archivos que ya están embebidos en la descripción
   const displayEvidencias = useMemo(() => {
@@ -128,10 +131,22 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   const sharedNames = actividad.shared_with_names || [];
   const hasShared = (actividad.shared_with && actividad.shared_with.length > 0) || sharedNames.length > 0;
 
+  const cleanParentDesc = actividad.parent_task_desc
+    ? stripHtml(actividad.parent_task_desc).trim()
+    : '';
+
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-        <div className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col">
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto overflow-x-hidden"
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-[#1A1E29] border-b border-slate-200/80 dark:border-white/[0.07] shrink-0">
             <div className="flex items-center gap-2.5">
@@ -162,10 +177,10 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overflow-x-hidden min-h-0 flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3.5 bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 p-3.5 bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Inicio
                 </span>
@@ -174,7 +189,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Fin
                 </span>
@@ -185,7 +200,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Tiempo Neto
                 </span>
@@ -194,20 +209,26 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Tipo
                 </span>
-                <div className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                <div
+                  className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate"
+                  title={actividad.tipo_trabajo || undefined}
+                >
                   {actividad.tipo_trabajo || '—'}
                 </div>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-1 min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Cliente / Área
                 </span>
-                <div className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                <div
+                  className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate"
+                  title={actividad.para_cliente || undefined}
+                >
                   {actividad.para_cliente || '—'}
                 </div>
               </div>
@@ -261,10 +282,10 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 )}
 
                 {actividad.parent_task_id && (
-                  <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
-                      <div className="min-w-0 text-xs">
+                  <div className="w-full min-w-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08] overflow-hidden">
+                    <div className="flex items-start gap-2 min-w-0 flex-1 overflow-hidden">
+                      <Link2 className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                      <div className="min-w-0 flex-1 overflow-hidden text-xs">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">
                           {actividad.tipo_vinculo === 'subtarea'
                             ? 'Subtarea de'
@@ -273,18 +294,21 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                             : actividad.tipo_vinculo === 'relacionada'
                             ? 'Relacionada con'
                             : 'Continuación de'}
-                          :{' '}
+                          :
                         </span>
-                        <span className="text-slate-600 dark:text-slate-400 truncate">
-                          {actividad.parent_task_desc || `Actividad previa #${actividad.parent_task_id}`}
-                        </span>
+                        <p
+                          className="text-slate-600 dark:text-slate-400 line-clamp-2 break-words [overflow-wrap:anywhere] mt-0.5 leading-snug"
+                          title={cleanParentDesc || undefined}
+                        >
+                          {cleanParentDesc || `Actividad previa #${actividad.parent_task_id}`}
+                        </p>
                       </div>
                     </div>
                     {onNavigateToRef && (
                       <button
                         type="button"
                         onClick={() => onNavigateToRef(actividad.parent_task_id!, actividad.tipo_vinculo)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-[#222735] hover:bg-slate-100 dark:hover:bg-white/10 text-sky-600 dark:text-sky-400 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#222735] hover:bg-slate-100 dark:hover:bg-white/10 text-sky-600 dark:text-sky-400 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors shrink-0 cursor-pointer self-start sm:self-center"
                       >
                         <span>Ver origen</span>
                         <ExternalLink className="w-3 h-3" />
@@ -321,7 +345,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </button>
               </div>
 
-              <div className="p-4 bg-slate-50/70 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07] leading-relaxed text-sm text-slate-800 dark:text-slate-200">
+              <div className="p-4 bg-slate-50/70 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07] leading-relaxed text-sm text-slate-800 dark:text-slate-200 min-w-0 max-w-full overflow-x-hidden break-words [overflow-wrap:anywhere]">
                 {actividad.descripcion ? (
                   <RichHtmlRenderer content={actividad.descripcion} />
                 ) : (
@@ -339,7 +363,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                     Comentarios
                   </label>
                 </div>
-                <div className="p-3 bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.07] rounded-xl text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                <div className="p-3 bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.07] rounded-xl text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed min-w-0 max-w-full overflow-x-hidden break-words [overflow-wrap:anywhere]">
                   {actividad.comentarios}
                 </div>
               </div>

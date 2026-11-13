@@ -127,7 +127,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
           </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-y-auto">
+        <div className="p-5 space-y-4 overflow-y-auto overflow-x-hidden">
           {/* Qué se revisa */}
           <div className="rounded-xl bg-slate-50 dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/[0.08] p-3.5 space-y-2">
             <div className="text-sm text-slate-800 dark:text-slate-100 font-medium break-words">

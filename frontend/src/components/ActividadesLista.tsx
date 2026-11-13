@@ -35,7 +35,7 @@ import {
   X,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia } from '../types';
-import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays } from '../utils/formatters';
+import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays, stripHtml } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { api } from '../services/api';
 import { ActividadModal } from './ActividadModal';
@@ -676,13 +676,13 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             className="flex-1 min-w-0 px-3 py-1.5 text-xs sm:text-[13px] bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 min-h-[34px]"
           />
 
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5">
             <select
               value={quickDuration}
               onChange={(e) => setQuickDuration(Number(e.target.value))}
               aria-label="Duración rápida"
               title="Duración estimada"
-              className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px] tabular-nums"
+              className="w-full sm:w-auto text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px] tabular-nums"
             >
               <option value={15}>15 min</option>
               <option value={30}>30 min</option>
@@ -700,7 +700,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               value={quickCliente}
               onChange={(e) => setQuickCliente(e.target.value)}
               placeholder="Cliente / Área"
-              className="w-32 sm:w-36 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 min-h-[34px] placeholder:text-slate-400"
+              className="w-full sm:w-36 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 min-h-[34px] placeholder:text-slate-400 min-w-0"
               title="Cliente o área (opcional)"
             />
             <datalist id="quick-clientes-datalist">
@@ -713,70 +713,72 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               value={quickTipo}
               onChange={(e) => setQuickTipo(e.target.value)}
               aria-label="Tipo de trabajo para registro rápido"
-              className="w-36 sm:w-40 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px]"
+              className="col-span-2 sm:col-span-1 w-full sm:w-40 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px]"
             >
               {TIPOS_TRABAJO.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
 
-            <button
-              type="submit"
-              disabled={!quickDesc.trim()}
-              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 min-h-[34px]"
-            >
-              Agregar
-            </button>
+            <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5">
+              <button
+                type="submit"
+                disabled={!quickDesc.trim()}
+                className="flex-1 sm:flex-initial px-3 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 min-h-[34px]"
+              >
+                Agregar
+              </button>
 
-            {/* Live Timer */}
-            {!isTimerRunning ? (
+              {/* Live Timer */}
+              {!isTimerRunning ? (
+                <button
+                  type="button"
+                  onClick={handleStartTimer}
+                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer min-h-[34px] shrink-0"
+                  title="Iniciar cronómetro en vivo"
+                >
+                  <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 fill-current" />
+                  <span className="hidden sm:inline">Cronómetro</span>
+                </button>
+              ) : (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 min-h-[34px] shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  <span className="font-mono tabular-nums">{formatTimerClock(timerSeconds)}</span>
+                  <button
+                    type="button"
+                    onClick={handleStopTimer}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 cursor-pointer"
+                    title="Detener cronómetro y registrar actividad"
+                  >
+                    <Square className="w-2.5 h-2.5 fill-current" />
+                    <span>Guardar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelTimer}
+                    className="p-0.5 text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 cursor-pointer"
+                    title="Descartar cronómetro"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Quiet Presets Toggle */}
               <button
                 type="button"
-                onClick={handleStartTimer}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer min-h-[34px]"
-                title="Iniciar cronómetro en vivo"
+                onClick={() => setShowPresets((prev) => !prev)}
+                className={`inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer min-h-[34px] shrink-0 ${
+                  showPresets
+                    ? 'bg-slate-200/80 dark:bg-white/10 text-slate-800 dark:text-white border-slate-300 dark:border-white/15'
+                    : 'bg-white dark:bg-[#1E222D] text-slate-500 dark:text-slate-400 border-slate-200/90 dark:border-white/[0.08] hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+                title="Plantillas rápidas de 1 clic"
               >
-                <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 fill-current" />
-                <span className="hidden sm:inline">Cronómetro</span>
+                <Zap className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Plantillas</span>
               </button>
-            ) : (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 min-h-[34px]">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                <span className="font-mono tabular-nums">{formatTimerClock(timerSeconds)}</span>
-                <button
-                  type="button"
-                  onClick={handleStopTimer}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 cursor-pointer"
-                  title="Detener cronómetro y registrar actividad"
-                >
-                  <Square className="w-2.5 h-2.5 fill-current" />
-                  <span>Guardar</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCancelTimer}
-                  className="p-0.5 text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 cursor-pointer"
-                  title="Descartar cronómetro"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Quiet Presets Toggle */}
-            <button
-              type="button"
-              onClick={() => setShowPresets((prev) => !prev)}
-              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer min-h-[34px] ${
-                showPresets
-                  ? 'bg-slate-200/80 dark:bg-white/10 text-slate-800 dark:text-white border-slate-300 dark:border-white/15'
-                  : 'bg-white dark:bg-[#1E222D] text-slate-500 dark:text-slate-400 border-slate-200/90 dark:border-white/[0.08] hover:text-slate-800 dark:hover:text-slate-200'
-              }`}
-              title="Plantillas rápidas de 1 clic"
-            >
-              <Zap className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Plantillas</span>
-            </button>
+            </div>
           </div>
         </form>
 
@@ -921,8 +923,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       </td>
 
                       {/* Actividad (Descripción limpia + metadatos discretos solo cuando existen) */}
-                      <td className="py-3 px-4 align-top">
-                        <div className="flex flex-col gap-1">
+                      <td className="py-3 px-4 align-top w-full max-w-0">
+                        <div className="flex flex-col gap-1 min-w-0 overflow-hidden">
                           <RichHtmlRenderer
                             content={act.descripcion}
                             clampLines={2}
@@ -930,7 +932,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                           />
 
                           {hasMetaRow && (
-                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 min-w-0">
                               {act.parent_task_id && (
                                 <button
                                   type="button"
@@ -938,7 +940,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                   className="inline-flex items-center gap-1 hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
                                   title={
                                     act.parent_task_desc
-                                      ? `Ver origen: ${act.parent_task_desc}`
+                                      ? `Ver origen: ${stripHtml(act.parent_task_desc)}`
                                       : 'Ver actividad de origen'
                                   }
                                 >
@@ -1158,7 +1160,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     </div>
                   </div>
 
-                  <div className="mb-2">
+                  <div className="mb-2 min-w-0 overflow-hidden">
                     <RichHtmlRenderer
                       content={act.descripcion}
                       clampLines={2}

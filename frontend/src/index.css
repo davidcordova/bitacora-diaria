@@ -333,3 +333,18 @@
   color: #38bdf8;
   border: 1px solid rgba(56, 189, 248, 0.22);
 }
+
+/* Responsive safeguards & horizontal scroll utilities */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

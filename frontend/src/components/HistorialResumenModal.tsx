@@ -26,6 +26,7 @@ import { formatDateLong, formatDateDisplay, formatDuration, stripHtml, copyToCli
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { WhatsAppShareModal } from './WhatsAppShareModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface HistorialResumenModalProps {
   isOpen: boolean;
@@ -53,6 +54,8 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerEvidencias, setViewerEvidencias] = useState<Evidencia[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
+
+  useModalBehavior(isOpen && Boolean(bitacora), onClose);
 
   if (!isOpen || !bitacora) return null;
 
@@ -144,8 +147,16 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="relative w-full max-w-3xl bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col">
+      <div
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto overflow-x-hidden bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-3xl bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col"
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-[#1E222D] border-b border-slate-200 dark:border-white/[0.08] shrink-0">
             <div className="flex items-center gap-2.5 sm:gap-3">
@@ -181,30 +192,30 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
           </div>
 
           {/* Modal Body - Scrollable */}
-          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto overflow-x-hidden min-h-0 flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-[#1E222D] rounded-2xl border border-slate-200/80 dark:border-white/[0.08]">
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Colaborador
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 min-w-0">
                   <UserIcon className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                   <span className="truncate">{bitacora.colaborador}</span>
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Área / Equipo
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 min-w-0">
                   <Building2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
                   <span className="truncate">{bitacora.area}</span>
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Hora de Inicio
                 </span>
@@ -214,13 +225,13 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Tiempo Total
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 font-extrabold text-xs sm:text-sm text-sky-600 dark:text-sky-400">
                   <Timer className="w-3.5 h-3.5 text-sky-500 shrink-0" />
-                  <span>{totalMinutos} min ({formatDuration(totalMinutos)})</span>
+                  <span className="truncate">{totalMinutos} min ({formatDuration(totalMinutos)})</span>
                 </div>
               </div>
             </div>
@@ -338,20 +349,20 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08] min-w-0 overflow-hidden">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                    <ListTodo className="w-3.5 h-3.5 text-sky-500" />
+                    <ListTodo className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                     <span>Pendientes</span>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
                     {bitacora.pendientes || 'Sin pendientes reportados.'}
                   </p>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08] min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1 flex-wrap">
                     <AlertTriangle
-                      className={`w-3.5 h-3.5 ${
+                      className={`w-3.5 h-3.5 shrink-0 ${
                         bitacora.necesita_apoyo === 'Si' ? 'text-amber-500' : 'text-slate-400'
                       }`}
                     />
@@ -366,19 +377,19 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                       {bitacora.necesita_apoyo || 'No'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
                     {bitacora.necesita_apoyo === 'Si' && bitacora.apoyo_detalle
                       ? bitacora.apoyo_detalle
                       : 'No se requiere apoyo extraordinario.'}
                   </p>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08] min-w-0 overflow-hidden">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                    <Target className="w-3.5 h-3.5 text-emerald-500" />
+                    <Target className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                     <span>Prioridad Siguiente Día</span>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                  <p className="text-xs text-slate-600 dark:text-slate-400 break-words [overflow-wrap:anywhere]">
                     {bitacora.prioridad_siguiente || 'No especificada.'}
                   </p>
                 </div>

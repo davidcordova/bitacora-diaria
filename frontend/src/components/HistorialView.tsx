@@ -239,7 +239,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
       <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/80 dark:border-white/[0.07] p-4 sm:p-5 space-y-3.5 shadow-2xs transition-all duration-200">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* 1. Text Search Input */}
-          <div className="relative flex-1 min-w-[220px]">
+          <div className="relative flex-1 min-w-0 sm:min-w-[220px]">
             <input
               type="text"
               value={searchTerm}
@@ -251,13 +251,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
           </div>
 
           {/* 2. Specific Date Picker Input */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex items-center">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <div className="relative flex items-center flex-1 sm:flex-initial min-w-[140px]">
               <input
                 type="date"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className={`pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
+                className={`w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
                   dateFilter
                     ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-500/30'
                     : 'bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06]'
@@ -534,7 +534,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                     </div>
 
                     {/* Col 4: Tareas Registradas */}
-                    <div className="col-span-3 pr-2">
+                    <div className="col-span-3 pr-2 min-w-0 overflow-hidden">
                       <div className="space-y-1">
                         {(() => {
                           const actsToShow = (item.actividades || []).filter((act) => {

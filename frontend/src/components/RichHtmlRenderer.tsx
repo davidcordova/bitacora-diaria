@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import DOMPurify from 'dompurify';
 
 const LINK_CLASS =
-  'text-sky-600 dark:text-sky-400 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity';
+  'text-sky-600 dark:text-sky-400 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity break-all';
 
 // Lista blanca estricta: solo formato de texto, listas, enlaces, imágenes y código.
 const PURIFY_CONFIG = {
@@ -89,7 +89,7 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
     parsed = parsed.replace(
       urlPattern,
       (url) =>
-        `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-400 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity inline-flex items-center gap-0.5">${url}</a>`
+        `<a href="${url}" target="_blank" rel="noopener noreferrer" class="${LINK_CLASS}">${url}</a>`
     );
 
     // Convertir saltos de línea a <br /> preservando los bloques <pre>
@@ -130,7 +130,7 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
     <div
       style={clampStyle}
       onClick={handleImageClick}
-      className={`prose prose-sm dark:prose-invert max-w-none text-xs sm:text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200 break-words [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-100 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-sky-400 [&_code]:font-mono [&_code]:text-[11px] [&_img]:max-h-56 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2 [&_img]:cursor-pointer hover:[&_img]:opacity-90 [&_img]:transition-opacity ${className}`}
+      className={`prose prose-sm dark:prose-invert min-w-0 max-w-full ${clampLines ? '' : 'overflow-x-hidden'} text-xs sm:text-sm font-medium leading-relaxed text-slate-800 dark:text-slate-200 break-words [overflow-wrap:anywhere] [&_a]:break-all [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1.5 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-100 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-sky-400 [&_code]:font-mono [&_code]:text-[11px] [&_code]:break-words [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_img]:max-w-full [&_img]:h-auto [&_img]:max-h-56 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2 [&_img]:cursor-pointer hover:[&_img]:opacity-90 [&_img]:transition-opacity ${className}`}
       dangerouslySetInnerHTML={{ __html: processedHtml }}
     />
   );

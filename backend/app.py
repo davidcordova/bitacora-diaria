@@ -7,6 +7,7 @@ import time
 import io
 import csv
 import re
+import html
 import logging
 import secrets
 from datetime import datetime, timedelta
@@ -176,6 +177,12 @@ def format_actividad_dict(act_row, users_map=None, fecha=None):
         a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'), act_fecha)
 
     a_dict['evidencias'] = sanitize_evidencias(a_dict.get('evidencias'), a_dict.get('descripcion', ''))
+
+    raw_parent_desc = a_dict.get('parent_task_desc')
+    if raw_parent_desc:
+        clean_parent = re.sub(r'<[^>]+>', ' ', str(raw_parent_desc))
+        clean_parent = re.sub(r'\s+', ' ', html.unescape(clean_parent)).strip()
+        a_dict['parent_task_desc'] = clean_parent
 
     sw_val = a_dict.get('shared_with')
     if isinstance(sw_val, str):

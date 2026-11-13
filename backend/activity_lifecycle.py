@@ -580,3 +580,4 @@ def relink_children_before_delete(cursor, del_ids):
             "UPDATE actividades SET parent_task_id = CASE WHEN id = ? THEN NULL ELSE ? END WHERE parent_task_id = ?",
             (cur_parent or -1, cur_parent, did),
         )
+

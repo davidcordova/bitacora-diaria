@@ -300,3 +300,40 @@ def test_eliminar_tarea_arrastrada_no_resucita_ancestro(client, make_user):
     assert d1_row is not None
     assert d1_row['duracion_min'] == 30
     assert (d1_row['is_deleted'] or 0) == 0
+
+
+def test_parent_task_desc_se_entrega_sin_etiquetas_html(client, make_user):
+    """
+    Cuando la tarea origen contiene HTML enriquecido o párrafos largos con saltos de línea,
+    parent_task_desc en la tarea vinculada debe serializarse limpio y sin etiquetas crudas.
+    """
+    u = make_user()
+    uid = u['user']['id']
+    uname = u['user']['full_name']
+
+    r1 = client.post('/api/bitacoras', json={
+        'fecha': '2026-11-11',
+        'colaborador': uname,
+        'user_id': uid,
+        'actividades': [{
+            'id': 'html-origin',
+            'hora_inicio': '09:00',
+            'hora_fin': '11:00',
+            'duracion_min': 120,
+            'descripcion': '<p>Se cerró la <strong>Fase 4C</strong> (mkt_rh_management&nbsp;17.0.1.8.0).</p><p>Enlace: https://claude.ai/artifact/MJojqe5T6qxJuhmRKiPxpX</p>',
+            'estado': 'en_proceso',
+        }],
+    }, headers=u['h'])
+    origin_id = r1.json['bitacora']['actividades'][0]['id']
+
+    execute_daily_rollover(today_str='2026-11-12')
+    b_next = client.get(f'/api/bitacoras?fecha=2026-11-12&user_id={uid}', headers=u['h']).json[0]
+    child = b_next['actividades'][0]
+
+    assert child['parent_task_id'] == origin_id
+    assert '<p>' not in child['parent_task_desc']
+    assert '<strong>' not in child['parent_task_desc']
+    assert '&nbsp;' not in child['parent_task_desc']
+    assert 'Fase 4C' in child['parent_task_desc']
+
+

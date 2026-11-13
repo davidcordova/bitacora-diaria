@@ -167,7 +167,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto min-h-0 flex-1">
+        <div className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto overflow-x-hidden min-h-0 flex-1">
           {/* Contingency Banner */}
           <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300/60 dark:border-emerald-700/50 rounded-2xl flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />

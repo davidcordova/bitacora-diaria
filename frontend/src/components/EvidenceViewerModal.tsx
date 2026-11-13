@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Evidencia } from '../types';
 import { confirmDialog } from './DialogHost';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface EvidenceViewerModalProps {
   isOpen: boolean;
@@ -28,6 +29,8 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
 
+  useModalBehavior(isOpen && evidencias.length > 0, onClose);
+
   useEffect(() => {
     setCurrentIndex(initialIndex);
   }, [initialIndex, isOpen]);
@@ -35,7 +38,6 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
-      if (e.key === 'Escape') onClose();
       if (e.key === 'ArrowLeft') handlePrev();
       if (e.key === 'ArrowRight') handleNext();
     };
@@ -66,7 +68,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn overflow-y-auto overflow-x-hidden"
       onClick={onClose}
       id="evidence-modal-backdrop"
     >

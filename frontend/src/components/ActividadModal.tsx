@@ -29,6 +29,7 @@ import {
   getRefrigerioMinutos,
   previewCandidateOverlap,
   formatDuration,
+  stripHtml,
 } from '../utils/formatters';
 import { useModalBehavior } from '../hooks/useModalBehavior';
 import { EvidenceDropzone } from './EvidenceDropzone';
@@ -383,7 +384,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 select-none overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 select-none overflow-y-auto overflow-x-hidden">
       <div className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden">
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-[#1A1E29] border-b border-slate-200/80 dark:border-white/[0.07] shrink-0">
@@ -407,7 +408,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
         {/* Modal Form with Scrollable Body & Sticky Footer */}
         <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
             {errorMsg && (
               <div className="flex items-center gap-2 p-3 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/25 rounded-xl">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -764,8 +765,8 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               </div>
 
               {parentTaskId ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-white dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/10">
-                  <div className="flex items-center gap-2 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-lg bg-white dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/10 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                     <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 shrink-0">
                       {tipoVinculo === 'continuacion'
                         ? 'Continuación'
@@ -775,8 +776,8 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                         ? 'Bloqueado por'
                         : 'Relacionada'}
                     </span>
-                    <span className="text-xs text-slate-700 dark:text-slate-200 truncate">
-                      {parentTaskDesc || `Actividad previa #${parentTaskId}`}
+                    <span className="block min-w-0 flex-1 text-xs text-slate-700 dark:text-slate-200 truncate">
+                      {(parentTaskDesc ? stripHtml(parentTaskDesc).trim() : '') || `Actividad previa #${parentTaskId}`}
                     </span>
                   </div>
 
@@ -796,7 +797,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               ) : (
                 showLinkSelector && (
                   <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-white/[0.06]">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                       <select
                         value={tipoVinculo}
                         onChange={(e) => setTipoVinculo(e.target.value)}
@@ -808,7 +809,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                         <option value="relacionada">Relacionada con</option>
                       </select>
 
-                      <div className="relative flex-1">
+                      <div className="relative flex-1 min-w-0">
                         <input
                           type="text"
                           placeholder="Buscar actividad previa por texto o cliente..."
@@ -823,7 +824,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                    <div className="max-h-40 overflow-y-auto overflow-x-hidden space-y-1.5 pr-1">
                       {loadingRefs ? (
                         <div className="text-center py-3 text-xs text-slate-400">Cargando actividades recientes...</div>
                       ) : referencias.length === 0 ? (
