@@ -70,24 +70,23 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
   return (
     <div className="space-y-4">
       {/* 1. Tip Box */}
-      <div className="bg-slate-50 dark:bg-[#161722] border border-slate-200/80 dark:border-[#252636] rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
-        <div className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 shrink-0 mt-0.5">
+      <div className="bg-slate-50 dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-4 flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/70 dark:border-sky-500/20 shrink-0 mt-0.5">
           <Lightbulb className="w-5 h-5" />
         </div>
         <div>
           <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">Tip</div>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5 leading-relaxed">
-            Puedes registrar varias actividades en el mismo día. El sistema calculará el tiempo
-            total automáticamente.
+            Puedes registrar varias actividades en el mismo día. Si agregas tareas pequeñas dentro del rango horario de una tarea mayor, el tiempo neto se ajustará automáticamente.
           </p>
         </div>
       </div>
 
       {/* 2. Main Preview Card */}
       <div className="saas-card p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-[#252636]">
+        <div className="flex items-start justify-between gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+            <div className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/70 dark:border-sky-500/20">
               <FileText className="w-5 h-5" />
             </div>
             <div>
@@ -102,7 +101,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
         </div>
 
         {/* Formatted Preview Box */}
-        <div className="rounded-2xl bg-slate-50/70 dark:bg-[#161722] border border-slate-200/80 dark:border-[#252636] p-4 font-sans text-xs text-slate-800 dark:text-slate-200 space-y-4">
+        <div className="rounded-2xl bg-slate-50/70 dark:bg-[#1E222D]/80 border border-slate-200/80 dark:border-white/[0.08] p-4 font-sans text-xs text-slate-800 dark:text-slate-200 space-y-4">
           {/* Header Metadata */}
           <div>
             <div className="font-extrabold text-[13px] text-slate-900 dark:text-slate-100 uppercase tracking-wide mb-2">
@@ -136,7 +135,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
 
           {/* Activities List */}
           <div>
-            <div className="font-bold text-[11px] text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200 dark:border-[#252636]">
+            <div className="font-bold text-[11px] text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200 dark:border-white/[0.08]">
               ACTIVIDADES
             </div>
             {bitacora.actividades.length === 0 ? (
@@ -147,7 +146,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
                   const estadoBadge = getEstadoBadgeInfo(act.estado);
                   return (
                     <div key={index} className="flex items-start gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center text-[10px] font-extrabold shrink-0 mt-0.5 shadow-2xs">
+                      <span className="w-5 h-5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                         {index + 1}
                       </span>
                       <div className="flex-1 space-y-1">
@@ -158,7 +157,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
                           <span className="text-slate-400 dark:text-slate-600">|</span>
                           <span className="text-slate-600 dark:text-slate-400">{act.duracion_min || 0} min</span>
                           {act.tipo_trabajo && (
-                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 text-[10px] font-semibold">
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 text-[10px] font-medium">
                               {act.tipo_trabajo}
                             </span>
                           )}
@@ -192,10 +191,10 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
                                   setViewerIndex(evIdx);
                                   setViewerOpen(true);
                                 }}
-                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#00F0FF]/10 dark:bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-cyan-600 dark:text-[#00F0FF] text-[10px] font-semibold border border-[#00F0FF]/30 transition cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 text-[10px] font-medium border border-sky-200/80 dark:border-sky-500/25 transition cursor-pointer"
                                 title={`Ver ${ev.nombre}`}
                               >
-                                <Paperclip className="w-3 h-3 text-[#00F0FF]" />
+                                <Paperclip className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                                 <span className="max-w-[120px] truncate">{ev.nombre}</span>
                               </button>
                             ))}
@@ -210,8 +209,8 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
           </div>
 
           {/* Total Duration Block */}
-          <div className="bg-white dark:bg-[#13141F] border border-slate-200/80 dark:border-[#252636] rounded-2xl p-3 flex items-center gap-3 shadow-2xs">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 flex items-center justify-center shrink-0 shadow-2xs">
+          <div className="bg-white dark:bg-[#161922] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-3 flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/70 dark:border-sky-500/20 flex items-center justify-center shrink-0">
               <Clock className="w-4 h-4" />
             </div>
             <div>
@@ -225,7 +224,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
           </div>
 
           {/* Cierre de Jornada Section */}
-          <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-[#252636]">
+          <div className="space-y-1.5 pt-2 border-t border-slate-200 dark:border-white/[0.08]">
             <div className="font-bold text-[11px] text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-2">
               Cierre de jornada
             </div>
@@ -255,8 +254,8 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
 
         {/* Status / Success Banner if generated */}
         {isGenerated && (
-          <div className="mt-4 p-3 bg-[#00F0FF]/10 border border-[#00F0FF]/30 rounded-2xl flex items-center gap-2.5 text-xs text-cyan-600 dark:text-[#00F0FF] animate-in fade-in">
-            <CheckCircle2 className="w-4 h-4 text-[#00F0FF] shrink-0" />
+          <div className="mt-4 p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/25 rounded-2xl flex items-center gap-2.5 text-xs text-emerald-700 dark:text-emerald-300 animate-in fade-in">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
             <span>
               <strong>Bitácora generada correctamente.</strong> Puedes copiar el resumen o compartirlo.
             </span>
@@ -268,16 +267,16 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
           <button
             type="button"
             onClick={handleCopy}
-            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 text-slate-950 py-3 px-5 rounded-full text-xs sm:text-sm font-bold shadow-sm shadow-[#00F0FF]/20 transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 active:scale-[0.99] text-white py-2.5 px-5 rounded-xl text-xs sm:text-sm font-semibold shadow-2xs transition-all cursor-pointer"
           >
             {copied ? (
               <>
-                <Check className="w-4 h-4 text-slate-950" />
+                <Check className="w-4 h-4 text-white" />
                 <span>¡Resumen copiado al portapapeles!</span>
               </>
             ) : (
               <>
-                <Copy className="w-4 h-4 text-slate-900" />
+                <Copy className="w-4 h-4 text-white" />
                 <span>Copiar resumen</span>
               </>
             )}
@@ -288,7 +287,7 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
             <button
               type="button"
               onClick={handleWhatsApp}
-              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-200 hover:text-emerald-500 dark:hover:text-emerald-400 border border-slate-200 dark:border-[#252636] py-2.5 px-3 rounded-full text-xs font-semibold transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#1E222D] hover:bg-slate-50 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-200 hover:text-emerald-600 dark:hover:text-emerald-400 border border-slate-200 dark:border-white/[0.08] py-2.5 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer"
             >
               <Share2 className="w-3.5 h-3.5 text-emerald-500" />
               <span>WhatsApp</span>
@@ -297,9 +296,9 @@ export const ResumenPreview: React.FC<ResumenPreviewProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-200 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] border border-slate-200 dark:border-[#252636] py-2.5 px-3 rounded-full text-xs font-semibold transition-all cursor-pointer"
+              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#1E222D] hover:bg-slate-50 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 border border-slate-200 dark:border-white/[0.08] py-2.5 px-3 rounded-xl text-xs font-semibold transition-all cursor-pointer"
             >
-              <Printer className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+              <Printer className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
               <span>Imprimir / PDF</span>
             </button>
           </div>

@@ -141,7 +141,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/75 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-xl bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-rose-500/10 border-b border-rose-500/20 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
@@ -203,11 +203,11 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
             </label>
 
             {evidenciaScreenshot ? (
-              <div className="relative group border border-slate-200 dark:border-[#252636] rounded-2xl overflow-hidden bg-slate-50 dark:bg-[#161722] p-2 flex items-center gap-3">
+              <div className="relative group border border-slate-200 dark:border-white/[0.08] rounded-2xl overflow-hidden bg-slate-50 dark:bg-[#1E222D] p-2 flex items-center gap-3">
                 <img
                   src={evidenciaScreenshot.url}
                   alt="Captura de error"
-                  className="w-16 h-16 object-cover rounded-xl border border-slate-200 dark:border-[#252636]"
+                  className="w-16 h-16 object-cover rounded-xl border border-slate-200 dark:border-white/[0.08]"
                 />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
@@ -227,7 +227,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
                 </button>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-slate-200 dark:border-[#252636] hover:border-cyan-500/50 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-slate-50/50 dark:bg-[#161722]/50">
+              <label className="border-2 border-dashed border-slate-200 dark:border-white/[0.08] hover:border-cyan-500/50 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors bg-slate-50/50 dark:bg-[#1E222D]/50">
                 <input
                   type="file"
                   accept="image/*"
@@ -259,7 +259,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
               placeholder="Ej. Al agregar la segunda tarea de soporte y hacer clic en Guardar"
-              className="w-full px-3.5 py-2 text-xs bg-slate-50 dark:bg-[#161722] border border-slate-200 dark:border-[#252636] rounded-xl text-slate-800 dark:text-slate-100 outline-hidden focus:border-[#00F0FF]"
+              className="w-full px-3.5 py-2 text-xs bg-slate-50 dark:bg-[#1E222D] border border-slate-200 dark:border-white/[0.08] rounded-xl text-slate-800 dark:text-slate-100 outline-hidden focus:border-sky-500"
             />
           </div>
 
@@ -272,12 +272,12 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
         </div>
 
         {/* Footer Actions */}
-        <div className="px-4 sm:px-6 py-3 bg-slate-50/80 dark:bg-[#161722]/80 border-t border-slate-100 dark:border-[#252636] flex items-center justify-between gap-2.5 flex-wrap shrink-0">
+        <div className="px-4 sm:px-6 py-3 bg-slate-50/80 dark:bg-[#1E222D]/80 border-t border-slate-100 dark:border-white/[0.08] flex items-center justify-between gap-2.5 flex-wrap shrink-0">
           <button
             type="button"
             onClick={onRetrySync}
             disabled={isRetrying}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer shadow-xs disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRetrying ? 'animate-spin' : ''}`} />
             <span>{isRetrying ? 'Reintentando...' : 'Reintentar Guardar'}</span>
@@ -287,7 +287,7 @@ Captura Adjunta: ${evidenciaScreenshot?.url || 'Ninguna'}
             <button
               type="button"
               onClick={handleCopyReport}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#252636] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-bold bg-slate-100 dark:bg-[#232836] text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/[0.08] transition-all cursor-pointer"
               title="Copiar texto técnico para pegar en chat de WhatsApp o Teams"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}

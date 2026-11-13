@@ -470,7 +470,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       </div>
 
       {/* BARRA DE FILTROS Y ORDENAMIENTO */}
-      <div className="bg-white dark:bg-[#13141F] rounded-2xl p-4 border border-slate-200/90 dark:border-white/5 shadow-xs dark:shadow-lg space-y-3">
+      <div className="bg-white dark:bg-[#161922] rounded-2xl p-4 border border-slate-200/90 dark:border-white/5 shadow-xs dark:shadow-lg space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Búsqueda rápida */}
           <div className="relative flex-1">
@@ -637,7 +637,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
             return (
               <div
                 key={sug.id}
-                className="group relative bg-white dark:bg-[#13141F] hover:bg-slate-50/70 dark:hover:bg-[#161726] border border-slate-200/90 dark:border-white/10 hover:border-cyan-500/40 dark:hover:border-cyan-500/30 rounded-2xl p-5 md:p-6 transition-all duration-200 shadow-xs hover:shadow-md dark:shadow-md dark:hover:shadow-cyan-950/20 flex flex-col md:flex-row items-start gap-4 md:gap-6"
+                className="group relative bg-white dark:bg-[#161922] hover:bg-slate-50/70 dark:hover:bg-[#161726] border border-slate-200/90 dark:border-white/10 hover:border-cyan-500/40 dark:hover:border-cyan-500/30 rounded-2xl p-5 md:p-6 transition-all duration-200 shadow-xs hover:shadow-md dark:shadow-md dark:hover:shadow-cyan-950/20 flex flex-col md:flex-row items-start gap-4 md:gap-6"
               >
                 {/* BOTÓN DE VOTACIÓN ADAPTATIVO */}
                 <div className="flex md:flex-col items-center justify-center gap-2 self-stretch md:self-start bg-slate-50 dark:bg-[#181926] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 min-w-[70px]">
@@ -835,7 +835,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       {/* MODAL CREAR PROPUESTA */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">
@@ -1053,7 +1053,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       {/* MODAL RESPUESTA ADMIN / LÍDER */}
       {respondModalSug && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
               <div className="flex items-center gap-2.5">
                 <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">

@@ -94,7 +94,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
       case 'bloqueado_por':
         return { label: 'Bloqueada por', badge: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800/50' };
       case 'relacionada':
-        return { label: 'Relacionada con', badge: 'bg-cyan-50 dark:bg-cyan-950/40 text-cyan-800 dark:text-[#00F0FF] border-cyan-200 dark:border-[#00F0FF]/30' };
+        return { label: 'Relacionada con', badge: 'bg-cyan-50 dark:bg-cyan-950/40 text-sky-700 dark:text-sky-400 border-cyan-200 dark:border-sky-500/30' };
       case 'continuacion':
       default:
         return { label: 'Continuación de', badge: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800/50' };
@@ -111,7 +111,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
         };
       case 'en_proceso':
         return {
-          bg: 'bg-cyan-50 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border-cyan-200 dark:border-[#00F0FF]/40',
+          bg: 'bg-cyan-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border-cyan-200 dark:border-sky-500/40',
           label: 'En proceso',
           icon: Timer,
         };
@@ -124,7 +124,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]',
+          bg: 'bg-slate-100 dark:bg-[#232836] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.08]',
           label: 'Por iniciar',
           icon: ListTodo,
         };
@@ -137,11 +137,11 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto">
+      <div className="relative w-full max-w-xl bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-white/[0.08] overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50/90 dark:bg-[#161722]/90 border-b border-slate-100 dark:border-[#252636] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50/90 dark:bg-[#1E222D]/90 border-b border-slate-100 dark:border-white/[0.08] shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/60 dark:border-[#00F0FF]/30 shrink-0">
+            <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-cyan-300/60 dark:border-sky-500/30 shrink-0">
               <Link2 className="w-4 h-4" />
             </div>
             <div>
@@ -161,7 +161,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1C1D2A] rounded-full transition-colors cursor-pointer shrink-0"
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#232836] rounded-full transition-colors cursor-pointer shrink-0"
             title="Cerrar (Esc)"
           >
             <X className="w-5 h-5" />
@@ -172,7 +172,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
         <div className="p-4 sm:p-6 overflow-y-auto min-h-0 flex-1 space-y-3.5 sm:space-y-4">
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center gap-3 text-slate-500 dark:text-slate-400">
-              <Loader2 className="w-8 h-8 animate-spin text-cyan-600 dark:text-[#00F0FF]" />
+              <Loader2 className="w-8 h-8 animate-spin text-sky-600 dark:text-sky-400" />
               <p className="text-xs font-medium">Buscando actividad referenciada #{refId}...</p>
             </div>
           ) : error ? (
@@ -186,7 +186,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
           ) : refActividad ? (
             <>
               {/* Origin Bitacora Info Card */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#161722] border border-slate-200/90 dark:border-[#252636] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#1E222D] border border-slate-200/90 dark:border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800/40">
                     <Calendar className="w-4 h-4" />
@@ -215,7 +215,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
               </div>
 
               {/* Meta Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 bg-slate-50/70 dark:bg-[#161722]/60 rounded-2xl border border-slate-200/80 dark:border-[#252636]">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 p-3 bg-slate-50/70 dark:bg-[#1E222D]/60 rounded-2xl border border-slate-200/80 dark:border-white/[0.08]">
                 <div>
                   <span className="block text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">
                     Hora / Tiempo
@@ -224,7 +224,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                     <span>{refActividad.hora_inicio || '--:--'}</span>
                     <span className="text-slate-300 dark:text-slate-600">•</span>
-                    <span className="text-cyan-800 dark:text-[#00F0FF] font-extrabold">{refActividad.duracion_min}m</span>
+                    <span className="text-sky-700 dark:text-sky-400 font-extrabold">{refActividad.duracion_min}m</span>
                   </div>
                 </div>
 
@@ -254,7 +254,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                   Descripción de la tarea referenciada:
                 </label>
-                <div className="p-3.5 rounded-2xl bg-white dark:bg-[#13141F] border border-slate-200/90 dark:border-[#252636] max-h-48 overflow-y-auto">
+                <div className="p-3.5 rounded-2xl bg-white dark:bg-[#161922] border border-slate-200/90 dark:border-white/[0.08] max-h-48 overflow-y-auto">
                   <RichHtmlRenderer
                     content={refActividad.descripcion}
                     className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed"
@@ -275,8 +275,8 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
 
               {/* Evidencias si tiene */}
               {refActividad.evidencias && refActividad.evidencias.length > 0 && (
-                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#161722] border border-slate-200 dark:border-[#252636] flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
-                  <Paperclip className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />
+                <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-[#1E222D] border border-slate-200 dark:border-white/[0.08] flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                  <Paperclip className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                   <span>Esta actividad cuenta con <strong>{refActividad.evidencias.length}</strong> archivo(s) o evidencia(s) adjunta(s).</span>
                 </div>
               )}
@@ -285,7 +285,7 @@ export const ActividadReferenciaModal: React.FC<ActividadReferenciaModalProps> =
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-50/90 dark:bg-[#161722]/90 border-t border-slate-100 dark:border-[#252636] shrink-0 gap-2.5 flex-wrap">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-50/90 dark:bg-[#1E222D]/90 border-t border-slate-100 dark:border-white/[0.08] shrink-0 gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={onClose}

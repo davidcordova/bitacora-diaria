@@ -129,7 +129,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
       }
 
       // Crear enlace HTML seguro
-      const linkHtml = `<a href="${urlToInsert}" target="_blank" rel="noopener noreferrer" class="text-cyan-600 dark:text-[#00F0FF] underline font-semibold hover:opacity-80">${textToInsert}</a> `;
+      const linkHtml = `<a href="${urlToInsert}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-400 underline font-semibold hover:opacity-80">${textToInsert}</a> `;
       document.execCommand('insertHTML', false, linkHtml);
       handleContentChange();
     }
@@ -235,9 +235,9 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
     : 0;
 
   return (
-    <div className={`flex flex-col rounded-2xl border border-slate-200 dark:border-[#252636] bg-slate-50 dark:bg-[#161722] overflow-hidden focus-within:border-[#00F0FF] focus-within:ring-1 focus-within:ring-[#00F0FF]/30 transition-all ${className}`}>
+    <div className={`flex flex-col rounded-2xl border border-slate-200 dark:border-white/[0.08] bg-slate-50 dark:bg-[#1E222D] overflow-hidden focus-within:border-sky-500 focus-within:ring-1 focus-within:ring-sky-500/30 transition-all ${className}`}>
       {/* Barra de herramientas superior */}
-      <div className="flex flex-wrap items-center justify-between gap-1 p-2 bg-slate-100/90 dark:bg-[#1A1C29] border-b border-slate-200/80 dark:border-[#252636] text-slate-700 dark:text-slate-300">
+      <div className="flex flex-wrap items-center justify-between gap-1 p-2 bg-slate-100/90 dark:bg-[#232836] border-b border-slate-200/80 dark:border-white/[0.08] text-slate-700 dark:text-slate-300">
         {/* Herramientas de formato */}
         <div className="flex items-center gap-0.5 flex-wrap">
           <button
@@ -324,7 +324,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
             onClick={handleOpenLinkModal}
             disabled={isRawHtml}
             title="Insertar enlace (Ctrl+K)"
-            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 text-cyan-600 dark:text-[#00F0FF] disabled:opacity-30 cursor-pointer transition-colors"
+            className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 text-sky-600 dark:text-sky-400 disabled:opacity-30 cursor-pointer transition-colors"
           >
             <LinkIcon className="w-4 h-4" />
           </button>
@@ -337,7 +337,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
             title="Adjuntar Imagen (también puedes pegar con Ctrl+V)"
             className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-white/10 text-slate-700 dark:text-slate-200 disabled:opacity-30 cursor-pointer transition-colors"
           >
-            {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-[#00F0FF]" /> : <ImageIcon className="w-4 h-4" />}
+            {isUploading ? <Loader2 className="w-4 h-4 animate-spin text-sky-500" /> : <ImageIcon className="w-4 h-4" />}
           </button>
 
           {/* Adjuntar Archivo */}
@@ -370,7 +370,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
             onClick={() => setIsRawHtml(!isRawHtml)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
               isRawHtml
-                ? 'bg-[#00F0FF]/20 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/40'
+                ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/40'
                 : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/10'
             }`}
             title={isRawHtml ? 'Cambiar a modo visual WYSIWYG' : 'Ver y editar código HTML'}
@@ -415,15 +415,15 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
 
       {/* Popover / Modal inline de inserción de enlaces */}
       {showLinkModal && (
-        <div className="p-3 bg-white dark:bg-[#1A1C29] border-b border-slate-200 dark:border-[#252636] flex flex-col sm:flex-row items-center gap-2 animate-in fade-in duration-150">
+        <div className="p-3 bg-white dark:bg-[#232836] border-b border-slate-200 dark:border-white/[0.08] flex flex-col sm:flex-row items-center gap-2 animate-in fade-in duration-150">
           <div className="flex-1 w-full flex items-center gap-2">
-            <LinkIcon className="w-4 h-4 text-[#00F0FF] shrink-0" />
+            <LinkIcon className="w-4 h-4 text-sky-500 shrink-0" />
             <input
               type="text"
               value={linkUrl}
               onChange={(e) => setLinkUrl(e.target.value)}
               placeholder="https://ejemplo.com o link de tarea..."
-              className="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-[#13141F] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] outline-hidden"
+              className="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-[#161922] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-white/[0.08] focus:border-sky-500 outline-hidden"
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -441,7 +441,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
               value={linkText}
               onChange={(e) => setLinkText(e.target.value)}
               placeholder="Texto visible (opcional)"
-              className="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-[#13141F] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-[#252636] focus:border-[#00F0FF] outline-hidden"
+              className="flex-1 px-3 py-1.5 text-xs bg-slate-50 dark:bg-[#161922] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200 dark:border-white/[0.08] focus:border-sky-500 outline-hidden"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
@@ -456,7 +456,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
             <button
               type="button"
               onClick={handleApplyLink}
-              className="px-3 py-1.5 bg-[#00F0FF] hover:bg-[#00D4E0] text-slate-950 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+              className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center gap-1"
             >
               <Check className="w-3.5 h-3.5" />
               <span>Insertar</span>
@@ -494,7 +494,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
               role="textbox"
               aria-multiline="true"
               style={{ minHeight: `calc(${minHeight} - 20px)` }}
-              className="w-full outline-hidden text-xs sm:text-sm font-medium leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-200/80 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-[#00F0FF] [&_code]:font-mono [&_code]:text-[11px] [&_img]:max-h-48 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2"
+              className="w-full outline-hidden text-xs sm:text-sm font-medium leading-relaxed prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_h3]:text-sm [&_h3]:font-bold [&_h3]:my-1 [&_h3]:text-slate-900 dark:[&_h3]:text-white [&_strong]:text-slate-950 dark:[&_strong]:text-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-slate-200/80 dark:[&_code]:bg-white/10 [&_code]:text-cyan-600 dark:[&_code]:text-sky-400 [&_code]:font-mono [&_code]:text-[11px] [&_img]:max-h-48 [&_img]:rounded-xl [&_img]:border [&_img]:border-slate-200 dark:[&_img]:border-white/10 [&_img]:my-2"
             />
             {(!value || value === '<p><br></p>' || value === '<br>' || value.trim() === '') && (
               <div
@@ -509,7 +509,7 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
       </div>
 
       {/* Barra de pie de página: Contador e indicaciones */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100/50 dark:bg-[#1A1C29]/50 border-t border-slate-200/60 dark:border-[#252636] text-[10px] text-slate-400 dark:text-slate-500">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-100/50 dark:bg-[#232836]/50 border-t border-slate-200/60 dark:border-white/[0.08] text-[10px] text-slate-400 dark:text-slate-500">
         <span className="flex items-center gap-2">
           <span>Pega capturas con <strong>Ctrl+V</strong></span>
           <span>•</span>

@@ -18,6 +18,8 @@ export interface Actividad {
   hora_inicio: string;
   hora_fin?: string;
   duracion_min: number;
+  duracion_bruta_min?: number;
+  minutos_descontados?: number;
   tipo_trabajo: string;
   descripcion: string;
   para_cliente: string;

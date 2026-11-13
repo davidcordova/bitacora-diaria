@@ -62,10 +62,10 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
 
   const config = {
     success: {
-      bg: 'bg-slate-900/95 dark:bg-[#161722]/95 text-white border-[#00F0FF]/40 shadow-slate-950/30',
+      bg: 'bg-slate-900/95 dark:bg-[#1E222D]/95 text-white border-sky-500/40 shadow-slate-950/30',
       icon: CheckCircle2,
-      iconColor: 'text-[#00F0FF]',
-      barColor: 'bg-[#00F0FF]',
+      iconColor: 'text-sky-500',
+      barColor: 'bg-sky-500',
     },
     error: {
       bg: 'bg-rose-950/95 text-white border-rose-600/60 shadow-rose-950/30',
@@ -74,7 +74,7 @@ const ToastItem: React.FC<{ toast: ToastMessage; onDismiss: (id: string) => void
       barColor: 'bg-rose-400',
     },
     info: {
-      bg: 'bg-slate-900/95 dark:bg-[#161722]/95 text-white border-slate-700/60 shadow-slate-950/30',
+      bg: 'bg-slate-900/95 dark:bg-[#1E222D]/95 text-white border-slate-700/60 shadow-slate-950/30',
       icon: Info,
       iconColor: 'text-cyan-400',
       barColor: 'bg-cyan-400',

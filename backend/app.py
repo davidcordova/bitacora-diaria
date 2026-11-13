@@ -36,6 +36,14 @@ from security import (
 )
 from routes.system_routes import system_bp, normalize_client_name
 from routes.mcp_routes import mcp_bp
+from activity_lifecycle import (
+    normalize_desc_key,
+    enrich_activities_with_net_info,
+    recalculate_bitacora_durations,
+    propagate_completion_across_lineage,
+    mark_lineage_rollover_dismissed,
+    relink_children_before_delete,
+)
 
 logging.basicConfig(
     level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
@@ -241,6 +249,14 @@ def check_and_notify_stagnant_activities(user_id=None, cursor=None, conn=None):
         JOIN bitacoras b ON a.bitacora_id = b.id
         WHERE a.estado != 'completada'
           AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND COALESCE(a.rollover_dismissed, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM actividades a_child
+              JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
+              WHERE a_child.parent_task_id = a.id
+                AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
+                AND b_child.fecha > b.fecha
+          )
     '''
     params = []
     if user_id:
@@ -1232,46 +1248,106 @@ def admin_team_detail(team_id):
 def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
     """
     Arrastra tareas abiertas de días previos de un usuario hacia la fecha actual.
-    Idempotente: no duplica si ya fue transferida a hoy o continuada en una fecha posterior.
+    Idempotente:
+      - No duplica si ya fue transferida (activa o enviada a papelera) en una fecha posterior.
+      - No arrastra tareas marcadas con `rollover_dismissed = 1`.
+      - Si una instancia igual/posterior del mismo usuario ya fue completada, cierra el eslabón
+        abierto rezagado en lugar de volver a arrastrarlo.
     """
     open_tasks = cursor.execute('''
         SELECT a.*, b.fecha, b.area
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        WHERE (b.user_id = ? OR b.colaborador = ?)
+        WHERE (b.user_id = ? OR LOWER(TRIM(b.colaborador)) = LOWER(TRIM(?)))
           AND b.fecha < ?
           AND a.estado != 'completada'
           AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND COALESCE(a.rollover_dismissed, 0) = 0
           AND NOT EXISTS (
             SELECT 1 FROM actividades a_child
             JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
             WHERE a_child.parent_task_id = a.id
-              AND (a_child.is_deleted IS NULL OR a_child.is_deleted = 0)
+              AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
               AND b_child.fecha > b.fecha
           )
-        ORDER BY a.id ASC
-    ''', (u_id, u_name, today_str)).fetchall()
-    
+        ORDER BY b.fecha DESC, a.id DESC
+    ''', (u_id, u_name or '', today_str)).fetchall()
+
     if not open_tasks:
         return 0
-        
+
+    min_open_fecha = min(t['fecha'] for t in open_tasks)
+    completed_rows = cursor.execute('''
+        SELECT a.descripcion, MAX(b.fecha) AS max_fecha
+        FROM actividades a
+        JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE (b.user_id = ? OR LOWER(TRIM(b.colaborador)) = LOWER(TRIM(?)))
+          AND b.fecha >= ?
+          AND a.estado = 'completada'
+          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+        GROUP BY a.descripcion
+    ''', (u_id, u_name or '', min_open_fecha)).fetchall()
+
+    completed_max_fecha_by_desc = {}
+    for cr in completed_rows:
+        dk = normalize_desc_key(cr['descripcion'])
+        if dk:
+            prev_f = completed_max_fecha_by_desc.get(dk, '')
+            if (cr['max_fecha'] or '') > prev_f:
+                completed_max_fecha_by_desc[dk] = cr['max_fecha']
+
+    # Filtrar duplicados entre días previos (quedarnos solo con el eslabón más reciente por descripción)
+    # y cerrar silenciosamente los que ya fueron completados en una fecha igual o posterior.
+    filtered_tasks = []
+    stale_to_close = []
+    seen_desc_keys = set()
+    for task in open_tasks:
+        desc_key = normalize_desc_key(task['descripcion'])
+        if not desc_key:
+            continue
+        comp_fecha = completed_max_fecha_by_desc.get(desc_key)
+        if comp_fecha and comp_fecha >= task['fecha']:
+            stale_to_close.append(task['id'])
+            continue
+        if desc_key in seen_desc_keys:
+            # Existe una copia abierta más reciente de la misma tarea en otro día previo;
+            # descartar rollover del duplicado más antiguo para arrastrar una sola vez.
+            cursor.execute("UPDATE actividades SET rollover_dismissed = 1 WHERE id = ?", (task['id'],))
+            continue
+        seen_desc_keys.add(desc_key)
+        filtered_tasks.append(task)
+
+    if stale_to_close:
+        ph = ','.join(['?'] * len(stale_to_close))
+        cursor.execute(
+            f"UPDATE actividades SET estado = 'completada', updated_at = ?, last_stagnant_notified_at = NULL WHERE id IN ({ph})",
+            [now_peru] + stale_to_close,
+        )
+
+    if not filtered_tasks:
+        return len(stale_to_close)
+
+    # Orden cronológico ascendente para mantener el orden natural en la bitácora del día
+    filtered_tasks.reverse()
+
     # Buscar si ya existe bitácora de hoy para este colaborador
     today_b = cursor.execute('''
         SELECT id FROM bitacoras
-        WHERE (user_id = ? OR colaborador = ?) AND fecha = ?
-    ''', (u_id, u_name, today_str)).fetchone()
-    
+        WHERE (user_id = ? OR LOWER(TRIM(colaborador)) = LOWER(TRIM(?))) AND fecha = ?
+        ORDER BY id ASC LIMIT 1
+    ''', (u_id, u_name or '', today_str)).fetchone()
+
     today_b_id = None
     if today_b:
         today_b_id = today_b['id']
     else:
         last_b = cursor.execute('''
             SELECT area FROM bitacoras
-            WHERE (user_id = ? OR colaborador = ?)
+            WHERE (user_id = ? OR LOWER(TRIM(colaborador)) = LOWER(TRIM(?)))
             ORDER BY fecha DESC, id DESC LIMIT 1
-        ''', (u_id, u_name)).fetchone()
+        ''', (u_id, u_name or '')).fetchone()
         area_val = last_b['area'] if last_b else 'Sistemas'
-        
+
         try:
             cursor.execute('''
                 INSERT INTO bitacoras (
@@ -1287,39 +1363,35 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
                 (u_id, today_str)
             ).fetchone()['id']
 
-    # IDs y descripciones de tareas que ya existen hoy
+    # IDs y descripciones de tareas que ya existen hoy (incluyendo enviadas hoy a papelera, para no recrearlas)
     existing_parent_ids = set(
         r[0] for r in cursor.execute(
-            "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL AND (is_deleted IS NULL OR is_deleted = 0)",
+            "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL",
             (today_b_id,)
         ).fetchall()
     )
     existing_descriptions = set(
-        r[0].strip().lower() for r in cursor.execute(
-            "SELECT descripcion FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+        normalize_desc_key(r[0]) for r in cursor.execute(
+            "SELECT descripcion FROM actividades WHERE bitacora_id = ?",
             (today_b_id,)
         ).fetchall() if r[0]
     )
-    
+
     current_order = cursor.execute(
         "SELECT COALESCE(MAX(orden), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
         (today_b_id,)
     ).fetchone()[0] + 1
-    
+
     rolled_count = 0
-    seen_in_batch = set()
-    for task in open_tasks:
-        desc_clean = (task['descripcion'] or '').strip().lower()
+    for task in filtered_tasks:
+        desc_clean = normalize_desc_key(task['descripcion'])
         if not desc_clean:
             continue
-        if task['id'] in existing_parent_ids:
-            continue
-        if desc_clean in existing_descriptions or desc_clean in seen_in_batch:
+        if task['id'] in existing_parent_ids or desc_clean in existing_descriptions:
             continue
 
-        seen_in_batch.add(desc_clean)
         existing_descriptions.add(desc_clean)
-        
+
         orig_created = task['created_at'] or get_peru_now().strftime('%Y-%m-%d %H:%M:%S')
         orig_updated = task['updated_at'] or orig_created
         ev_val = task['evidencias'] if ('evidencias' in task.keys() and task['evidencias']) else '[]'
@@ -1327,16 +1399,16 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
         sw_uuid = task['shared_uuid'] if ('shared_uuid' in task.keys() and task['shared_uuid']) else None
         rev_dec = task['revision_decision'] if ('revision_decision' in task.keys() and task['revision_decision']) else None
         rev_com = task['revision_comentario'] if ('revision_comentario' in task.keys() and task['revision_comentario']) else None
-        rev_por = task['revisado_por'] if ('revisado_por' in task.keys() and task['revisado_por']) else None
+        rev_por = task['revisado_por'] if ('revisado_por' in task.keys() and task['revision_decision']) else None
         rev_at = task['revisado_at'] if ('revisado_at' in task.keys() and task['revisado_at']) else None
         cursor.execute('''
             INSERT INTO actividades (
-                bitacora_id, orden, hora_inicio, duracion_min,
+                bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
                 tipo_trabajo, descripcion, para_cliente, estado,
                 parent_task_id, tipo_vinculo, created_at, updated_at, evidencias,
-                shared_with, shared_uuid, is_deleted,
+                shared_with, shared_uuid, is_deleted, rollover_dismissed,
                 revision_decision, revision_comentario, revisado_por, revisado_at
-            ) VALUES (?, ?, '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)
+            ) VALUES (?, ?, '', '', 0, ?, ?, ?, ?, ?, 'continuacion', ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
         ''', (
             today_b_id,
             current_order,
@@ -1358,8 +1430,8 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
         existing_parent_ids.add(task['id'])
         current_order += 1
         rolled_count += 1
-            
-    return rolled_count
+
+    return rolled_count + len(stale_to_close)
 
 # ==================== DELEGACIONES Y USUARIOS DE APOYO ====================
 
@@ -1662,7 +1734,8 @@ def get_bitacoras():
     for b in bitacoras:
         b_dict = dict(b)
         acts = acts_by_bitacora.get(b['id'], [])
-        b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+        formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+        b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
         result.append(b_dict)
         
     conn.close()
@@ -1699,7 +1772,8 @@ def get_bitacora(bitacora_id):
         WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
         ORDER BY a.orden ASC, a.id ASC
     ''', (bitacora_id,)).fetchall()
-    b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+    formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+    b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
     conn.close()
     return jsonify(b_dict)
 
@@ -1935,6 +2009,8 @@ def save_bitacora():
 
         next_orden = (max([r['orden'] or 0 for r in all_rows]) + 1) if all_rows else 0
         conflicts = 0
+        completed_in_save = []
+        shared_bitacoras_touched = set()
 
         for idx, act in enumerate(actividades_data):
             if idx in skip_idx:
@@ -1973,7 +2049,11 @@ def save_bitacora():
                 duracion = max(0, int(act.get('duracion_min', 0) or 0))
             except (TypeError, ValueError):
                 duracion = 0
-            act_hora_fin = act.get('hora_fin') or calculate_hora_fin(act.get('hora_inicio'), duracion, fecha)
+            act_hora_inicio = (act.get('hora_inicio') or '').strip()
+            if act_hora_inicio:
+                act_hora_fin = (act.get('hora_fin') or '').strip() or calculate_hora_fin(act_hora_inicio, duracion, fecha)
+            else:
+                act_hora_fin = ''
             client_uid = _client_uid_of(act)
 
             # Una decisión del líder (aprobar/devolver) que el cliente aún no conoce no debe ser
@@ -2001,7 +2081,7 @@ def save_bitacora():
                     WHERE id = ?
                 ''', (
                     idx if not is_merge else active_by_id[target_act_id].get('orden', idx),
-                    act.get('hora_inicio', ''),
+                    act_hora_inicio,
                     act_hora_fin,
                     duracion,
                     act.get('tipo_trabajo', ''),
@@ -2020,6 +2100,7 @@ def save_bitacora():
                     now_peru,
                     target_act_id
                 ))
+                saved_id = target_act_id
             else:
                 orden_val = idx if not is_merge else next_orden
                 if is_merge:
@@ -2035,13 +2116,13 @@ def save_bitacora():
                 ''', (
                     bitacora_id,
                     orden_val,
-                    act.get('hora_inicio', ''),
+                    act_hora_inicio,
                     act_hora_fin,
                     duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
                     normalize_client_name(act.get('para_cliente', '')),
-                    act.get('estado', 'completada'),
+                    estado_to_write,
                     evidencias_json,
                     shared_with_json,
                     shared_uuid,
@@ -2054,7 +2135,11 @@ def save_bitacora():
                     now_peru,
                     now_peru
                 ))
-                used_ids.add(cursor.lastrowid)
+                saved_id = cursor.lastrowid
+                used_ids.add(saved_id)
+
+            if estado_to_write == 'completada' and saved_id:
+                completed_in_save.append(saved_id)
 
             # Sincronización automática de tarea compartida en paralelo con el otro usuario
             if shared_with_val and shared_uuid:
@@ -2074,7 +2159,7 @@ def save_bitacora():
                                             pendientes, necesita_apoyo, prioridad_siguiente,
                                             tiempo_total_min, estado, created_at, updated_at
                                         ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
-                                    ''', (target_u['id'], fecha, act.get('hora_inicio') or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
+                                    ''', (target_u['id'], fecha, act_hora_inicio or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
                                     target_b_id = cursor.lastrowid
                                 except sqlite3.IntegrityError:
                                     target_b_id = cursor.execute(
@@ -2109,13 +2194,13 @@ def save_bitacora():
                                         updated_at = ?
                                     WHERE id = ?
                                 ''', (
-                                    act.get('hora_inicio', ''),
+                                    act_hora_inicio,
                                     act_hora_fin,
                                     duracion,
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
                                     act.get('para_cliente', ''),
-                                    act.get('estado', 'en_proceso'),
+                                    estado_to_write,
                                     evidencias_json,
                                     counterpart_shared,
                                     now_peru,
@@ -2135,13 +2220,13 @@ def save_bitacora():
                                 ''', (
                                     target_b_id,
                                     next_ord,
-                                    act.get('hora_inicio', ''),
+                                    act_hora_inicio,
                                     act_hora_fin,
                                     duracion,
                                     act.get('tipo_trabajo', ''),
                                     act.get('descripcion', ''),
                                     act.get('para_cliente', ''),
-                                    act.get('estado', 'en_proceso'),
+                                    estado_to_write,
                                     evidencias_json,
                                     counterpart_shared,
                                     shared_uuid,
@@ -2149,12 +2234,7 @@ def save_bitacora():
                                     now_peru
                                 ))
 
-                            # Recalcular el tiempo_total_min de la bitácora del colaborador
-                            cursor.execute('''
-                                UPDATE bitacoras SET tiempo_total_min = (
-                                    SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-                                ), updated_at = ? WHERE id = ?
-                            ''', (target_b_id, now_peru, target_b_id))
+                            shared_bitacoras_touched.add(target_b_id)
 
         # 3) Eliminaciones: SOLO las solicitadas explícitamente por el cliente (deleted_ids).
         #    Las actividades ausentes del payload ya NO se envían implícitamente a la papelera
@@ -2165,15 +2245,19 @@ def save_bitacora():
                     continue
                 del_id = int(raw_del)
                 if del_id in active_by_id and del_id not in matched_target_ids.values():
-                    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (del_id,))
+                    mark_lineage_rollover_dismissed(cursor, [del_id])
+                    relink_children_before_delete(cursor, [del_id])
                     cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, del_id))
 
-        # 4) Total de tiempo siempre calculado desde la base (fuente de verdad)
-        cursor.execute('''
-            UPDATE bitacoras SET tiempo_total_min = (
-                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-            ) WHERE id = ?
-        ''', (bitacora_id, bitacora_id))
+        # 4) Recalcular duraciones netas recursivas (solapamientos anidados) y totales desde la base
+        recalculate_bitacora_durations(cursor, bitacora_id, fecha=fecha, now_peru=now_peru)
+        for tb_id in shared_bitacoras_touched:
+            recalculate_bitacora_durations(cursor, tb_id, fecha=fecha, now_peru=now_peru)
+
+        # 5) Propagar cierre hacia atrás en cadenas de continuación si se completaron tareas
+        closed_lineage_ids = []
+        if completed_in_save:
+            closed_lineage_ids = propagate_completion_across_lineage(cursor, completed_in_save, now_peru)
 
         conn.commit()
         
@@ -2194,16 +2278,35 @@ def save_bitacora():
         b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
         b_dict = dict(b)
         acts = cursor.execute('''
-            SELECT a.*, p.descripcion as parent_task_desc, p.estado as parent_task_estado 
+            SELECT a.*,
+              p.descripcion as parent_task_desc,
+              p.estado as parent_task_estado,
+              CASE WHEN a.parent_task_id IS NULL THEN a.duracion_min ELSE COALESCE((
+                WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
+                  SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
+                  UNION ALL
+                  SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
+                  FROM actividades prev
+                  JOIN lineage l ON prev.id = l.parent_task_id
+                  WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
+                )
+                SELECT SUM(duracion_min) FROM lineage
+              ), a.duracion_min) END AS tiempo_acumulado_min
             FROM actividades a 
             LEFT JOIN actividades p ON a.parent_task_id = p.id 
             WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0) 
             ORDER BY a.orden ASC, a.id ASC
         ''', (bitacora_id,)).fetchall()
-        b_dict['actividades'] = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+        formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
+        b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
         
         conn.close()
-        return jsonify({"message": "Bitácora guardada con éxito", "bitacora": b_dict, "conflicts": conflicts}), 200
+        return jsonify({
+            "message": "Bitácora guardada con éxito",
+            "bitacora": b_dict,
+            "conflicts": conflicts,
+            "closed_lineage_ids": closed_lineage_ids,
+        }), 200
         
     except Exception as e:
         conn.rollback()
@@ -2244,14 +2347,31 @@ def update_actividad_estado(act_id):
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
-    cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, act_id))
+    cursor.execute(
+        "UPDATE actividades SET estado = ?, updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
+        (nuevo_estado, now_peru, act_id)
+    )
+    sib_ids = []
     for sib in _same_day_shared_siblings(cursor, act_id, act['shared_uuid']):
-        cursor.execute("UPDATE actividades SET estado = ?, updated_at = ? WHERE id = ?", (nuevo_estado, now_peru, sib['id']))
-    if nuevo_estado == 'en_revision' and act['estado'] != 'en_revision':
+        cursor.execute(
+            "UPDATE actividades SET estado = ?, updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
+            (nuevo_estado, now_peru, sib['id'])
+        )
+        sib_ids.append(sib['id'])
+
+    closed_lineage_ids = []
+    if nuevo_estado == 'completada':
+        closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
+    elif nuevo_estado == 'en_revision' and act['estado'] != 'en_revision':
         _notify_reviewers(cursor, act['owner_id'], act['colaborador'], act['descripcion'])
     conn.commit()
     conn.close()
-    return jsonify({"success": True, "id": act_id, "nuevo_estado": nuevo_estado})
+    return jsonify({
+        "success": True,
+        "id": act_id,
+        "nuevo_estado": nuevo_estado,
+        "closed_lineage_ids": closed_lineage_ids,
+    })
 
 
 def _plain_snippet(html, limit=80):
@@ -2327,9 +2447,14 @@ def revisar_actividad(act_id):
     for target in ids:
         cursor.execute('''
             UPDATE actividades SET estado = ?, revision_decision = ?, revision_comentario = ?,
-                revisado_por = ?, revisado_at = ?, updated_at = ?, updated_by_user_id = ?
+                revisado_por = ?, revisado_at = ?, updated_at = ?, updated_by_user_id = ?,
+                last_stagnant_notified_at = NULL
             WHERE id = ?
         ''', (nuevo_estado, decision, comentario or None, reviewer['id'], now_peru, now_peru, reviewer['id'], target))
+
+    closed_lineage_ids = []
+    if nuevo_estado == 'completada':
+        closed_lineage_ids = propagate_completion_across_lineage(cursor, ids, now_peru)
 
     if act['owner_id']:
         detalle = f" — {comentario}" if comentario else ''
@@ -2347,6 +2472,7 @@ def revisar_actividad(act_id):
         "success": True, "id": act_id, "nuevo_estado": nuevo_estado, "revision_decision": decision,
         "revision_comentario": comentario or None, "revisado_por": reviewer['id'],
         "revisado_por_nombre": reviewer['full_name'], "revisado_at": now_peru,
+        "closed_lineage_ids": closed_lineage_ids,
     })
 
 @app.route('/api/actividades/<int:act_id>', methods=['GET', 'PUT', 'OPTIONS'])
@@ -2396,7 +2522,12 @@ def update_actividad_detalle(act_id):
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
-    act = cursor.execute("SELECT id, shared_uuid FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    act = cursor.execute('''
+        SELECT a.id, a.bitacora_id, a.shared_uuid, a.hora_inicio, a.hora_fin, a.duracion_min, b.fecha AS bitacora_fecha
+        FROM actividades a
+        LEFT JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.id = ?
+    ''', (act_id,)).fetchone()
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
@@ -2404,17 +2535,52 @@ def update_actividad_detalle(act_id):
     shared_with_val = data.get('shared_with')
     shared_with_json = json.dumps(shared_with_val) if isinstance(shared_with_val, list) else None
 
-    parent_task_id_param = int(data['parent_task_id']) if data.get('parent_task_id') and str(data['parent_task_id']).isdigit() else (None if 'parent_task_id' in data else None)
+    has_parent_key = 1 if 'parent_task_id' in data else 0
+    parent_task_id_param = (
+        int(data['parent_task_id'])
+        if data.get('parent_task_id') and str(data['parent_task_id']).isdigit() and int(data['parent_task_id']) != act_id
+        else None
+    )
     comentarios_param = data.get('comentarios')
     tipo_vinculo_param = data.get('tipo_vinculo')
+
+    eff_hora_inicio = (
+        (data.get('hora_inicio') or '').strip()
+        if 'hora_inicio' in data and data.get('hora_inicio') is not None
+        else (act['hora_inicio'] or '').strip()
+    )
+    try:
+        eff_dur = (
+            max(0, int(data.get('duracion_min') or 0))
+            if 'duracion_min' in data and data.get('duracion_min') is not None
+            else max(0, int(act['duracion_min'] or 0))
+        )
+    except (TypeError, ValueError):
+        eff_dur = max(0, int(act['duracion_min'] or 0))
+
+    has_hora_fin_update = 0
+    resolved_hora_fin = None
+    if not eff_hora_inicio:
+        if 'hora_inicio' in data or 'hora_fin' in data:
+            has_hora_fin_update = 1
+            resolved_hora_fin = ''
+    elif 'hora_fin' in data and data.get('hora_fin') is not None:
+        has_hora_fin_update = 1
+        hfin_raw = str(data.get('hora_fin') or '').strip()
+        resolved_hora_fin = hfin_raw or calculate_hora_fin(eff_hora_inicio, eff_dur, act['bitacora_fecha'])
+    elif 'hora_inicio' in data or 'duracion_min' in data:
+        has_hora_fin_update = 1
+        resolved_hora_fin = calculate_hora_fin(eff_hora_inicio, eff_dur, act['bitacora_fecha'])
 
     # Propagar SOLO el contenido compartido a las copias del mismo día (no a jornadas históricas)
     siblings = _same_day_shared_siblings(cursor, act_id, act['shared_uuid'])
     affected_bitacoras = set()
+    sib_ids = []
     for sib in siblings:
         cursor.execute('''
             UPDATE actividades SET
                 hora_inicio = COALESCE(?, hora_inicio),
+                hora_fin = CASE WHEN ? = 1 THEN ? ELSE hora_fin END,
                 duracion_min = COALESCE(?, duracion_min),
                 tipo_trabajo = COALESCE(?, tipo_trabajo),
                 descripcion = COALESCE(?, descripcion),
@@ -2426,6 +2592,8 @@ def update_actividad_detalle(act_id):
             WHERE id = ?
         ''', (
             data.get('hora_inicio'),
+            has_hora_fin_update,
+            resolved_hora_fin,
             data.get('duracion_min'),
             data.get('tipo_trabajo'),
             data.get('descripcion'),
@@ -2436,62 +2604,112 @@ def update_actividad_detalle(act_id):
             sib['id']
         ))
         affected_bitacoras.add(sib['bitacora_id'])
+        sib_ids.append(sib['id'])
 
-    if True:
-        cursor.execute('''
-            UPDATE actividades SET
-                hora_inicio = COALESCE(?, hora_inicio),
-                duracion_min = COALESCE(?, duracion_min),
-                tipo_trabajo = COALESCE(?, tipo_trabajo),
-                descripcion = COALESCE(?, descripcion),
-                para_cliente = COALESCE(?, para_cliente),
-                estado = COALESCE(?, estado),
-                evidencias = COALESCE(?, evidencias),
-                shared_with = COALESCE(?, shared_with),
-                comentarios = COALESCE(?, comentarios),
-                parent_task_id = COALESCE(?, parent_task_id),
-                tipo_vinculo = COALESCE(?, tipo_vinculo),
-                updated_at = ?,
-                last_stagnant_notified_at = NULL
-            WHERE id = ?
-        ''', (
-            data.get('hora_inicio'),
-            data.get('duracion_min'),
-            data.get('tipo_trabajo'),
-            data.get('descripcion'),
-            normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
-            data.get('estado'),
-            evidencias_json,
-            shared_with_json,
-            comentarios_param,
-            parent_task_id_param,
-            tipo_vinculo_param,
-            now_peru,
-            act_id
-        ))
-        
-    # Recalcular el tiempo_total_min de la bitácora asociada (y de las copias compartidas)
-    b_row = cursor.execute("SELECT bitacora_id FROM actividades WHERE id = ?", (act_id,)).fetchone()
-    if b_row and b_row['bitacora_id']:
-        affected_bitacoras.add(b_row['bitacora_id'])
+    cursor.execute('''
+        UPDATE actividades SET
+            hora_inicio = COALESCE(?, hora_inicio),
+            hora_fin = CASE WHEN ? = 1 THEN ? ELSE hora_fin END,
+            duracion_min = COALESCE(?, duracion_min),
+            tipo_trabajo = COALESCE(?, tipo_trabajo),
+            descripcion = COALESCE(?, descripcion),
+            para_cliente = COALESCE(?, para_cliente),
+            estado = COALESCE(?, estado),
+            evidencias = COALESCE(?, evidencias),
+            shared_with = COALESCE(?, shared_with),
+            comentarios = COALESCE(?, comentarios),
+            parent_task_id = CASE WHEN ? = 1 THEN ? ELSE parent_task_id END,
+            tipo_vinculo = COALESCE(?, tipo_vinculo),
+            updated_at = ?,
+            last_stagnant_notified_at = NULL
+        WHERE id = ?
+    ''', (
+        data.get('hora_inicio'),
+        has_hora_fin_update,
+        resolved_hora_fin,
+        data.get('duracion_min'),
+        data.get('tipo_trabajo'),
+        data.get('descripcion'),
+        normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
+        data.get('estado'),
+        evidencias_json,
+        shared_with_json,
+        comentarios_param,
+        has_parent_key,
+        parent_task_id_param,
+        tipo_vinculo_param,
+        now_peru,
+        act_id
+    ))
+
+    # Recalcular duraciones netas recursivas y tiempo_total_min de la bitácora asociada (y copias compartidas)
+    primary_b_id = act['bitacora_id']
+    if primary_b_id:
+        affected_bitacoras.add(primary_b_id)
     for b_id in affected_bitacoras:
-        cursor.execute('''
-            UPDATE bitacoras SET tiempo_total_min = (
-                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
-                WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-            ), updated_at = ? WHERE id = ?
-        ''', (b_id, now_peru, b_id))
+        recalculate_bitacora_durations(cursor, b_id, now_peru=now_peru)
+
+    closed_lineage_ids = []
+    cur_estado_row = cursor.execute("SELECT estado FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    if cur_estado_row and cur_estado_row['estado'] == 'completada':
+        closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
 
     conn.commit()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    updated_act = cursor.execute('''
-        SELECT a.*, p.descripcion as parent_task_desc, p.estado as parent_task_estado
-        FROM actividades a
-        LEFT JOIN actividades p ON a.parent_task_id = p.id
-        WHERE a.id = ?
-    ''', (act_id,)).fetchone()
+
+    formatted_bitacora_acts = []
+    formatted_updated = None
+    tiempo_total = 0
+    if primary_b_id:
+        b_info = cursor.execute("SELECT fecha, tiempo_total_min FROM bitacoras WHERE id = ?", (primary_b_id,)).fetchone()
+        b_fecha = b_info['fecha'] if b_info else act['bitacora_fecha']
+        tiempo_total = b_info['tiempo_total_min'] if b_info else 0
+        all_b_acts = cursor.execute('''
+            SELECT a.*,
+              p.descripcion as parent_task_desc,
+              p.estado as parent_task_estado,
+              CASE WHEN a.parent_task_id IS NULL THEN a.duracion_min ELSE COALESCE((
+                WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
+                  SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
+                  UNION ALL
+                  SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
+                  FROM actividades prev
+                  JOIN lineage l ON prev.id = l.parent_task_id
+                  WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
+                )
+                SELECT SUM(duracion_min) FROM lineage
+              ), a.duracion_min) END AS tiempo_acumulado_min
+            FROM actividades a
+            LEFT JOIN actividades p ON a.parent_task_id = p.id
+            WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+            ORDER BY a.orden ASC, a.id ASC
+        ''', (primary_b_id,)).fetchall()
+        formatted_bitacora_acts = enrich_activities_with_net_info(
+            [format_actividad_dict(r, users_map, b_fecha) for r in all_b_acts],
+            fecha=b_fecha,
+        )
+        for fa in formatted_bitacora_acts:
+            if fa.get('id') == act_id:
+                formatted_updated = fa
+                break
+
+    if formatted_updated is None:
+        updated_act = cursor.execute('''
+            SELECT a.*, p.descripcion as parent_task_desc, p.estado as parent_task_estado
+            FROM actividades a
+            LEFT JOIN actividades p ON a.parent_task_id = p.id
+            WHERE a.id = ?
+        ''', (act_id,)).fetchone()
+        formatted_updated = format_actividad_dict(updated_act, users_map) if updated_act else None
+
     conn.close()
-    return jsonify({"success": True, "actividad": format_actividad_dict(updated_act, users_map) if updated_act else None})
+    return jsonify({
+        "success": True,
+        "actividad": formatted_updated,
+        "bitacora_actividades": formatted_bitacora_acts,
+        "tiempo_total_min": tiempo_total,
+        "closed_lineage_ids": closed_lineage_ids,
+    })
 
 
 @app.route('/api/actividades/pendientes', methods=['GET'])
@@ -2507,7 +2725,16 @@ def get_actividades_pendientes():
         SELECT a.*, b.fecha, b.colaborador
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        WHERE a.estado != 'completada' AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+        WHERE a.estado != 'completada'
+          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND COALESCE(a.rollover_dismissed, 0) = 0
+          AND NOT EXISTS (
+              SELECT 1 FROM actividades a_child
+              JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
+              WHERE a_child.parent_task_id = a.id
+                AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
+                AND b_child.fecha > b.fecha
+          )
     '''
     params = []
     
@@ -2559,7 +2786,10 @@ def delete_bitacora(bitacora_id):
         return jsonify({}), 200
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE bitacora_id = ?)", (bitacora_id,))
+    b_act_ids = [r[0] for r in cursor.execute("SELECT id FROM actividades WHERE bitacora_id = ?", (bitacora_id,)).fetchall()]
+    if b_act_ids:
+        mark_lineage_rollover_dismissed(cursor, b_act_ids)
+        relink_children_before_delete(cursor, b_act_ids)
     cursor.execute("DELETE FROM actividades WHERE bitacora_id = ?", (bitacora_id,))
     cursor.execute("DELETE FROM bitacoras WHERE id = ?", (bitacora_id,))
     conn.commit()
@@ -2681,26 +2911,14 @@ def restaurar_actividad(act_id):
     # Restaurar actividad
     cursor.execute('''
         UPDATE actividades 
-        SET is_deleted = 0, deleted_at = NULL, bitacora_id = ?, updated_at = ? 
+        SET is_deleted = 0, deleted_at = NULL, rollover_dismissed = 0, bitacora_id = ?, updated_at = ? 
         WHERE id = ?
     ''', (new_bitacora_id, now_peru, act_id))
     
-    # Recalcular tiempo total de la bitácora antigua
-    cursor.execute('''
-        UPDATE bitacoras SET tiempo_total_min = (
-            SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
-            WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-        ), updated_at = ? WHERE id = ?
-    ''', (old_bitacora_id, now_peru, old_bitacora_id))
-
-    # Si cambió de bitácora, recalcular también la nueva
+    # Recalcular duraciones netas y tiempo total de la bitácora antigua (y de la nueva si cambió)
+    recalculate_bitacora_durations(cursor, old_bitacora_id, now_peru=now_peru)
     if new_bitacora_id != old_bitacora_id:
-        cursor.execute('''
-            UPDATE bitacoras SET tiempo_total_min = (
-                SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
-                WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-            ), updated_at = ? WHERE id = ?
-        ''', (new_bitacora_id, now_peru, new_bitacora_id))
+        recalculate_bitacora_durations(cursor, new_bitacora_id, now_peru=now_peru)
     
     conn.commit()
 
@@ -2732,7 +2950,8 @@ def eliminar_definitivo_actividad(act_id):
         
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = ?", (act_id,))
+    mark_lineage_rollover_dismissed(cursor, [act_id])
+    relink_children_before_delete(cursor, [act_id])
     cursor.execute("DELETE FROM actividades WHERE id = ?", (act_id,))
     conn.commit()
     conn.close()
@@ -2754,21 +2973,27 @@ def vaciar_papelera():
     
     # Solo un administrador con intención explícita puede vaciar la papelera de todos los usuarios
     if user_role == 'admin' and (data.get('all') or data.get('role') == 'admin') and not data.get('target_user_id'):
-        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1)")
+        del_ids = [r[0] for r in cursor.execute("SELECT id FROM actividades WHERE is_deleted = 1").fetchall()]
+        if del_ids:
+            mark_lineage_rollover_dismissed(cursor, del_ids)
+            relink_children_before_delete(cursor, del_ids)
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
     else:
         # Administrador vaciando la de un usuario específico, o un usuario vaciando su propia papelera
         target_uid = data.get('target_user_id') if (user_role == 'admin' and data.get('target_user_id')) else current_uid
         if target_uid:
-            cursor.execute('''
-                UPDATE actividades SET parent_task_id = NULL 
-                WHERE parent_task_id IN (
+            del_ids = [
+                r[0]
+                for r in cursor.execute('''
                     SELECT id FROM actividades 
                     WHERE is_deleted = 1 AND bitacora_id IN (
                         SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
                     )
-                )
-            ''', (target_uid, target_uid))
+                ''', (target_uid, target_uid)).fetchall()
+            ]
+            if del_ids:
+                mark_lineage_rollover_dismissed(cursor, del_ids)
+                relink_children_before_delete(cursor, del_ids)
             cursor.execute('''
                 DELETE FROM actividades 
                 WHERE is_deleted = 1 AND bitacora_id IN (
@@ -2793,17 +3018,12 @@ def soft_delete_actividad(act_id):
         return jsonify({"error": "Actividad no encontrada"}), 404
         
     now_peru = get_peru_now_str()
+    mark_lineage_rollover_dismissed(cursor, [act_id])
     cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, act_id))
     
-    # Recalcular tiempo_total_min
-    cursor.execute('''
-        UPDATE bitacoras SET tiempo_total_min = (
-            SELECT COALESCE(SUM(duracion_min), 0) FROM actividades 
-            WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)
-        ), updated_at = ? WHERE id = ?
-    ''', (act['bitacora_id'], now_peru, act['bitacora_id']))
+    # Recalcular duraciones netas recursivas y tiempo_total_min (devolviendo el tiempo descontado a tareas contenedoras)
+    recalculate_bitacora_durations(cursor, act['bitacora_id'], now_peru=now_peru)
 
-    
     conn.commit()
     conn.close()
     return jsonify({"success": True, "message": "Actividad movida a la papelera (retención 15 días)"})
@@ -3111,7 +3331,16 @@ def execute_daily_rollover(today_str=None):
     try:
         # 0. Auto-purga permanente de actividades eliminadas con más de 15 días de antigüedad según horario de Perú
         purge_threshold = (get_peru_now() - timedelta(days=15)).strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id IN (SELECT id FROM actividades WHERE is_deleted = 1 AND deleted_at < ?)", (purge_threshold,))
+        expired_ids = [
+            r[0]
+            for r in cursor.execute(
+                "SELECT id FROM actividades WHERE is_deleted = 1 AND deleted_at < ?",
+                (purge_threshold,),
+            ).fetchall()
+        ]
+        if expired_ids:
+            mark_lineage_rollover_dismissed(cursor, expired_ids)
+            relink_children_before_delete(cursor, expired_ids)
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < ?", (purge_threshold,))
 
         # 1. Auto-cerrar bitácoras de días pasados (< today_str) que no estén formalmente cerradas
@@ -3214,15 +3443,16 @@ def importar_actividades_pendientes():
           ), a.duracion_min) AS tiempo_acumulado_min
         FROM actividades a
         JOIN bitacoras b ON a.bitacora_id = b.id
-        WHERE (b.user_id = ? OR b.colaborador = ?)
+        WHERE (b.user_id = ? OR LOWER(TRIM(b.colaborador)) = LOWER(TRIM(?)))
           AND b.fecha < ?
           AND a.estado != 'completada'
           AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+          AND COALESCE(a.rollover_dismissed, 0) = 0
           AND NOT EXISTS (
             SELECT 1 FROM actividades a_child
             JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
             WHERE a_child.parent_task_id = a.id
-              AND (a_child.is_deleted IS NULL OR a_child.is_deleted = 0)
+              AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
               AND b_child.fecha > b.fecha
           )
         ORDER BY a.id ASC

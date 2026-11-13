@@ -30,6 +30,7 @@ export const getBitacoraSignature = (
       id: a.id || null,
       orden: typeof a.orden === 'number' ? a.orden : idx,
       hora_inicio: (a.hora_inicio || '').trim(),
+      hora_fin: (a.hora_fin || '').trim(),
       duracion_min: Number(a.duracion_min || 0),
       tipo_trabajo: (a.tipo_trabajo || '').trim(),
       descripcion: (a.descripcion || '').trim(),
@@ -74,6 +75,7 @@ const SYNC_HEADER_FIELDS = [
 export const actContentSig = (a: Actividad): string =>
   JSON.stringify([
     (a.hora_inicio || '').trim(),
+    (a.hora_fin || '').trim(),
     Number(a.duracion_min || 0),
     (a.tipo_trabajo || '').trim(),
     (a.descripcion || '').trim(),

@@ -331,7 +331,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       tipo: 'Capacitación / Reunión',
       cliente: 'Interno TI',
       duracion: 15,
-      color: 'text-cyan-700 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/60',
     },
     {
       id: 'backups',
@@ -340,7 +339,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       tipo: 'Mantenimiento',
       cliente: 'Infraestructura TI',
       duracion: 30,
-      color: 'text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/60',
     },
     {
       id: 'deploy',
@@ -349,7 +347,6 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       tipo: 'Desarrollo',
       cliente: 'Producción',
       duracion: 45,
-      color: 'text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/60',
     },
     {
       id: 'ticket',
@@ -358,10 +355,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       tipo: 'Soporte técnico',
       cliente: 'Mesa de Ayuda',
       duracion: 20,
-      color: 'text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/60',
     },
-    // Nota: no hay preset de almuerzo. El refrigerio (13:00-14:00) ya se descuenta
-    // automáticamente; registrarlo como actividad inflaba la carga laboral.
   ];
 
   // Hora de inicio encadenada: la hora de fin MÁS TARDÍA del día (no la del último
@@ -489,299 +483,225 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createModalOpen, detailModalOpen, refModalOpen, quickDesc, quickDuration, quickTipo, quickCliente]);
 
-  // Helper for status badge style (high-contrast WCAG AA compliant)
   const getStatusBadge = (estado: EstadoActividad) => {
     switch (estado) {
       case 'completada':
         return {
-          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800/60',
-          dot: 'bg-emerald-500',
+          bg: 'bg-emerald-50/90 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25',
           label: 'Completada',
-          icon: CheckCircle2,
         };
       case 'en_proceso':
         return {
-          bg: 'bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border-sky-300/80 dark:border-sky-800/60',
-          dot: 'bg-sky-500',
+          bg: 'bg-sky-50/90 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25',
           label: 'En proceso',
-          icon: Timer,
         };
       case 'en_revision':
         return {
-          bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-300/80 dark:border-purple-800/60',
-          dot: 'bg-purple-500',
+          bg: 'bg-amber-50/90 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25',
           label: 'En revisión',
-          icon: Eye,
         };
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border-slate-300 dark:border-[#252636]',
-          dot: 'bg-slate-500',
+          bg: 'bg-slate-100/80 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border-slate-200/90 dark:border-white/10',
           label: 'Por iniciar',
-          icon: ListTodo,
         };
-    }
-  };
-
-  const getBorderColor = (estado: EstadoActividad) => {
-    switch (estado) {
-      case 'completada':
-        return 'border-l-emerald-500';
-      case 'en_proceso':
-        return 'border-l-sky-500';
-      case 'en_revision':
-        return 'border-l-purple-500';
-      case 'pendiente':
-      default:
-        return 'border-l-slate-400 dark:border-l-slate-600';
     }
   };
 
   return (
-    <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] shadow-sm overflow-hidden transition-all duration-200">
-      {/* 1. EXECUTIVE TOOLBAR */}
-      <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#252636] bg-slate-50/60 dark:bg-[#161722]/60">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          {/* Left: Title + Date Navigator + Start Time */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Title */}
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500/15 to-blue-500/15 text-cyan-700 dark:text-[#00F0FF] border border-cyan-500/20 shrink-0">
-                <ListChecks className="w-4 h-4 stroke-[2.5]" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight leading-tight">
-                  Actividades
-                </h2>
-              </div>
-            </div>
+    <div className="bg-white dark:bg-[#161922] rounded-xl border border-slate-200/80 dark:border-white/[0.07] shadow-2xs overflow-hidden">
+      {/* 1. CLEAN UNIFIED HEADER BAR */}
+      <div className="px-4 sm:px-5 py-3 border-b border-slate-200/70 dark:border-white/[0.06] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        {/* Left: Date Navigator + Start Time + Connection Alert */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {fecha && onDateChange && (
+            <div className="inline-flex items-center bg-slate-50 dark:bg-[#1E222D] p-0.5 rounded-lg border border-slate-200/80 dark:border-white/[0.08]">
+              <button
+                type="button"
+                onClick={() => changeDayByOffset(-1)}
+                title="Día anterior"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
 
-            {/* Error de Conexión (solo visible en caso de fallo para reintento y reporte) */}
-            {autoSaveStatus === 'error' && (
-              <div className="flex items-center gap-1.5 flex-wrap">
+              <div className="relative flex items-center">
                 <button
                   type="button"
-                  onClick={onForceSyncCloud}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer shadow-xs"
-                  title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
+                  onClick={() => {
+                    try {
+                      dateInputRef.current?.showPicker();
+                    } catch (e) {
+                      dateInputRef.current?.focus();
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-white/[0.05] rounded-md cursor-pointer transition-colors"
+                  title="Seleccionar fecha en el calendario"
                 >
-                  <CloudOff className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
-                  <span>Sin conexión (Reintentar)</span>
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400 shrink-0" />
+                  <span>{formatHeaderDate(fecha)}</span>
                 </button>
-                {onOpenErrorReport && (
+
+                {!isToday(fecha) && (
                   <button
                     type="button"
-                    onClick={onOpenErrorReport}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 transition-all cursor-pointer shadow-xs"
-                    title="Ver diagnóstico del error y adjuntar captura para soporte"
+                    onClick={goToToday}
+                    className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline px-2 py-0.5 cursor-pointer"
+                    title="Volver a la fecha de hoy"
                   >
-                    <span>⚠️ Ver detalle / Reportar</span>
+                    Ir a hoy
                   </button>
                 )}
-              </div>
-            )}
 
-            {/* Inline Date Navigator */}
-            {fecha && onDateChange && (
-              <div className="flex items-center gap-0.5 bg-white dark:bg-[#1A1C29] p-0.5 rounded-xl border border-slate-200/90 dark:border-[#252636] shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => changeDayByOffset(-1)}
-                  title="Día anterior"
-                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-
-                <div className="relative flex items-center">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        dateInputRef.current?.showPicker();
-                      } catch (e) {
-                        dateInputRef.current?.focus();
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-50/80 dark:bg-[#141522] hover:bg-slate-100 dark:hover:bg-[#1E2030] rounded-lg cursor-pointer transition-colors"
-                    title="Haz clic para seleccionar fecha en el calendario"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
-                    <span>{formatHeaderDate(fecha)}</span>
-                    {isToday(fecha) && (
-                      <span className="text-[10px] bg-cyan-50 dark:bg-cyan-950/40 text-cyan-800 dark:text-cyan-300 font-extrabold px-2 py-0.5 rounded-full border border-cyan-200 dark:border-cyan-800/60">
-                        Hoy
-                      </span>
-                    )}
-                  </button>
-
-                  {!isToday(fecha) && (
-                    <button
-                      type="button"
-                      onClick={goToToday}
-                      className="text-[10px] font-bold text-cyan-700 dark:text-[#00F0FF] hover:underline px-2 py-0.5 cursor-pointer ml-0.5"
-                      title="Volver a la fecha de hoy"
-                    >
-                      Ir a Hoy
-                    </button>
-                  )}
-
-                  <input
-                    ref={dateInputRef}
-                    type="date"
-                    value={fecha}
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        onDateChange(e.target.value);
-                      }
-                    }}
-                    className="sr-only"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => changeDayByOffset(1)}
-                  title="Día siguiente"
-                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
-
-            {/* Referential Start Time Pill */}
-            <div
-              className="flex items-center gap-1.5 text-xs bg-white dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300 px-3 py-1 rounded-xl border border-slate-200/90 dark:border-[#252636] shadow-2xs"
-              title="Hora referencial de inicio"
-            >
-              <Clock className="w-3 h-3 text-cyan-600 dark:text-[#00F0FF] shrink-0" />
-              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider">Inicio:</span>
-              {onHoraInicioChange ? (
                 <input
-                  type="time"
-                  value={horaInicio || '08:30'}
-                  onChange={(e) => onHoraInicioChange(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer w-14"
-                  title="Ajustar hora referencial de inicio"
+                  ref={dateInputRef}
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      onDateChange(e.target.value);
+                    }
+                  }}
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
                 />
-              ) : (
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{horaInicio || '08:30'}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => changeDayByOffset(1)}
+                title="Día siguiente"
+                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Subtle Referential Start Time */}
+          <div
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/[0.08]"
+            title="Hora referencial de inicio de la jornada"
+          >
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-[11px] text-slate-400 dark:text-slate-500">Inicio</span>
+            {onHoraInicioChange ? (
+              <input
+                type="time"
+                value={horaInicio || '08:30'}
+                onChange={(e) => onHoraInicioChange(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer w-14 tabular-nums"
+                title="Ajustar hora referencial de inicio"
+              />
+            ) : (
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-200 tabular-nums">
+                {horaInicio || '08:30'}
+              </span>
+            )}
+          </div>
+
+          {autoSaveStatus === 'error' && (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={onForceSyncCloud}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 hover:bg-rose-100 transition-colors cursor-pointer"
+                title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
+              >
+                <CloudOff className="w-3.5 h-3.5 text-rose-500" />
+                <span>Reintentar guardado</span>
+              </button>
+              {onOpenErrorReport && (
+                <button
+                  type="button"
+                  onClick={onOpenErrorReport}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 cursor-pointer"
+                >
+                  <span>Ver detalle</span>
+                </button>
               )}
             </div>
-          </div>
-
-          {/* Right: Primary Action Button */}
-          <div className="flex items-center gap-2 self-start lg:self-center shrink-0">
-            <button
-              type="button"
-              onClick={handleOpenCreateModal}
-              className="flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:scale-95 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md shadow-cyan-600/20 hover:shadow-cyan-600/30 transition-all shrink-0 cursor-pointer min-h-[38px]"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>Agregar actividad</span>
-            </button>
-          </div>
+          )}
         </div>
 
-        {/* 2. EXECUTIVE DAILY PROGRESS HERO (Only visible when there are activities) */}
-        {actividades.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-slate-200/70 dark:border-[#252636]/60">
-            {/* Top row: Target info & KPI stats */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                  Progreso de la Jornada:
-                </span>
-                <span className="text-xs font-extrabold text-cyan-700 dark:text-cyan-400">
+        {/* Right: Quiet Inline Progress + Primary Action */}
+        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4">
+          {actividades.length > 0 && (
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1.5 tabular-nums">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
                   {formatDuration(totalMinutos)}
                 </span>
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                  de 8h 00m ({porcentajeJornada}%)
+                <span className="text-slate-400 dark:text-slate-500">/ 8h</span>
+                <span className="text-slate-300 dark:text-slate-600">·</span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {completadasCount} de {actividades.length} completadas
                 </span>
               </div>
-
-              {/* 4 Mini KPI Chips */}
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1A1C29] border border-slate-200/80 dark:border-[#252636] text-slate-700 dark:text-slate-300 font-semibold shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-cyan-500" />
-                  <span>Total: <strong>{actividades.length}</strong></span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 font-semibold shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  <span>Completadas: <strong>{completadasCount}</strong></span>
-                </div>
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/50 text-sky-800 dark:text-sky-300 font-semibold shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-sky-500" />
-                  <span>En Proceso: <strong>{enProcesoCount}</strong></span>
-                </div>
-                {pendientesCount > 0 && (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold shadow-2xs">
-                    <span className="w-2 h-2 rounded-full bg-slate-400" />
-                    <span>Por iniciar: <strong>{pendientesCount}</strong></span>
-                  </div>
-                )}
+              <div
+                className="hidden sm:block w-24 bg-slate-100 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden"
+                title={`${porcentajeJornada}% de la meta diaria de 8 horas`}
+              >
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    porcentajeJornada >= 100 ? 'bg-emerald-500' : 'bg-sky-600 dark:bg-sky-500'
+                  }`}
+                  style={{ width: `${porcentajeJornada}%` }}
+                />
               </div>
             </div>
+          )}
 
-            {/* Visual Progress Bar */}
-            <div className="w-full bg-slate-200/80 dark:bg-slate-800/80 h-2.5 rounded-full overflow-hidden p-0.5">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  porcentajeJornada >= 100
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                    : 'bg-gradient-to-r from-cyan-500 via-sky-500 to-blue-600'
-                }`}
-                style={{ width: `${porcentajeJornada}%` }}
-              />
-            </div>
-          </div>
-        )}
+          <button
+            type="button"
+            onClick={handleOpenCreateModal}
+            className="inline-flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer min-h-[34px]"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Nueva actividad</span>
+          </button>
+        </div>
       </div>
 
-      {/* 2. UNIFIED SMART COMMAND BAR (Quick-Add + Live Timer + Collapsible IT Presets) */}
-      <div className="p-3.5 sm:p-4 bg-slate-50/80 dark:bg-[#151622]/80 border-b border-slate-200/80 dark:border-[#252636] space-y-2.5">
-        <form onSubmit={handleQuickAddSubmit} className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2">
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={quickDesc}
-              onChange={(e) => setQuickDesc(e.target.value)}
-              placeholder="⚡ Comando rápido: escribe la actividad y presiona Enter (o usa [N] para el formulario completo)..."
-              className="w-full pl-3.5 pr-32 py-2 text-xs sm:text-sm bg-white dark:bg-[#1A1C29] text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-sky-600 dark:focus:border-[#00F0FF] focus:ring-2 focus:ring-sky-500/20 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-2xs font-medium"
-            />
-            {/* Quick Duration Buttons embedded inside input */}
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-1">
-              {[15, 30, 45, 60].map((mins) => (
-                <button
-                  key={mins}
-                  type="button"
-                  onClick={() => setQuickDuration(mins)}
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-all cursor-pointer ${
-                    quickDuration === mins
-                      ? 'bg-sky-600 dark:bg-[#00F0FF] text-white dark:text-slate-950 shadow-2xs'
-                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-white/5'
-                  }`}
-                >
-                  {mins}m
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* 2. CLEAN SINGLE-ROW QUICK ENTRY BAR (Zero Input Overlap) */}
+      <div className="px-4 sm:px-5 py-2.5 bg-slate-50/70 dark:bg-[#1A1E29]/60 border-b border-slate-200/70 dark:border-white/[0.06] space-y-2">
+        <form onSubmit={handleQuickAddSubmit} className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2">
+          <input
+            type="text"
+            value={quickDesc}
+            onChange={(e) => setQuickDesc(e.target.value)}
+            placeholder="Registrar actividad rápida... (Enter para agregar, N para formulario completo)"
+            className="flex-1 min-w-0 px-3 py-1.5 text-xs sm:text-[13px] bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 min-h-[34px]"
+          />
 
-          {/* Right Controls: Client Autocomplete + Category + Quick Submit + Live Timer + Presets Toggle */}
           <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={quickDuration}
+              onChange={(e) => setQuickDuration(Number(e.target.value))}
+              aria-label="Duración rápida"
+              title="Duración estimada"
+              className="text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px] tabular-nums"
+            >
+              <option value={15}>15 min</option>
+              <option value={30}>30 min</option>
+              <option value={45}>45 min</option>
+              <option value={60}>1 h</option>
+              <option value={90}>1h 30m</option>
+              <option value={120}>2 h</option>
+              <option value={180}>3 h</option>
+              <option value={240}>4 h</option>
+            </select>
+
             <input
               type="text"
               list="quick-clientes-datalist"
               value={quickCliente}
               onChange={(e) => setQuickCliente(e.target.value)}
-              placeholder="Cliente / Área (opc.)"
-              className="w-36 sm:w-40 text-xs font-medium px-2.5 py-2 rounded-xl bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] focus:outline-none focus:border-sky-600 dark:focus:border-[#00F0FF] shadow-2xs min-h-[36px] placeholder:text-slate-400"
-              title="Cliente o área (con autocompletado de nombres existentes)"
+              placeholder="Cliente / Área"
+              className="w-32 sm:w-36 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 min-h-[34px] placeholder:text-slate-400"
+              title="Cliente o área (opcional)"
             />
             <datalist id="quick-clientes-datalist">
               {mergedClientSuggestions.map((c) => (
@@ -793,7 +713,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               value={quickTipo}
               onChange={(e) => setQuickTipo(e.target.value)}
               aria-label="Tipo de trabajo para registro rápido"
-              className="text-xs font-semibold px-2.5 py-2 rounded-xl bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] focus:outline-none focus:border-sky-600 dark:focus:border-[#00F0FF] cursor-pointer shadow-2xs min-h-[36px]"
+              className="w-36 sm:w-40 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px]"
             >
               {TIPOS_TRABAJO.map((t) => (
                 <option key={t} value={t}>{t}</option>
@@ -803,31 +723,31 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             <button
               type="submit"
               disabled={!quickDesc.trim()}
-              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 dark:bg-[#00F0FF] dark:hover:bg-[#00F0FF]/90 active:scale-95 disabled:opacity-40 text-white dark:text-slate-950 rounded-xl text-xs font-bold shadow-2xs transition-all cursor-pointer shrink-0 min-h-[36px]"
+              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 min-h-[34px]"
             >
-              + Registrar
+              Agregar
             </button>
 
-            {/* Live Timer Pill */}
+            {/* Live Timer */}
             {!isTimerRunning ? (
               <button
                 type="button"
                 onClick={handleStartTimer}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-[#252636] hover:border-sky-500/50 shadow-2xs transition-all cursor-pointer min-h-[36px]"
-                title="Iniciar cronómetro en vivo para medir una actividad (persiste aunque recargues la página)"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer min-h-[34px]"
+                title="Iniciar cronómetro en vivo"
               >
-                <Play className="w-3 h-3 text-sky-600 dark:text-[#00F0FF] fill-current" />
-                <span>Cronómetro</span>
+                <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 fill-current" />
+                <span className="hidden sm:inline">Cronómetro</span>
               </button>
             ) : (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-900/60 shadow-xs min-h-[36px]">
-                <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-                <span className="font-mono">{formatTimerClock(timerSeconds)}</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 min-h-[34px]">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="font-mono tabular-nums">{formatTimerClock(timerSeconds)}</span>
                 <button
                   type="button"
                   onClick={handleStopTimer}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[11px] font-bold hover:bg-rose-500 cursor-pointer shadow-2xs"
-                  title="Detener cronómetro y registrar actividad con el tiempo real"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 cursor-pointer"
+                  title="Detener cronómetro y registrar actividad"
                 >
                   <Square className="w-2.5 h-2.5 fill-current" />
                   <span>Guardar</span>
@@ -843,57 +763,47 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               </div>
             )}
 
-            {/* Collapsible IT Presets Toggle */}
+            {/* Quiet Presets Toggle */}
             <button
               type="button"
               onClick={() => setShowPresets((prev) => !prev)}
-              className={`inline-flex items-center gap-1 px-2.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer min-h-[36px] ${
-                showPresets || actividades.length === 0
-                  ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-300/80 dark:border-amber-800/60'
-                  : 'bg-white dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300 border-slate-200/90 dark:border-[#252636] hover:text-slate-900 dark:hover:text-white'
+              className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer min-h-[34px] ${
+                showPresets
+                  ? 'bg-slate-200/80 dark:bg-white/10 text-slate-800 dark:text-white border-slate-300 dark:border-white/15'
+                  : 'bg-white dark:bg-[#1E222D] text-slate-500 dark:text-slate-400 border-slate-200/90 dark:border-white/[0.08] hover:text-slate-800 dark:hover:text-slate-200'
               }`}
-              title="Mostrar/ocultar plantillas rápidas de 1 clic"
+              title="Plantillas rápidas de 1 clic"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              <Zap className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Plantillas</span>
             </button>
           </div>
         </form>
 
-        {/* Collapsible Presets Row (Visible when toggled or when day is empty) */}
-        {(showPresets || actividades.length === 0) && (
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mr-1 inline-flex items-center gap-1">
-                <Zap className="w-3 h-3 text-amber-500" />
-                <span>1 Clic:</span>
-              </span>
-              {IT_PRESETS.map((preset) => {
-                const Icon = preset.icon;
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleApplyPreset(preset)}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border transition-all cursor-pointer shadow-2xs hover:scale-102 active:scale-95 ${preset.color}`}
-                    title={`Registrar "${preset.label}" (${preset.duracion} min) en 1 solo clic`}
-                  >
-                    <Icon className="w-3 h-3 shrink-0" />
-                    <span>{preset.label}</span>
-                    <span className="opacity-60 text-[10px]">({preset.duracion}m)</span>
-                  </button>
-                );
-              })}
-            </div>
-            <span className="hidden xl:inline-block text-[10px] text-slate-400 dark:text-slate-500 font-mono bg-white dark:bg-white/5 px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-white/5">
-              Atajo modal detallado: <kbd className="font-bold text-slate-700 dark:text-slate-300">[N]</kbd>
-            </span>
+        {/* Collapsible Presets Row (Only shown when explicitly toggled) */}
+        {showPresets && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            {IT_PRESETS.map((preset) => {
+              const Icon = preset.icon;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => handleApplyPreset(preset)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.07] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] transition-colors cursor-pointer"
+                  title={`Registrar "${preset.label}" (${preset.duracion} min)`}
+                >
+                  <Icon className="w-3 h-3 text-slate-400 shrink-0" />
+                  <span>{preset.label}</span>
+                  <span className="text-slate-400 text-[11px]">({preset.duracion}m)</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        {/* Temporary Feedback Banner if preset or quick-add was triggered */}
         {recentFeedback && (
-          <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800/40 animate-in fade-in">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-200/80 dark:border-emerald-500/20">
             <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span>{recentFeedback}</span>
           </div>
@@ -902,116 +812,107 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
       {/* Empty State */}
       {actividades.length === 0 ? (
-        <div className="text-center py-12 px-4 bg-slate-50/40 dark:bg-slate-900/30">
-          <div className="w-12 h-12 rounded-2xl bg-cyan-100/70 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-400 flex items-center justify-center mx-auto mb-3 border border-cyan-200 dark:border-cyan-800/40">
-            <ListChecks className="w-6 h-6 stroke-[2.5]" />
+        <div className="text-center py-12 px-4">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-400 dark:text-slate-500 flex items-center justify-center mx-auto mb-3">
+            <ListChecks className="w-5 h-5" />
           </div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-1">
-            Sin actividades {isToday(fecha) ? 'hoy' : 'para esta fecha'}
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+            Sin actividades {isToday(fecha) ? 'hoy' : 'en esta fecha'}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-4">
-            Agrega tu primera actividad para comenzar a registrar tu jornada laboral.
+            Escribe arriba para un registro rápido o abre el formulario para detallar horarios y evidencias.
           </p>
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:scale-95 text-white rounded-xl text-xs font-bold shadow-md shadow-cyan-600/20 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
           >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>Agregar actividad</span>
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Nueva actividad</span>
           </button>
         </div>
       ) : (
         <>
-          {/* DESKTOP EXECUTIVE TABLE LIST VIEW (Hidden on small screens) */}
+          {/* DESKTOP CLEAN 6-COLUMN TABLE (Zero horizontal clipping on 1366px screens) */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200/90 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  <th className="py-3 px-3 w-10 text-center">#</th>
-                  <th className="py-3 px-3 w-36 whitespace-nowrap">Horario</th>
-                  <th className="py-3 px-4 min-w-[260px]">Actividad</th>
-                  <th className="py-3 px-3 w-40 whitespace-nowrap">Cliente / Tipo</th>
-                  <th className="py-3 px-3 w-28 whitespace-nowrap">Colaboración</th>
-                  <th className="py-3 px-2 w-14 text-center whitespace-nowrap">Adj.</th>
-                  <th className="py-3 px-3 w-36 whitespace-nowrap">Estado</th>
-                  <th className="py-3 px-3 w-20 text-right whitespace-nowrap">Acciones</th>
+                <tr className="border-b border-slate-200/80 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.02] text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                  <th className="py-2.5 px-3 w-10 text-center">#</th>
+                  <th className="py-2.5 px-3 w-40 whitespace-nowrap">Horario</th>
+                  <th className="py-2.5 px-4">Actividad</th>
+                  <th className="py-2.5 px-3 w-44 whitespace-nowrap">Cliente / Tipo</th>
+                  <th className="py-2.5 px-3 w-36 whitespace-nowrap">Estado</th>
+                  <th className="py-2.5 px-3 w-20 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-[#252636]/60 text-xs text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05] text-xs text-slate-700 dark:text-slate-300">
                 {actividades.map((act, index) => {
                   const statusConfig = getStatusBadge(act.estado);
                   const sharedNames = act.shared_with_names || [];
                   const hasShared = (act.shared_with && act.shared_with.length > 0) || sharedNames.length > 0;
                   const evidenceCount = act.evidencias?.length || 0;
-
-                  // Detectar huecos (>15m, excluyendo almuerzo 13:00-14:00) o solapamientos con la tarea previa
-                  const gapInfo = (() => {
-                    if (index <= 0) return null;
-                    const prev = actividades[index - 1];
-                    if (!act.hora_inicio || act.hora_inicio === '--:--' || !prev.hora_inicio || prev.hora_inicio === '--:--') return null;
-                    const prevEnd = prev.hora_fin || calculateHoraFin(prev.hora_inicio, prev.duracion_min, fecha);
-                    if (!prevEnd || prevEnd === '--:--') return null;
-                    const [ph, pm] = prevEnd.split(':').map(Number);
-                    const [ch, cm] = act.hora_inicio.split(':').map(Number);
-                    if (isNaN(ph) || isNaN(pm) || isNaN(ch) || isNaN(cm)) return null;
-                    const diff = (ch * 60 + cm) - (ph * 60 + pm);
-                    if (prevEnd === '13:00' && act.hora_inicio === '14:00') return null;
-                    if (diff > 15) return { type: 'gap' as const, minutes: diff, label: `Hueco +${diff}m` };
-                    if (diff < 0) return { type: 'overlap' as const, minutes: Math.abs(diff), label: `Solape ${Math.abs(diff)}m` };
-                    return null;
-                  })();
+                  const isUntimed =
+                    (!act.hora_inicio || act.hora_inicio === '--:--') &&
+                    (!act.duracion_min || act.duracion_min === 0);
+                  const discountedMin = Number(act.minutos_descontados) || 0;
+                  const grossMin = Number(act.duracion_bruta_min) || Number(act.duracion_min) || 0;
+                  const hasChildLinks =
+                    act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id));
+                  const hasMetaRow =
+                    Boolean(act.parent_task_id) ||
+                    hasChildLinks ||
+                    hasShared ||
+                    evidenceCount > 0 ||
+                    Boolean(act.comentarios) ||
+                    Boolean(act.created_by_name);
 
                   return (
                     <tr
                       key={act.id || `act-${index}`}
                       id={act.id ? `act-row-${act.id}` : undefined}
                       onClick={() => handleOpenDetailModal(act, index)}
-                      className={`group hover:bg-slate-50/90 dark:hover:bg-[#181A26] transition-all cursor-pointer border-l-4 ${getBorderColor(
-                        act.estado
-                      )} ${highlightedActId === act.id ? 'act-highlighted ring-2 ring-cyan-500' : ''}`}
+                      className={`group hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer ${
+                        highlightedActId === act.id ? 'act-highlighted bg-sky-50/60 dark:bg-sky-500/10' : ''
+                      }`}
                     >
-                      {/* # Orden */}
-                      <td className="py-3.5 px-3 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-xs font-bold text-slate-600 dark:text-slate-400">
+                      {/* # */}
+                      <td className="py-3 px-3 text-center align-top">
+                        <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 tabular-nums">
                           {index + 1}
                         </span>
                       </td>
 
-                      {/* Horario / Tiempo */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        {(!act.hora_inicio || act.hora_inicio === '--:--') && (!act.duracion_min || act.duracion_min === 0) ? (
-                          <div className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-300 font-semibold bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-lg border border-amber-200 dark:border-amber-900/50">
-                            <Clock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                            <span>Arrastrada · 0m</span>
+                      {/* Horario & Duración Neta */}
+                      <td className="py-3 px-3 whitespace-nowrap align-top">
+                        {isUntimed ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs text-slate-400 dark:text-slate-500">Sin horario</span>
+                            {(act.parent_task_id || act.is_rollover) && (
+                              <span className="text-[11px] text-slate-400/80 dark:text-slate-500">
+                                Pendiente previa
+                              </span>
+                            )}
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
-                              <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 shrink-0" />
+                          <div className="flex flex-col gap-0.5 tabular-nums">
+                            <div className="text-xs font-medium text-slate-800 dark:text-slate-200">
                               <span>{act.hora_inicio || '--:--'}</span>
-                              <span className="text-slate-400 dark:text-slate-500 font-normal">→</span>
-                              <span>{act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}</span>
+                              <span className="text-slate-400 dark:text-slate-500 mx-1">–</span>
+                              <span>
+                                {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
+                              </span>
                             </div>
-                            <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
-                              <span className="text-cyan-700 dark:text-[#00F0FF] font-bold">{act.duracion_min} min</span>
-                              {(act.parent_task_id || act.is_rollover) && (
-                                <span className="text-purple-600 dark:text-purple-400 font-semibold text-[10px]">· Continuada</span>
-                              )}
-                              {gapInfo && (
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <span className="font-semibold text-slate-500 dark:text-slate-400">
+                                {formatDuration(act.duracion_min)}
+                              </span>
+                              {discountedMin > 0 && (
                                 <span
-                                  className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
-                                    gapInfo.type === 'overlap'
-                                      ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/50'
-                                      : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/50'
-                                  }`}
-                                  title={
-                                    gapInfo.type === 'overlap'
-                                      ? `Se superpone ${gapInfo.minutes} min con la tarea anterior (#${index})`
-                                      : `Existe un espacio sin registrar de ${gapInfo.minutes} min respecto a la tarea anterior (#${index})`
-                                  }
+                                  className="text-[10px] font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-1.5 py-0.2 rounded"
+                                  title={`Ventana total: ${formatDuration(grossMin)}. Se descontaron automáticamente ${formatDuration(discountedMin)} ocupados por actividades realizadas dentro de este rango.`}
                                 >
-                                  {gapInfo.label}
+                                  −{formatDuration(discountedMin)} int.
                                 </span>
                               )}
                             </div>
@@ -1019,125 +920,127 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         )}
                       </td>
 
-                      {/* Actividad / Descripción */}
-                      <td className="py-3.5 px-4">
+                      {/* Actividad (Descripción limpia + metadatos discretos solo cuando existen) */}
+                      <td className="py-3 px-4 align-top">
                         <div className="flex flex-col gap-1">
-                          <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
-                            {act.parent_task_id && (
-                              <button
-                                type="button"
-                                onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/50 dark:hover:bg-cyan-900/60 px-2 py-0.5 rounded-md border border-cyan-200 dark:border-cyan-800/60 shrink-0 cursor-pointer transition-all shadow-2xs group/ref"
-                                title={act.parent_task_desc ? `Vinculada con: ${act.parent_task_desc} (Clic para ir a la tarea)` : `Clic para ir a la actividad referenciada #${act.parent_task_id}`}
-                              >
-                                <Link2 className="w-2.5 h-2.5 text-cyan-600 dark:text-[#00F0FF] group-hover/ref:rotate-45 transition-transform" />
-                                <span>Ref #{act.parent_task_id}</span>
-                                <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover/ref:opacity-100" />
-                              </button>
-                            )}
-
-                            {act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id)) && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const firstChild = childTasksMap.get(Number(act.id))![0];
-                                  if (firstChild.id) handleNavigateToRef(firstChild.id, firstChild.tipo_vinculo, e);
-                                }}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/40 shrink-0 cursor-pointer transition-all"
-                                title={`Esta actividad tiene ${childTasksMap.get(Number(act.id))!.length} continuación(es) hoy. Clic para ir.`}
-                              >
-                                <GitBranch className="w-2.5 h-2.5" />
-                                <span>↳ {childTasksMap.get(Number(act.id))!.length} vinc.</span>
-                              </button>
-                            )}
-
-                            {act.comentarios && (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30 shrink-0"
-                                title={`Comentario: ${act.comentarios}`}
-                              >
-                                <MessageSquare className="w-2.5 h-2.5 text-amber-500" />
-                                <span>Nota</span>
-                              </span>
-                            )}
-                            {act.created_by_name && (
-                              <span
-                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 rounded-md border border-teal-500/30 shrink-0"
-                                title={`Registrado en apoyo por ${act.created_by_name}`}
-                              >
-                                <UserCheck className="w-2.5 h-2.5 text-teal-500" />
-                                <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
-                              </span>
-                            )}
-                          </div>
                           <RichHtmlRenderer
                             content={act.descripcion}
                             clampLines={2}
-                            className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-relaxed group-hover:text-sky-900 dark:group-hover:text-white transition-colors"
+                            className="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug"
                           />
+
+                          {hasMetaRow && (
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                              {act.parent_task_id && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
+                                  className="inline-flex items-center gap-1 hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                                  title={
+                                    act.parent_task_desc
+                                      ? `Ver origen: ${act.parent_task_desc}`
+                                      : 'Ver actividad de origen'
+                                  }
+                                >
+                                  <Link2 className="w-3 h-3" />
+                                  <span>
+                                    {act.tipo_vinculo && act.tipo_vinculo !== 'continuacion'
+                                      ? 'Vinculada'
+                                      : 'Continuación'}
+                                  </span>
+                                </button>
+                              )}
+
+                              {hasChildLinks && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const firstChild = childTasksMap.get(Number(act.id))![0];
+                                    if (firstChild.id) handleNavigateToRef(firstChild.id, firstChild.tipo_vinculo, e);
+                                  }}
+                                  className="inline-flex items-center gap-1 hover:text-sky-600 dark:hover:text-sky-400 transition-colors cursor-pointer"
+                                  title="Ir a la actividad vinculada"
+                                >
+                                  <GitBranch className="w-3 h-3" />
+                                  <span>Seguimiento ({childTasksMap.get(Number(act.id))!.length})</span>
+                                </button>
+                              )}
+
+                              {hasShared && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"
+                                  title={`Compartida con: ${sharedNames.join(', ')}`}
+                                >
+                                  <Users className="w-3 h-3" />
+                                  <span className="truncate max-w-[160px]">
+                                    {sharedNames.length > 0 ? sharedNames.join(', ') : `${act.shared_with?.length} colab.`}
+                                  </span>
+                                </span>
+                              )}
+
+                              {evidenceCount > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"
+                                  title={`${evidenceCount} archivo(s) adjunto(s)`}
+                                >
+                                  <Paperclip className="w-3 h-3" />
+                                  <span>{evidenceCount} adj.</span>
+                                </span>
+                              )}
+
+                              {act.comentarios && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"
+                                  title={`Nota: ${act.comentarios}`}
+                                >
+                                  <MessageSquare className="w-3 h-3" />
+                                  <span>Nota</span>
+                                </span>
+                              )}
+
+                              {act.created_by_name && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"
+                                  title={`Registrado en apoyo por ${act.created_by_name}`}
+                                >
+                                  <UserCheck className="w-3 h-3" />
+                                  <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+
                           {(act.estado === 'en_revision' || act.revision_decision) && (
-                            <div className="mt-1.5">
+                            <div className="mt-1">
                               <RevisionBadge actividad={act} />
                             </div>
                           )}
                         </div>
                       </td>
 
-                      {/* Cliente / Tipo combinado */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        <div className="flex flex-col gap-1">
-                          {act.para_cliente ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">
-                              <span className="w-2 h-2 rounded-full bg-cyan-500 shrink-0" />
-                              <span className="truncate">{act.para_cliente}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 dark:text-slate-500 text-xs">Sin cliente</span>
-                          )}
-                          {act.tipo_trabajo && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-[#252636] w-fit">
-                              <Briefcase className="w-2.5 h-2.5 text-slate-400" />
-                              <span>{act.tipo_trabajo}</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Colaboración */}
-                      <td className="py-3.5 px-3 whitespace-nowrap">
-                        {hasShared ? (
-                          <span
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/40 px-2 py-0.5 rounded-lg truncate max-w-[110px]"
-                            title={`Compartida con: ${sharedNames.join(', ')}`}
-                          >
-                            <Users className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span className="truncate">
-                              {sharedNames.length > 0 ? sharedNames.join(', ') : `${act.shared_with?.length} colab.`}
-                            </span>
-                          </span>
+                      {/* Cliente / Tipo limpio sin cajas redundantes */}
+                      <td className="py-3 px-3 whitespace-nowrap align-top">
+                        {act.para_cliente || act.tipo_trabajo ? (
+                          <div className="flex flex-col gap-0.5">
+                            {act.para_cliente && (
+                              <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate max-w-[160px]">
+                                {act.para_cliente}
+                              </span>
+                            )}
+                            {act.tipo_trabajo && (
+                              <span className="text-[11px] text-slate-400 dark:text-slate-500 truncate max-w-[160px]">
+                                {act.tipo_trabajo}
+                              </span>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-slate-400 dark:text-slate-500 text-[11px]">Individual</span>
+                          <span className="text-slate-300 dark:text-slate-600">—</span>
                         )}
                       </td>
 
-                      {/* Adjuntos */}
-                      <td className="py-3.5 px-2 text-center whitespace-nowrap">
-                        {evidenceCount > 0 ? (
-                          <span
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-800 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/50 border border-cyan-200 dark:border-cyan-800/60 px-2 py-0.5 rounded-md"
-                            title={`${evidenceCount} archivo(s) adjunto(s)`}
-                          >
-                            <Paperclip className="w-3 h-3" />
-                            <span>{evidenceCount}</span>
-                          </span>
-                        ) : (
-                          <span className="text-slate-300 dark:text-slate-600">-</span>
-                        )}
-                      </td>
-
-                      {/* Estado con selector rápido */}
-                      <td className="py-3.5 px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {/* Estado */}
+                      <td className="py-3 px-3 whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
                         <div className="relative inline-flex items-center">
                           <select
                             value={act.estado}
@@ -1149,24 +1052,24 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                 onUpdateActividad(index, 'estado', nuevoEstado);
                               }
                             }}
-                            className={`text-xs font-bold pl-3 pr-7 py-1.5 rounded-xl border transition-all cursor-pointer outline-hidden shadow-2xs appearance-none ${statusConfig.bg}`}
+                            className={`text-xs font-semibold pl-2.5 pr-6 py-1 rounded-lg border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
                           >
-                            <option value="pendiente" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● Por iniciar</option>
-                            <option value="en_proceso" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● En proceso</option>
-                            <option value="en_revision" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● En revisión</option>
-                            <option value="completada" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● Completada</option>
+                            <option value="pendiente" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Por iniciar</option>
+                            <option value="en_proceso" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En proceso</option>
+                            <option value="en_revision" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En revisión</option>
+                            <option value="completada" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Completada</option>
                           </select>
-                          <ChevronRight className="w-3 h-3 rotate-90 absolute right-2.5 pointer-events-none opacity-60" />
+                          <ChevronRight className="w-3 h-3 rotate-90 absolute right-2 pointer-events-none opacity-50" />
                         </div>
                       </td>
 
                       {/* Acciones */}
-                      <td className="py-3 px-3 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="py-3 px-3 text-right whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5">
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(act, index)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-700 dark:hover:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 rounded-lg transition-colors cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer"
                             title="Editar actividad"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -1175,8 +1078,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                           <button
                             type="button"
                             onClick={() => onRemoveActividad(index)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                            title="Eliminar actividad"
+                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md transition-colors cursor-pointer"
+                            title="Mover a papelera"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1189,64 +1092,57 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             </table>
           </div>
 
-          {/* MOBILE / TABLET COMPACT LIST VIEW (< 1024px) */}
-          <div className="lg:hidden divide-y divide-slate-100 dark:divide-[#252636]/60">
+          {/* MOBILE / TABLET CLEAN LIST VIEW (< 1024px) */}
+          <div className="lg:hidden divide-y divide-slate-100 dark:divide-white/[0.06]">
             {actividades.map((act, index) => {
               const statusConfig = getStatusBadge(act.estado);
               const sharedNames = act.shared_with_names || [];
               const hasShared = (act.shared_with && act.shared_with.length > 0) || sharedNames.length > 0;
               const evidenceCount = act.evidencias?.length || 0;
+              const isUntimed =
+                (!act.hora_inicio || act.hora_inicio === '--:--') &&
+                (!act.duracion_min || act.duracion_min === 0);
+              const discountedMin = Number(act.minutos_descontados) || 0;
 
               return (
                 <div
                   key={act.id || `act-m-${index}`}
                   id={act.id ? `act-m-${act.id}` : undefined}
                   onClick={() => handleOpenDetailModal(act, index)}
-                  className={`p-4 hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-all cursor-pointer border-l-4 ${getBorderColor(
-                    act.estado
-                  )} ${highlightedActId === act.id ? 'act-highlighted ring-2 ring-cyan-500 shadow-md' : ''}`}
+                  className={`p-3.5 hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer ${
+                    highlightedActId === act.id ? 'act-highlighted bg-sky-50/60 dark:bg-sky-500/10' : ''
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="inline-flex items-center justify-center w-5 h-5 rounded-sm bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] font-mono text-[10px] font-bold text-slate-600 dark:text-slate-400">
-                        {index + 1}
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                      <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
+                        #{index + 1}
                       </span>
-                      {(!act.hora_inicio || act.hora_inicio === '--:--') && (!act.duracion_min || act.duracion_min === 0) ? (
-                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-300 dark:border-amber-800/40">
-                          {act.parent_task_id || act.is_rollover ? 'Arrastrada · sin tiempo hoy' : 'Sin horario'}
-                        </span>
+                      {isUntimed ? (
+                        <span className="text-slate-400 dark:text-slate-500">Sin horario</span>
                       ) : (
                         <>
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                            {act.hora_inicio || '--:--'} - {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
+                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                            {act.hora_inicio || '--:--'} –{' '}
+                            {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
                           </span>
-                          <span className="text-xs font-extrabold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 dark:bg-[#00F0FF]/15 px-2.5 py-0.5 rounded-full border border-cyan-300 dark:border-[#00F0FF]/30">
-                            {act.duracion_min}m
+                          <span className="font-semibold text-slate-500 dark:text-slate-400">
+                            ({formatDuration(act.duracion_min)})
                           </span>
+                          {discountedMin > 0 && (
+                            <span className="text-[10px] font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-1.5 py-0.2 rounded">
+                              −{formatDuration(discountedMin)} int.
+                            </span>
+                          )}
                         </>
-                      )}
-                      {hasShared && (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-full border border-indigo-200 dark:border-indigo-800/40 inline-flex items-center gap-1">
-                          <Users className="w-3 h-3 text-indigo-500" />
-                          <span>Compartida</span>
-                        </span>
-                      )}
-                      {act.created_by_name && (
-                        <span
-                          className="text-[10px] font-bold px-2 py-0.5 bg-teal-500/10 text-teal-700 dark:text-teal-300 rounded-full border border-teal-500/30 inline-flex items-center gap-1"
-                          title={`Registrado en apoyo por ${act.created_by_name}`}
-                        >
-                          <UserCheck className="w-3 h-3 text-teal-500" />
-                          <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
-                        </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         type="button"
                         onClick={() => handleOpenEditModal(act, index)}
-                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-cyan-700 dark:hover:text-[#00F0FF] hover:bg-cyan-50 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                        className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-md transition-colors cursor-pointer"
                         title="Editar"
                       >
                         <Edit3 className="w-4 h-4" />
@@ -1254,7 +1150,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       <button
                         type="button"
                         onClick={() => onRemoveActividad(index)}
-                        className="p-2 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-full transition-colors cursor-pointer"
+                        className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-md transition-colors cursor-pointer"
                         title="Eliminar"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -1262,70 +1158,47 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                     </div>
                   </div>
 
-                  {/* Badges de vinculación / continuación interactivos en móvil */}
-                  {(act.parent_task_id || (act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id))) || act.comentarios) && (
-                    <div className="flex flex-wrap items-center gap-1.5 mb-2" onClick={(e) => e.stopPropagation()}>
-                      {act.parent_task_id && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-cyan-800 dark:text-[#00F0FF] bg-cyan-100/70 hover:bg-cyan-200 dark:bg-[#00F0FF]/15 dark:hover:bg-[#00F0FF]/25 px-2 py-0.5 rounded-md border border-cyan-300 dark:border-[#00F0FF]/40 cursor-pointer shadow-2xs"
-                          title="Clic para ir a la actividad referenciada"
-                        >
-                          <Link2 className="w-2.5 h-2.5" />
-                          <span>Ref #{act.parent_task_id}</span>
-                          <ExternalLink className="w-2.5 h-2.5 opacity-60" />
-                        </button>
-                      )}
-
-                      {act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id)) && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const firstChild = childTasksMap.get(Number(act.id))![0];
-                            if (firstChild.id) handleNavigateToRef(firstChild.id, firstChild.tipo_vinculo, e);
-                          }}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800/40 cursor-pointer"
-                        >
-                          <GitBranch className="w-2.5 h-2.5" />
-                          <span>↳ {childTasksMap.get(Number(act.id))!.length} vinc.</span>
-                        </button>
-                      )}
-
-                      {act.comentarios && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-500/30">
-                          <MessageSquare className="w-2.5 h-2.5 text-amber-500" />
-                          <span>Nota</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-
                   <div className="mb-2">
                     <RichHtmlRenderer
                       content={act.descripcion}
                       clampLines={2}
-                      className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-200 leading-relaxed"
+                      className="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug"
                     />
                     {(act.estado === 'en_revision' || act.revision_decision) && (
-                      <div className="mt-1.5">
+                      <div className="mt-1">
                         <RevisionBadge actividad={act} />
                       </div>
                     )}
                   </div>
 
                   <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    <div className="flex items-center gap-2">
-                      {act.tipo_trabajo && <span className="font-semibold text-slate-700 dark:text-slate-300">{act.tipo_trabajo}</span>}
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
                       {act.para_cliente && (
-                        <span className="flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 dark:bg-[#00F0FF]" />
-                          <span>Para: <strong className="text-slate-700 dark:text-slate-200">{act.para_cliente}</strong></span>
+                        <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
+                          {act.para_cliente}
+                        </span>
+                      )}
+                      {act.tipo_trabajo && (
+                        <span className="text-slate-400 dark:text-slate-500">{act.tipo_trabajo}</span>
+                      )}
+                      {act.parent_task_id && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
+                          className="inline-flex items-center gap-0.5 text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"
+                        >
+                          <Link2 className="w-3 h-3" />
+                          <span>Continuación</span>
+                        </button>
+                      )}
+                      {hasShared && (
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="w-3 h-3" />
+                          <span>{sharedNames[0] || 'Compartida'}</span>
                         </span>
                       )}
                       {evidenceCount > 0 && (
-                        <span className="font-bold text-cyan-800 dark:text-[#00F0FF] inline-flex items-center gap-1">
+                        <span className="inline-flex items-center gap-0.5">
                           <Paperclip className="w-3 h-3" />
                           <span>{evidenceCount}</span>
                         </span>
@@ -1343,14 +1216,14 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                             onUpdateActividad(index, 'estado', nuevoEstado);
                           }
                         }}
-                        className={`text-[11px] font-bold pl-2.5 pr-6 py-1 rounded-full border transition-all cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
+                        className={`text-[11px] font-semibold pl-2.5 pr-6 py-1 rounded-lg border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
                       >
-                        <option value="pendiente" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● Por iniciar</option>
-                        <option value="en_proceso" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● En proceso</option>
-                        <option value="en_revision" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● En revisión</option>
-                        <option value="completada" className="bg-white dark:bg-[#161722] text-slate-800 dark:text-slate-200">● Completada</option>
+                        <option value="pendiente" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Por iniciar</option>
+                        <option value="en_proceso" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En proceso</option>
+                        <option value="en_revision" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En revisión</option>
+                        <option value="completada" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Completada</option>
                       </select>
-                      <ChevronRight className="w-3 h-3 rotate-90 absolute right-2 pointer-events-none opacity-60" />
+                      <ChevronRight className="w-3 h-3 rotate-90 absolute right-2 pointer-events-none opacity-50" />
                     </div>
                   </div>
                 </div>
@@ -1360,7 +1233,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         </>
       )}
 
-      {/* MODAL 1: Detail Inspection Modal (opens when clicking row or eye) */}
+      {/* MODAL 1: Detail Inspection Modal */}
       <ActividadDetalleModal
         isOpen={detailModalOpen}
         onClose={() => setDetailModalOpen(false)}
@@ -1393,6 +1266,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         users={users}
         currentUser={currentUser}
         fecha={fecha}
+        existingActividades={actividades}
       />
 
       {/* MODAL 3: Referenced Task Deep Inspection & Navigation */}

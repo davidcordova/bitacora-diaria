@@ -176,12 +176,12 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/70 dark:bg-black/75 backdrop-blur-sm animate-in fade-in duration-200 select-none overflow-y-auto">
       <div
-        className="relative w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col overflow-hidden"
+        className="relative w-full max-w-4xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-white/[0.08] flex flex-col overflow-hidden"
         role="dialog"
         aria-modal="true"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-white/[0.08] bg-slate-50/80 dark:bg-[#1E222D]/80 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-xs border border-rose-200 dark:border-rose-900/40">
               <Trash2 className="w-5 h-5" />
@@ -252,7 +252,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
               </button>
               <button
                 onClick={() => setConfirmVaciar(false)}
-                className="px-3.5 py-1.5 bg-white dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] text-slate-700 dark:text-slate-300 font-semibold rounded-full hover:bg-slate-50 dark:hover:bg-[#202230] cursor-pointer"
+                className="px-3.5 py-1.5 bg-white dark:bg-[#232836] border border-slate-200 dark:border-white/[0.08] text-slate-700 dark:text-slate-300 font-semibold rounded-full hover:bg-slate-50 dark:hover:bg-[#202230] cursor-pointer"
               >
                 Cancelar
               </button>
@@ -287,7 +287,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         )}
 
         {/* Search Bar */}
-        <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-[#252636] flex items-center gap-3 bg-slate-50/50 dark:bg-[#161722]/50 shrink-0">
+        <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-white/[0.08] flex items-center gap-3 bg-slate-50/50 dark:bg-[#1E222D]/50 shrink-0">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 dark:text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -295,7 +295,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
               placeholder="Buscar actividades por descripción, cliente, tipo o colaborador..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-white dark:bg-[#161722] border border-slate-200/90 dark:border-[#252636] text-slate-800 dark:text-slate-200 rounded-xl focus:outline-hidden focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-white dark:bg-[#1E222D] border border-slate-200/90 dark:border-white/[0.08] text-slate-800 dark:text-slate-200 rounded-xl focus:outline-hidden focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
           </div>
         </div>
@@ -309,7 +309,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
             </div>
           ) : filteredItems.length === 0 ? (
             <div className="py-16 text-center">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 dark:bg-[#161722] text-slate-400 dark:text-slate-500 flex items-center justify-center mb-3">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-slate-100 dark:bg-[#1E222D] text-slate-400 dark:text-slate-500 flex items-center justify-center mb-3">
                 <Trash2 className="w-8 h-8 opacity-40" />
               </div>
               <h3 className="text-base font-bold text-slate-700 dark:text-slate-200">La papelera está vacía</h3>
@@ -328,7 +328,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
               return (
                 <div
                   key={act.id}
-                  className="group relative bg-white dark:bg-[#161722] border border-slate-200/90 dark:border-[#252636] hover:border-slate-300 dark:hover:border-[#00F0FF]/40 rounded-2xl p-4 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  className="group relative bg-white dark:bg-[#1E222D] border border-slate-200/90 dark:border-white/[0.08] hover:border-slate-300 dark:hover:border-sky-500/40 rounded-2xl p-4 shadow-xs hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
                   <div className="flex-1 space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2">
@@ -352,16 +352,16 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
 
                       {/* Fecha de la bitácora */}
                       {act.bitacora_fecha && (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-[#1A1C29] border border-slate-200/60 dark:border-[#252636] px-2 py-0.5 rounded-md font-semibold">
-                          <Calendar className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF]" />
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-[#232836] border border-slate-200/60 dark:border-white/[0.08] px-2 py-0.5 rounded-md font-semibold">
+                          <Calendar className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                           {formatDateDisplay(act.bitacora_fecha)}
                         </span>
                       )}
 
                       {/* Colaborador */}
                       {(act.bitacora_colaborador || act.colaborador) && (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-[#1A1C29] border border-slate-200/60 dark:border-[#252636] px-2 py-0.5 rounded-md font-semibold">
-                          <UserIcon className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF]" />
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-[#232836] border border-slate-200/60 dark:border-white/[0.08] px-2 py-0.5 rounded-md font-semibold">
+                          <UserIcon className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                           {act.bitacora_colaborador || act.colaborador}
                         </span>
                       )}
@@ -375,7 +375,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
 
                       {/* Para Cliente */}
                       {act.para_cliente && (
-                        <span className="text-xs bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30 px-2 py-0.5 rounded-md font-semibold">
+                        <span className="text-xs bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 px-2 py-0.5 rounded-md font-semibold">
                           {act.para_cliente}
                         </span>
                       )}
@@ -397,13 +397,13 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-[#252636]">
+                  <div className="flex items-center gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-white/[0.08]">
                     {currentBitacoraFecha && act.bitacora_fecha && act.bitacora_fecha !== currentBitacoraFecha ? (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
                           onClick={() => handleRestaurar(act, true)}
                           disabled={actionLoadingId === act.id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/40 transition-colors cursor-pointer min-h-[36px]"
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-sky-500/10 hover:bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/40 transition-colors cursor-pointer min-h-[36px]"
                           title="Restaurar y traer esta actividad a mis actividades de hoy"
                         >
                           <RotateCcw className={`w-3.5 h-3.5 ${actionLoadingId === act.id ? 'animate-spin' : ''}`} />
@@ -413,7 +413,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
                         <button
                           onClick={() => handleRestaurar(act, false)}
                           disabled={actionLoadingId === act.id}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] transition-colors cursor-pointer min-h-[36px]"
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#232836] border border-slate-200 dark:border-white/[0.08] transition-colors cursor-pointer min-h-[36px]"
                           title={`Restaurar en la bitácora original del ${act.bitacora_fecha}`}
                         >
                           <span>En su fecha ({act.bitacora_fecha.slice(5)})</span>
@@ -447,14 +447,14 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3.5 border-t border-slate-100 dark:border-[#252636] bg-slate-50/80 dark:bg-[#161722]/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <div className="px-6 py-3.5 border-t border-slate-100 dark:border-white/[0.08] bg-slate-50/80 dark:bg-[#1E222D]/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
           <div className="flex items-center gap-1.5">
             <ShieldAlert className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
             <span>Las actividades restauradas volverán de inmediato a la bitácora correspondiente y sumarán sus minutos al total.</span>
           </div>
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-5 py-2 bg-white dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-[#202230] text-slate-700 dark:text-slate-200 font-bold rounded-full shadow-2xs transition-colors cursor-pointer min-h-[38px]"
+            className="w-full sm:w-auto px-5 py-2 bg-white dark:bg-[#232836] border border-slate-200 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-[#202230] text-slate-700 dark:text-slate-200 font-bold rounded-full shadow-2xs transition-colors cursor-pointer min-h-[38px]"
           >
             Cerrar
           </button>

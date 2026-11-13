@@ -95,7 +95,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 my-3">
             <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10">
               <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2 mb-1">
-                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-600 dark:text-[#00F0FF] text-xs flex items-center justify-center font-black">1</span>
+                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-sky-600 dark:text-sky-400 text-xs flex items-center justify-center font-black">1</span>
                 Escritura Inmediata (0ms)
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -121,7 +121,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-xs text-cyan-800 dark:text-[#00F0FF]">
+          <div className="flex items-center gap-2 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-xs text-sky-700 dark:text-sky-400">
             <Sparkles className="w-4 h-4 shrink-0" />
             <span>
               <strong>Regla de oro:</strong> Si la barra superior indica <em>"Sin conexión"</em> en rojo, tus tareas siguen perfectamente guardadas en tu equipo. No cierres tu sesión y el sistema subirá todo apenas vuelva la red.
@@ -230,7 +230,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
           </div>
 
           <div className="p-4 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 space-y-2">
-            <h4 className="font-bold text-cyan-900 dark:text-[#00F0FF] flex items-center gap-2">
+            <h4 className="font-bold text-cyan-900 dark:text-sky-400 flex items-center gap-2">
               <Camera className="w-4 h-4" />
               Pegado Directo de Capturas con Ctrl + V
             </h4>
@@ -240,7 +240,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
             <ol className="list-decimal list-inside text-xs space-y-1 text-slate-600 dark:text-slate-400">
               <li>Toma cualquier captura con <code className="bg-white/80 dark:bg-black/40 px-1.5 py-0.5 rounded font-bold">Win + Shift + S</code> o la tecla <code className="bg-white/80 dark:bg-black/40 px-1.5 py-0.5 rounded font-bold">Impr Pant / PrtScr</code>.</li>
               <li>Abre o mantén abierto el modal de la actividad.</li>
-              <li>Presiona <code className="bg-cyan-500/20 text-cyan-800 dark:text-[#00F0FF] font-bold px-2 py-0.5 rounded">Ctrl + V</code> en cualquier parte del modal o dentro de la descripción.</li>
+              <li>Presiona <code className="bg-cyan-500/20 text-sky-700 dark:text-sky-400 font-bold px-2 py-0.5 rounded">Ctrl + V</code> en cualquier parte del modal o dentro de la descripción.</li>
               <li>La imagen se subirá automáticamente a los servidores y quedará como evidencia asociada a la tarea.</li>
             </ol>
           </div>
@@ -352,7 +352,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
       title: '6. Bóveda TI, Credenciales & Importación Masiva Excel',
       icon: <KeyRound className="w-5 h-5 text-cyan-500" />,
       badge: 'Seguridad AES-256',
-      badgeColor: 'bg-cyan-500/10 text-cyan-600 dark:text-[#00F0FF] border-cyan-500/30',
+      badgeColor: 'bg-cyan-500/10 text-sky-600 dark:text-sky-400 border-cyan-500/30',
       description: 'Gestión segura de cuentas de plataformas corporativas y carga masiva mediante planillas Excel.',
       tags: ['boveda', 'vault', 'credenciales', 'excel', 'importar', 'pin', 'aes256'],
       content: (
@@ -415,7 +415,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
       title: '8. Diagnóstico de Errores & Reporte Asistido con Capturas',
       icon: <LifeBuoy className="w-5 h-5 text-cyan-500" />,
       badge: 'Soporte',
-      badgeColor: 'bg-cyan-500/10 text-cyan-600 dark:text-[#00F0FF] border-cyan-500/30',
+      badgeColor: 'bg-cyan-500/10 text-sky-600 dark:text-sky-400 border-cyan-500/30',
       description: 'Qué hacer ante una falla de red y cómo enviar reportes técnicos enriquecidos al equipo de Sistemas.',
       tags: ['diagnostico', 'error', 'reporte', 'soporte', 'sin_conexion', 'sincronizacion'],
       content: (
@@ -472,7 +472,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1 max-w-xl">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white font-heading flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-[#00F0FF] border border-cyan-200 dark:border-cyan-500/30">
+              <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/20 text-sky-700 dark:text-sky-400 border border-cyan-200 dark:border-cyan-500/30">
                 <BookOpen className="w-5 h-5" />
               </span>
               Manual de Operaciones
@@ -496,7 +496,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
             <button
               type="button"
               onClick={() => onNavigateToView('lista')}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-600 via-sky-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 dark:from-cyan-500 dark:to-[#00A3BF] text-white dark:text-slate-950 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
             >
               Mi Bitácora
               <ArrowRight className="w-3.5 h-3.5" />
@@ -545,7 +545,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
               onClick={() => setSelectedCategory(cat.id)}
               className={`px-3 py-1.5 rounded-xl border whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === cat.id
-                  ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-700 dark:text-[#00F0FF] font-bold shadow-2xs'
+                  ? 'bg-cyan-500/15 border-cyan-500/40 text-sky-700 dark:text-sky-400 font-bold shadow-2xs'
                   : 'bg-white dark:bg-[#12131C] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-white/20'
               }`}
             >
@@ -640,7 +640,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
       <div className="p-5 sm:p-6 rounded-3xl bg-slate-900 text-white border border-white/10 shadow-xl space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-500/20 text-[#00F0FF] border border-cyan-500/30">
+            <div className="p-2 rounded-xl bg-cyan-500/20 text-sky-500 border border-cyan-500/30">
               <Laptop className="w-4 h-4" />
             </div>
             <div>
@@ -653,7 +653,7 @@ export const ManualView: React.FC<ManualViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {shortcuts.map((sh, idx) => (
             <div key={idx} className="p-3 rounded-2xl bg-white/5 border border-white/10 flex flex-col justify-between">
-              <kbd className="self-start px-2 py-1 rounded-lg bg-cyan-500/20 text-[#00F0FF] border border-cyan-500/40 text-xs font-bold font-mono shadow-xs mb-2">
+              <kbd className="self-start px-2 py-1 rounded-lg bg-cyan-500/20 text-sky-500 border border-cyan-500/40 text-xs font-bold font-mono shadow-xs mb-2">
                 {sh.key}
               </kbd>
               <p className="text-xs text-slate-300">{sh.desc}</p>

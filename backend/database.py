@@ -883,10 +883,50 @@ def _mig_003_backfill_bitacora_user_ids_and_indexes(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_bitacora_deleted_estado ON actividades(bitacora_id, is_deleted, estado)")
 
 
+def _mig_004_close_completed_continuation_lineages(cursor):
+    """
+    Migración no destructiva v4 (con snapshot automático previo `pre_mig_v4`):
+    1. Añade `rollover_dismissed` e índice `idx_actividades_parent_task_id`.
+    2. Marca como `completada` las instancias abiertas previas cuya continuación posterior
+       (o actividad idéntica posterior del mismo colaborador) ya fue completada, evitando
+       que reaparezcan o fuercen al usuario a completar día por día. Conserva 100% de los
+       minutos, horarios, descripciones y evidencias históricas sin borrar ningún registro.
+    3. Marca `rollover_dismissed = 1` en ancestros cuyas copias arrastradas ya fueron
+       descartadas a la papelera, evitando resurrecciones al vaciar o expirar la papelera.
+    """
+    from activity_lifecycle import propagate_completion_across_lineage, mark_lineage_rollover_dismissed
+
+    cols = [c[1] for c in cursor.execute("PRAGMA table_info(actividades)").fetchall()]
+    if 'rollover_dismissed' not in cols:
+        cursor.execute("ALTER TABLE actividades ADD COLUMN rollover_dismissed INTEGER DEFAULT 0")
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_actividades_parent_task_id ON actividades(parent_task_id)")
+
+    now_str = get_peru_now_str()
+    completed_ids = [
+        r[0]
+        for r in cursor.execute(
+            "SELECT id FROM actividades WHERE estado = 'completada' AND (is_deleted IS NULL OR is_deleted = 0) ORDER BY id ASC"
+        ).fetchall()
+    ]
+    if completed_ids:
+        propagate_completion_across_lineage(cursor, completed_ids, now_str)
+
+    deleted_cont_ids = [
+        r[0]
+        for r in cursor.execute(
+            "SELECT id FROM actividades WHERE is_deleted = 1 AND parent_task_id IS NOT NULL ORDER BY id ASC"
+        ).fetchall()
+    ]
+    if deleted_cont_ids:
+        mark_lineage_rollover_dismissed(cursor, deleted_cont_ids)
+
+
 MIGRATIONS = [
     (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
     (2, 'normalize_existing_client_names', _mig_002_normalize_client_names),
     (3, 'backfill_bitacora_user_ids_and_indexes', _mig_003_backfill_bitacora_user_ids_and_indexes),
+    (4, 'close_completed_continuation_lineages', _mig_004_close_completed_continuation_lineages),
 ]
 
 

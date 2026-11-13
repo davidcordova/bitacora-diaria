@@ -145,11 +145,11 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 overflow-y-auto bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-        <div className="relative w-full max-w-3xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col">
+        <div className="relative w-full max-w-3xl bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-200 dark:border-[#252636] shrink-0">
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-[#1E222D] border-b border-slate-200 dark:border-white/[0.08] shrink-0">
             <div className="flex items-center gap-2.5 sm:gap-3">
-              <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black shadow-sm shadow-[#00F0FF]/20 shrink-0">
+              <div className="p-2 sm:p-2.5 rounded-xl bg-sky-600 text-white font-black shadow-sm shadow-sky-600/15 shrink-0">
                 <FileText className="w-5 h-5" />
               </div>
               <div>
@@ -157,7 +157,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                   <h3 className="text-sm sm:text-lg font-bold text-slate-900 dark:text-slate-100">
                     Resumen Detallado de Bitácora
                   </h3>
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30">
                     {formatDateDisplay(bitacora.fecha)}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 uppercase tracking-wider">
@@ -173,7 +173,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-lg transition-colors cursor-pointer shrink-0"
+              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1E222D] rounded-lg transition-colors cursor-pointer shrink-0"
               title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -183,13 +183,13 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
           {/* Modal Body - Scrollable */}
           <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636]">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-50 dark:bg-[#1E222D] rounded-2xl border border-slate-200/80 dark:border-white/[0.08]">
               <div>
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Colaborador
                 </span>
                 <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
-                  <UserIcon className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                  <UserIcon className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                   <span className="truncate">{bitacora.colaborador}</span>
                 </div>
               </div>
@@ -218,8 +218,8 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                 <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                   Tiempo Total
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-extrabold text-xs sm:text-sm text-[#00A3BF] dark:text-[#00F0FF]">
-                  <Timer className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                <div className="flex items-center gap-1.5 mt-1 font-extrabold text-xs sm:text-sm text-sky-600 dark:text-sky-400">
+                  <Timer className="w-3.5 h-3.5 text-sky-500 shrink-0" />
                   <span>{totalMinutos} min ({formatDuration(totalMinutos)})</span>
                 </div>
               </div>
@@ -251,24 +251,24 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                     return (
                       <div
                         key={act.id || idx}
-                        className="bg-white dark:bg-[#161722] rounded-xl border border-slate-200 dark:border-[#252636] p-4 shadow-2xs hover:border-[#00F0FF]/40 dark:hover:border-[#00F0FF]/40 transition-colors"
+                        className="bg-white dark:bg-[#1E222D] rounded-xl border border-slate-200 dark:border-white/[0.08] p-4 shadow-2xs hover:border-sky-500/40 dark:hover:border-sky-500/40 transition-colors"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-xs font-bold text-slate-400 dark:text-slate-500">#{idx + 1}</span>
 
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-[#1A1C29] px-2.5 py-0.5 rounded-md border border-slate-200/60 dark:border-[#252636]">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-[#232836] px-2.5 py-0.5 rounded-md border border-slate-200/60 dark:border-white/[0.08]">
                               <Clock className="w-3 h-3 text-slate-400" />
                               <span>{act.hora_inicio || '--:--'}</span>
                             </span>
 
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-[#00A3BF] dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 border border-[#00F0FF]/30 px-2 py-0.5 rounded-md">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-sky-600 dark:text-sky-400 bg-cyan-50 dark:bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 rounded-md">
                               <Timer className="w-3 h-3" />
                               <span>{act.duracion_min} min</span>
                             </span>
 
                             {act.tipo_trabajo && (
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#252636]">
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-[#232836] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08]">
                                 {act.tipo_trabajo}
                               </span>
                             )}
@@ -292,7 +292,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                           </div>
 
                           {act.para_cliente && (
-                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#1A1C29] px-2 py-0.5 rounded border border-slate-200 dark:border-[#252636]">
+                            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-[#232836] px-2 py-0.5 rounded border border-slate-200 dark:border-white/[0.08]">
                               Para: {act.para_cliente}
                             </span>
                           )}
@@ -305,7 +305,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
 
                         {/* Evidences */}
                         {act.evidencias && act.evidencias.length > 0 && (
-                          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-[#252636] flex flex-wrap items-center gap-2">
+                          <div className="mt-3 pt-2 border-t border-slate-100 dark:border-white/[0.08] flex flex-wrap items-center gap-2">
                             <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
                               <Paperclip className="w-3 h-3 text-slate-400" />
                               <span>Evidencias ({act.evidencias.length}):</span>
@@ -316,7 +316,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                                 key={ev.id || evIdx}
                                 type="button"
                                 onClick={() => handleOpenEvidenceViewer(act.evidencias || [], evIdx)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] hover:text-[#00F0FF] dark:hover:text-[#00F0FF] rounded-lg border border-slate-200 dark:border-[#252636] transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-[#161922] hover:bg-slate-100 dark:hover:bg-[#232836] hover:text-sky-600 dark:hover:text-sky-400 rounded-lg border border-slate-200 dark:border-white/[0.08] transition-colors cursor-pointer"
                               >
                                 <span className="truncate max-w-[150px]">{ev.nombre}</span>
                                 <ExternalLink className="w-3 h-3 text-slate-400" />
@@ -332,15 +332,15 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
             </div>
 
             {/* Cierre de Jornada */}
-            <div className="p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] space-y-3">
+            <div className="p-4 bg-slate-50 dark:bg-[#1E222D] rounded-2xl border border-slate-200 dark:border-white/[0.08] space-y-3">
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Cierre de Jornada y Compromisos
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3 bg-white dark:bg-[#13141F] rounded-xl border border-slate-200 dark:border-[#252636]">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
-                    <ListTodo className="w-3.5 h-3.5 text-[#00F0FF]" />
+                    <ListTodo className="w-3.5 h-3.5 text-sky-500" />
                     <span>Pendientes</span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
@@ -348,7 +348,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-[#13141F] rounded-xl border border-slate-200 dark:border-[#252636]">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
                     <AlertTriangle
                       className={`w-3.5 h-3.5 ${
@@ -360,7 +360,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                       className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
                         bitacora.necesita_apoyo === 'Si'
                           ? 'bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300'
-                          : 'bg-slate-100 dark:bg-[#1C1D2A] text-slate-600 dark:text-slate-300'
+                          : 'bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-300'
                       }`}
                     >
                       {bitacora.necesita_apoyo || 'No'}
@@ -373,7 +373,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                   </p>
                 </div>
 
-                <div className="p-3 bg-white dark:bg-[#13141F] rounded-xl border border-slate-200 dark:border-[#252636]">
+                <div className="p-3 bg-white dark:bg-[#161922] rounded-xl border border-slate-200 dark:border-white/[0.08]">
                   <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
                     <Target className="w-3.5 h-3.5 text-emerald-500" />
                     <span>Prioridad Siguiente Día</span>
@@ -387,12 +387,12 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
           </div>
 
           {/* Footer Actions */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-6 py-3 bg-slate-50 dark:bg-[#161722] border-t border-slate-200 dark:border-[#252636] shrink-0">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 px-4 sm:px-6 py-3 bg-slate-50 dark:bg-[#1E222D] border-t border-slate-200 dark:border-white/[0.08] shrink-0">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleCopySummary}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] bg-white dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200 dark:border-[#252636] hover:border-[#00F0FF]/40 rounded-xl transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 bg-white dark:bg-[#161922] hover:bg-slate-100 dark:hover:bg-[#232836] border border-slate-200 dark:border-white/[0.08] hover:border-sky-500/40 rounded-xl transition-all cursor-pointer shadow-2xs"
               >
                 {copied ? (
                   <>
@@ -410,7 +410,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
               <button
                 type="button"
                 onClick={() => setWhatsAppModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 bg-emerald-50 dark:bg-[#13141F] hover:bg-emerald-100 dark:hover:bg-[#1C1D2A] border border-emerald-200 dark:border-emerald-800/60 rounded-xl transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 bg-emerald-50 dark:bg-[#161922] hover:bg-emerald-100 dark:hover:bg-[#232836] border border-emerald-200 dark:border-emerald-800/60 rounded-xl transition-all cursor-pointer shadow-2xs"
               >
                 <Share2 className="w-4 h-4 text-emerald-500" />
                 <span>WhatsApp</span>
@@ -419,7 +419,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] bg-white dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200 dark:border-[#252636] rounded-xl transition-all cursor-pointer shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 bg-white dark:bg-[#161922] hover:bg-slate-100 dark:hover:bg-[#232836] border border-slate-200 dark:border-white/[0.08] rounded-xl transition-all cursor-pointer shadow-2xs"
               >
                 <Printer className="w-4 h-4 text-slate-400" />
                 <span>Imprimir</span>
@@ -434,7 +434,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
                     onLoadInEditor(bitacora);
                     onClose();
                   }}
-                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-xl transition-all cursor-pointer shadow-sm shadow-[#00F0FF]/20"
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 active:scale-[0.99] rounded-xl transition-all cursor-pointer shadow-sm shadow-sky-600/15"
                 >
                   <FileEdit className="w-4 h-4" />
                   <span>Cargar en Editor</span>
@@ -444,7 +444,7 @@ export const HistorialResumenModal: React.FC<HistorialResumenModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1C1D2A] rounded-xl transition-colors cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#232836] rounded-xl transition-colors cursor-pointer"
               >
                 Cerrar
               </button>

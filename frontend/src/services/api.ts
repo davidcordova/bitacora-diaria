@@ -337,7 +337,7 @@ export const api = {
     bitacora: Bitacora,
     requesting_user_id?: number,
     opts?: { mode?: 'replace' | 'merge'; deletedIds?: Array<number | string> }
-  ): Promise<{ bitacora: Bitacora; message: string; conflicts?: number }> {
+  ): Promise<{ bitacora: Bitacora; message: string; conflicts?: number; closed_lineage_ids?: number[] }> {
     // 1. Respaldo preventivo inmediato en cliente ante cualquier falla de red o corte
     this.saveToLocalStorage(bitacora);
     
@@ -376,20 +376,25 @@ export const api = {
     }
   },
 
-  async updateActividadEstado(actId: number | string, nuevoEstado: EstadoActividad): Promise<boolean> {
+  async updateActividadEstado(
+    actId: number | string,
+    nuevoEstado: EstadoActividad
+  ): Promise<{ ok: boolean; closed_lineage_ids?: number[] }> {
     if (typeof actId === 'number') {
-      try {
-        const res = await authFetch(`${API_BASE}/actividades/${actId}/estado`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ estado: nuevoEstado }),
-        });
-        return res.ok;
-      } catch (e) {
-        console.warn('API patch actividad error', e);
+      const res = await authFetch(`${API_BASE}/actividades/${actId}/estado`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ estado: nuevoEstado }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err: any = new Error(body?.error || 'No se pudo actualizar el estado de la tarea');
+        err.status = res.status;
+        throw err;
       }
+      return { ok: true, closed_lineage_ids: body?.closed_lineage_ids || [] };
     }
-    return true;
+    return { ok: true, closed_lineage_ids: [] };
   },
 
   /** Decisión del líder/admin sobre una tarea "En revisión". Devuelve los datos de la revisión o un error legible. */
@@ -413,20 +418,37 @@ export const api = {
     }
   },
 
-  async updateActividadDetalle(actId: number | string, actData: Partial<Actividad>): Promise<boolean> {
+  async updateActividadDetalle(
+    actId: number | string,
+    actData: Partial<Actividad>
+  ): Promise<{
+    ok: boolean;
+    actividad?: Actividad;
+    bitacora_actividades?: Actividad[];
+    tiempo_total_min?: number;
+    closed_lineage_ids?: number[];
+  }> {
     if (typeof actId === 'number') {
-      try {
-        const res = await authFetch(`${API_BASE}/actividades/${actId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(actData),
-        });
-        return res.ok;
-      } catch (e) {
-        console.warn('API update actividad detalle error', e);
+      const res = await authFetch(`${API_BASE}/actividades/${actId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(actData),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const err: any = new Error(body?.error || 'Error al guardar el detalle de la actividad');
+        err.status = res.status;
+        throw err;
       }
+      return {
+        ok: true,
+        actividad: body?.actividad,
+        bitacora_actividades: body?.bitacora_actividades,
+        tiempo_total_min: body?.tiempo_total_min,
+        closed_lineage_ids: body?.closed_lineage_ids || [],
+      };
     }
-    return true;
+    return { ok: true };
   },
 
   async getActividadesPendientes(colaborador?: string, userId?: number): Promise<Actividad[]> {

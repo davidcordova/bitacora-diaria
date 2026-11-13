@@ -37,7 +37,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const navItemClass = (active: boolean) =>
     `flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer relative min-h-[44px] ${
       active
-        ? 'text-sky-600 dark:text-[#00F0FF] font-bold bg-sky-500/10 dark:bg-[#00F0FF]/10'
+        ? 'text-sky-600 dark:text-sky-400 font-bold bg-sky-500/10 dark:bg-sky-500/10'
         : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
     }`;
 
@@ -56,7 +56,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         <div className="relative">
           <LayoutList className="w-5 h-5" />
           {activitiesCount > 0 && (
-            <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[15px] h-[15px] rounded-full bg-sky-600 dark:bg-[#00F0FF] text-white dark:text-slate-950 text-[9px] font-extrabold flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-2.5 px-1 min-w-[15px] h-[15px] rounded-full bg-sky-600 text-white text-[9px] font-extrabold flex items-center justify-center">
               {activitiesCount > 99 ? '99+' : activitiesCount}
             </span>
           )}
@@ -104,7 +104,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         onClick={onOpenSummary}
         className="flex flex-col items-center justify-center py-1 px-2.5 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl transition-all cursor-pointer min-h-[44px]"
       >
-        <FileText className="w-5 h-5 text-sky-600 dark:text-[#00F0FF]" />
+        <FileText className="w-5 h-5 text-sky-600 dark:text-sky-400" />
         <span className="text-[10px] mt-0.5">Resumen</span>
       </button>
 

@@ -39,7 +39,7 @@ const OPTIONS: {
     title: 'Aprobar y cerrar',
     hint: 'El trabajo está conforme: la tarea queda "Completada".',
     icon: CheckCheck,
-    active: 'border-[#00A3BF] bg-cyan-50 dark:bg-cyan-950/30 ring-2 ring-[#00F0FF]/30',
+    active: 'border-[#00A3BF] bg-cyan-50 dark:bg-cyan-950/30 ring-2 ring-sky-500/30',
   },
   {
     value: 'devuelta',
@@ -99,9 +99,9 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
         if (e.target === e.currentTarget && !saving) onClose();
       }}
     >
-      <div className="w-full max-w-lg bg-white dark:bg-[#13141F] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#252636] animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
+      <div className="w-full max-w-lg bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200 dark:border-white/[0.08] animate-in zoom-in-95 duration-150 max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 p-5 pb-3 border-b border-slate-100 dark:border-[#252636]">
+        <div className="flex items-start justify-between gap-3 p-5 pb-3 border-b border-slate-100 dark:border-white/[0.08]">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-purple-500/10 border border-purple-500/30 text-purple-600 dark:text-purple-300">
               <ClipboardCheck className="w-5 h-5" />
@@ -120,7 +120,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
             id="revision-modal-close"
             onClick={onClose}
             disabled={saving}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#1A1C29] cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#232836] cursor-pointer"
             aria-label="Cerrar"
           >
             <X className="w-4 h-4" />
@@ -129,12 +129,12 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
 
         <div className="p-5 space-y-4 overflow-y-auto">
           {/* Qué se revisa */}
-          <div className="rounded-xl bg-slate-50 dark:bg-[#161722] border border-slate-200/80 dark:border-[#252636] p-3.5 space-y-2">
+          <div className="rounded-xl bg-slate-50 dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/[0.08] p-3.5 space-y-2">
             <div className="text-sm text-slate-800 dark:text-slate-100 font-medium break-words">
               <RichHtmlRenderer content={actividad.descripcion} />
             </div>
             {actividad.comentarios && (
-              <div className="text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200/70 dark:border-[#252636] pt-2 break-words">
+              <div className="text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200/70 dark:border-white/[0.08] pt-2 break-words">
                 <span className="font-semibold text-slate-500 dark:text-slate-400">Notas del colaborador: </span>
                 <RichHtmlRenderer content={actividad.comentarios} />
               </div>
@@ -156,7 +156,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
                   key={opt.value}
                   htmlFor={`revision-opt-${opt.value}`}
                   className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                    selected ? opt.active : 'border-slate-200 dark:border-[#252636] hover:border-slate-300 dark:hover:border-slate-600'
+                    selected ? opt.active : 'border-slate-200 dark:border-white/[0.08] hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
                 >
                   <input
@@ -194,7 +194,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
               maxLength={1000}
               rows={3}
               placeholder={needsComment ? '¿Qué debe corregir o completar?' : 'Ej.: Adelante, prioriza la parte de backups.'}
-              className="mt-1 w-full rounded-xl border border-slate-200 dark:border-[#252636] bg-white dark:bg-[#0D0E16] text-sm text-slate-800 dark:text-slate-100 p-2.5 focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/40 resize-y"
+              className="mt-1 w-full rounded-xl border border-slate-200 dark:border-white/[0.08] bg-white dark:bg-[#0D0E16] text-sm text-slate-800 dark:text-slate-100 p-2.5 focus:outline-none focus:ring-2 focus:ring-sky-500/40 resize-y"
             />
           </div>
 
@@ -206,7 +206,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-2 p-4 border-t border-slate-100 dark:border-[#252636]">
+        <div className="flex items-center justify-between gap-2 p-4 border-t border-slate-100 dark:border-white/[0.08]">
           <span className="text-[11px] text-slate-400 hidden sm:block">El colaborador recibirá una notificación</span>
           <div className="flex gap-2 ml-auto">
             <button
@@ -223,7 +223,7 @@ export const RevisionModal: React.FC<RevisionModalProps> = ({ actividad, initial
               id="revision-confirm"
               onClick={submit}
               disabled={!canSubmit}
-              className="px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+              className="px-4 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Confirmar decisión

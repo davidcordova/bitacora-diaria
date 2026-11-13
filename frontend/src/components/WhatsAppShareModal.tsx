@@ -126,11 +126,11 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 dark:border-[#252636] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto">
+      <div className="bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto">
         {/* Header */}
-        <div className="bg-slate-50 dark:bg-[#161722] px-4 sm:px-6 py-3.5 sm:py-4 text-slate-900 dark:text-white flex items-center justify-between border-b border-slate-200/80 dark:border-[#252636] shrink-0">
+        <div className="bg-slate-50 dark:bg-[#1E222D] px-4 sm:px-6 py-3.5 sm:py-4 text-slate-900 dark:text-white flex items-center justify-between border-b border-slate-200/80 dark:border-white/[0.08] shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="p-2 sm:p-2.5 rounded-2xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 shrink-0">
+            <div className="p-2 sm:p-2.5 rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30 shrink-0">
               <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div>
@@ -143,7 +143,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-[#1C1D2A] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+            className="p-1.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-[#232836] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -163,13 +163,13 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 onClick={() => setRecipientMode('lider')}
                 className={`flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl border text-center transition-all cursor-pointer ${
                   recipientMode === 'lider'
-                    ? 'border-[#00F0FF] bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] ring-2 ring-[#00F0FF]/20 shadow-xs font-bold'
-                    : 'border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-600 dark:text-slate-300'
+                    ? 'border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-2 ring-sky-500/20 shadow-xs font-bold'
+                    : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <ShieldCheck
                   className={`w-5 h-5 mb-1.5 ${
-                    recipientMode === 'lider' ? 'text-[#00F0FF]' : 'text-slate-400 dark:text-slate-500'
+                    recipientMode === 'lider' ? 'text-sky-500' : 'text-slate-400 dark:text-slate-500'
                   }`}
                 />
                 <span className="text-xs font-bold leading-tight">Líder de Equipo</span>
@@ -182,13 +182,13 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 onClick={() => setRecipientMode('colaborador')}
                 className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer ${
                   recipientMode === 'colaborador'
-                    ? 'border-[#00F0FF] bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] ring-2 ring-[#00F0FF]/20 shadow-xs font-bold'
-                    : 'border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-600 dark:text-slate-300'
+                    ? 'border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-2 ring-sky-500/20 shadow-xs font-bold'
+                    : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <Users
                   className={`w-5 h-5 mb-1.5 ${
-                    recipientMode === 'colaborador' ? 'text-[#00F0FF]' : 'text-slate-400 dark:text-slate-500'
+                    recipientMode === 'colaborador' ? 'text-sky-500' : 'text-slate-400 dark:text-slate-500'
                   }`}
                 />
                 <span className="text-xs font-bold leading-tight">Colaborador</span>
@@ -201,13 +201,13 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 onClick={() => setRecipientMode('particular')}
                 className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer ${
                   recipientMode === 'particular'
-                    ? 'border-[#00F0FF] bg-[#00F0FF]/10 text-cyan-600 dark:text-[#00F0FF] ring-2 ring-[#00F0FF]/20 shadow-xs font-bold'
-                    : 'border-slate-200 dark:border-[#252636] bg-slate-50/50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-slate-600 dark:text-slate-300'
+                    ? 'border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400 ring-2 ring-sky-500/20 shadow-xs font-bold'
+                    : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] text-slate-600 dark:text-slate-300'
                 }`}
               >
                 <Phone
                   className={`w-5 h-5 mb-1.5 ${
-                    recipientMode === 'particular' ? 'text-[#00F0FF]' : 'text-slate-400 dark:text-slate-500'
+                    recipientMode === 'particular' ? 'text-sky-500' : 'text-slate-400 dark:text-slate-500'
                   }`}
                 />
                 <span className="text-xs font-bold leading-tight">Otro Número</span>
@@ -217,7 +217,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
           </div>
 
           {/* Configuration for selected mode */}
-          <div className="bg-slate-50/80 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636] p-4 space-y-3">
+          <div className="bg-slate-50/80 dark:bg-[#1E222D] rounded-2xl border border-slate-200/80 dark:border-white/[0.08] p-4 space-y-3">
             {recipientMode === 'lider' && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -228,12 +228,12 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Número de WhatsApp:</span>
-                  <span className="text-xs font-mono font-bold text-[#00A88B] dark:text-[#00F0FF]">
+                  <span className="text-xs font-mono font-bold text-[#00A88B] dark:text-sky-400">
                     {teamLeader?.phone ? teamLeader.phone : '+51 987 654 321 (por defecto)'}
                   </span>
                 </div>
                 {teamLeader?.team_name && (
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-[#252636]">
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-200/60 dark:border-white/[0.08]">
                     Equipo: {teamLeader.team_name}
                   </div>
                 )}
@@ -248,11 +248,11 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 <select
                   value={selectedColabId}
                   onChange={(e) => setSelectedColabId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 bg-white dark:bg-[#13141F] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                  className="w-full px-3 py-2 bg-white dark:bg-[#161922] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                 >
-                  <option value="" className="dark:bg-[#161722]">-- Elige un colaborador --</option>
+                  <option value="" className="dark:bg-[#1E222D]">-- Elige un colaborador --</option>
                   {users.map((u) => (
-                    <option key={u.id} value={u.id} className="dark:bg-[#161722]">
+                    <option key={u.id} value={u.id} className="dark:bg-[#1E222D]">
                       {u.full_name} ({u.role}) {u.phone ? `• ${u.phone}` : '• Sin teléfono'}
                     </option>
                   ))}
@@ -277,7 +277,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                     value={customName}
                     onChange={(e) => setCustomName(e.target.value)}
                     placeholder="Ej: Gerencia, Cliente, Auditor..."
-                    className="w-full px-3 py-2 bg-white dark:bg-[#13141F] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                    className="w-full px-3 py-2 bg-white dark:bg-[#161922] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                   />
                 </div>
                 <div>
@@ -285,7 +285,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                     Número de WhatsApp (con o sin +51):
                   </label>
                   <div className="flex gap-2 items-center">
-                    <span className="px-3 py-2 bg-slate-200/80 dark:bg-[#1C1D2A] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold select-none">
+                    <span className="px-3 py-2 bg-slate-200/80 dark:bg-[#232836] text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold select-none">
                       +51
                     </span>
                     <input
@@ -293,7 +293,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                       value={customPhone}
                       onChange={(e) => setCustomPhone(e.target.value)}
                       placeholder="987654321"
-                      className="flex-1 px-3 py-2 bg-white dark:bg-[#13141F] text-xs font-mono text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                      className="flex-1 px-3 py-2 bg-white dark:bg-[#161922] text-xs font-mono text-slate-800 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                     />
                   </div>
                   <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
@@ -305,21 +305,21 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
           </div>
 
           {/* Generated Link Card */}
-          <div className="bg-[#00F0FF]/5 dark:bg-[#00F0FF]/5 border border-[#00F0FF]/20 dark:border-[#00F0FF]/20 rounded-2xl p-3.5 space-y-2">
+          <div className="bg-sky-500/5 dark:bg-sky-500/5 border border-sky-500/20 dark:border-sky-500/20 rounded-2xl p-3.5 space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                <UserCheck className="w-3.5 h-3.5 text-[#00F0FF]" />
+                <UserCheck className="w-3.5 h-3.5 text-sky-500" />
                 Destino listo: {activeRecipient.name}
               </span>
-              <span className="font-mono text-[11px] text-[#00A88B] dark:text-[#00F0FF] bg-white dark:bg-[#13141F] px-2.5 py-0.5 rounded-full font-bold border border-[#00F0FF]/30 shadow-2xs">
+              <span className="font-mono text-[11px] text-[#00A88B] dark:text-sky-400 bg-white dark:bg-[#161922] px-2.5 py-0.5 rounded-full font-bold border border-sky-500/30 shadow-2xs">
                 {cleanPhone ? `+${cleanPhone}` : 'Número pendiente'}
               </span>
             </div>
 
             {/* Message Preview Accordion */}
-            <div className="pt-2 border-t border-[#00F0FF]/20">
+            <div className="pt-2 border-t border-sky-500/20">
               <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">Mensaje a enviar:</div>
-              <div className="max-h-20 sm:max-h-28 overflow-y-auto bg-white dark:bg-[#13141F] p-2.5 rounded-xl border border-slate-200 dark:border-[#252636] text-[11px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
+              <div className="max-h-20 sm:max-h-28 overflow-y-auto bg-white dark:bg-[#161922] p-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] text-[11px] font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
                 {messageText}
               </div>
             </div>
@@ -327,7 +327,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-[#161722] border-t border-slate-200/80 dark:border-[#252636] space-y-2 shrink-0">
+        <div className="p-3 sm:p-4 bg-slate-50 dark:bg-[#1E222D] border-t border-slate-200/80 dark:border-white/[0.08] space-y-2 shrink-0">
           {/* Main WhatsApp Open Button */}
           <a
             href={isValidPhone ? whatsappUrl : undefined}
@@ -338,9 +338,9 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
                 e.preventDefault();
               }
             }}
-            className={`w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 ${
+            className={`w-full flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 active:scale-[0.99] ${
               !isValidPhone ? 'opacity-50 pointer-events-none' : ''
-            } text-white dark:text-slate-950 py-2.5 sm:py-3 px-4 rounded-full text-xs sm:text-sm font-bold shadow-md shadow-sky-600/20 dark:shadow-[#00F0FF]/20 transition-all cursor-pointer min-h-[40px]`}
+            } text-white py-2.5 sm:py-3 px-4 rounded-full text-xs sm:text-sm font-bold shadow-md shadow-sky-600/20 dark:shadow-sky-600/15 transition-all cursor-pointer min-h-[40px]`}
           >
             <Send className="w-4 h-4 shrink-0" />
             <span className="truncate">Enviar por WhatsApp a {activeRecipient.name}</span>
@@ -353,7 +353,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
               type="button"
               disabled={!isValidPhone}
               onClick={handleCopyLink}
-              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200 dark:border-[#252636] py-2 sm:py-2.5 px-2.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] transition-all cursor-pointer disabled:opacity-50 min-h-[36px]"
+              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#161922] hover:bg-slate-100 dark:hover:bg-[#232836] border border-slate-200 dark:border-white/[0.08] py-2 sm:py-2.5 px-2.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 transition-all cursor-pointer disabled:opacity-50 min-h-[36px]"
             >
               {copiedLink ? (
                 <>
@@ -371,7 +371,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
             <button
               type="button"
               onClick={handleCopyMessage}
-              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] border border-slate-200 dark:border-[#252636] py-2 sm:py-2.5 px-2.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] transition-all cursor-pointer min-h-[36px]"
+              className="flex items-center justify-center gap-1.5 bg-white dark:bg-[#161922] hover:bg-slate-100 dark:hover:bg-[#232836] border border-slate-200 dark:border-white/[0.08] py-2 sm:py-2.5 px-2.5 rounded-full text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-sky-600 dark:hover:text-sky-400 transition-all cursor-pointer min-h-[36px]"
             >
               {copiedText ? (
                 <>

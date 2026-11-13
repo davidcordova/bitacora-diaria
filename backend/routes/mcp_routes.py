@@ -31,6 +31,11 @@ from database import (
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 from security import _get_secret_key
 from routes.system_routes import normalize_client_name
+from activity_lifecycle import (
+    calculate_hora_fin,
+    recalculate_bitacora_durations,
+    propagate_completion_across_lineage,
+)
 
 mcp_bp = Blueprint('mcp_bp', __name__)
 
@@ -888,7 +893,7 @@ def _tool_detectar_alertas_y_cuellos_botella(args):
 
     conn = get_db()
     try:
-        # 1. Tareas bloqueadas o en revisión o abiertas antiguas
+        # 1. Tareas bloqueadas o en revisión o abiertas antiguas (solo el eslabón más reciente activo)
         open_acts = conn.execute(
             '''
             SELECT a.id, a.descripcion, a.para_cliente, a.estado, a.duracion_min,
@@ -898,6 +903,14 @@ def _tool_detectar_alertas_y_cuellos_botella(args):
             JOIN bitacoras b ON a.bitacora_id = b.id
             WHERE a.estado != 'completada'
               AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+              AND COALESCE(a.rollover_dismissed, 0) = 0
+              AND NOT EXISTS (
+                  SELECT 1 FROM actividades a_child
+                  JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
+                  WHERE a_child.parent_task_id = a.id
+                    AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
+                    AND b_child.fecha > b.fecha
+              )
             ORDER BY b.fecha DESC, a.id DESC
             '''
         ).fetchall()
@@ -1115,17 +1128,19 @@ def _tool_registrar_actividad_bitacora(args):
             )
             bitacora_id = cursor.lastrowid
 
+        hora_fin = calculate_hora_fin(hora_inicio, duracion_min, fecha) if hora_inicio else ''
         cursor.execute(
             '''
             INSERT INTO actividades (
-                bitacora_id, hora_inicio, duracion_min, tipo_trabajo, descripcion,
+                bitacora_id, hora_inicio, hora_fin, duracion_min, tipo_trabajo, descripcion,
                 para_cliente, estado, comentarios, created_by_user_id, updated_by_user_id,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
             (
                 bitacora_id,
                 hora_inicio,
+                hora_fin,
                 duracion_min,
                 tipo_trabajo,
                 descripcion,
@@ -1140,15 +1155,12 @@ def _tool_registrar_actividad_bitacora(args):
         )
         actividad_id = cursor.lastrowid
 
-        # Recalcular tiempo_total_min de la bitácora
-        total_min = cursor.execute(
-            'SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)',
-            (bitacora_id,),
-        ).fetchone()[0]
-        cursor.execute(
-            'UPDATE bitacoras SET tiempo_total_min = ?, updated_at = ? WHERE id = ?',
-            (total_min, now_str, bitacora_id),
-        )
+        recalculate_bitacora_durations(cursor, bitacora_id, fecha=fecha, now_peru=now_str)
+        if estado == 'completada':
+            propagate_completion_across_lineage(cursor, [actividad_id], now_str)
+
+        eff_dur_row = cursor.execute('SELECT duracion_min FROM actividades WHERE id = ?', (actividad_id,)).fetchone()
+        eff_dur = int(eff_dur_row[0]) if eff_dur_row else duracion_min
         conn.commit()
 
         return {
@@ -1158,7 +1170,8 @@ def _tool_registrar_actividad_bitacora(args):
             'colaborador': colab_name,
             'fecha': fecha,
             'hora_inicio': hora_inicio,
-            'duracion_min': duracion_min,
+            'hora_fin': hora_fin,
+            'duracion_min': eff_dur,
             'cliente': para_cliente,
             'estado': estado,
             'descripcion': descripcion,

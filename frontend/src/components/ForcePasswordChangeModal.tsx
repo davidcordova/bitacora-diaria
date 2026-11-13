@@ -47,7 +47,7 @@ export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> =
   };
 
   const inputCls =
-    'w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/60';
+    'w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500/60';
 
   return (
     <div
@@ -58,9 +58,9 @@ export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> =
     >
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white dark:bg-[#13141F] rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] overflow-hidden animate-in zoom-in-95 duration-200"
+        className="w-full max-w-md bg-white dark:bg-[#161922] rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] overflow-hidden animate-in zoom-in-95 duration-200"
       >
-        <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-[#00F0FF] to-blue-500" />
+        <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-sky-500 to-blue-500" />
         <div className="p-5 sm:p-6 space-y-4">
           <div className="flex items-start gap-3">
             <div className="w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-500 flex items-center justify-center shrink-0">
@@ -157,7 +157,7 @@ export const ForcePasswordChangeModal: React.FC<ForcePasswordChangeModalProps> =
               type="submit"
               id="force-pw-submit"
               disabled={!canSubmit}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 text-sm font-bold shadow-md shadow-[#00F0FF]/25 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all hover:brightness-110"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-bold shadow-md shadow-sky-600/15 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all hover:brightness-110"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               Guardar y continuar

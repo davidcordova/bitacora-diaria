@@ -95,13 +95,13 @@ export const DialogHost: React.FC = () => {
         if (e.target === e.currentTarget) close(false);
       }}
     >
-      <div className="w-full max-w-sm bg-white dark:bg-[#13141F] rounded-2xl shadow-2xl border border-slate-200 dark:border-[#252636] p-5 animate-in zoom-in-95 duration-150">
+      <div className="w-full max-w-sm bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200 dark:border-white/[0.08] p-5 animate-in zoom-in-95 duration-150">
         <div className="flex items-start gap-3">
           <div
             className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
               danger
                 ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
-                : 'bg-[#00F0FF]/10 border-[#00F0FF]/30 text-[#00A3BF] dark:text-[#00F0FF]'
+                : 'bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400'
             }`}
           >
             {danger ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
@@ -134,7 +134,7 @@ export const DialogHost: React.FC = () => {
             className={`px-3.5 py-2 rounded-xl text-sm font-bold cursor-pointer transition-all ${
               danger
                 ? 'bg-rose-600 hover:bg-rose-500 text-white'
-                : 'bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 hover:brightness-110'
+                : 'bg-sky-600 hover:bg-sky-700 text-white'
             }`}
           >
             {isConfirm ? current.confirmText || (danger ? 'Eliminar' : 'Aceptar') : 'Entendido'}

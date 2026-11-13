@@ -85,7 +85,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     currentUser.role === 'admin'
       ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
       : currentUser.role === 'lider' || currentUser.is_leader
-      ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border-[#00F0FF]/30'
+      ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30'
       : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30';
 
   const teamName =
@@ -160,11 +160,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-[#252636] flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+      <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722]/80 shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#1E222D]/80 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-br from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-md shadow-[#00F0FF]/20 text-xs sm:text-sm font-heading shrink-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-sky-600 text-white font-black flex items-center justify-center shadow-md shadow-sky-600/15 text-xs sm:text-sm font-heading shrink-0">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0)}
             </div>
             <div>
@@ -209,7 +209,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           )}
 
           {/* Read-only System Properties */}
-          <div className="bg-slate-50/80 dark:bg-[#161722] border border-slate-200/90 dark:border-[#252636] rounded-xl p-3.5 space-y-2">
+          <div className="bg-slate-50/80 dark:bg-[#1E222D] border border-slate-200/90 dark:border-white/[0.08] rounded-xl p-3.5 space-y-2">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
               <span>Propiedades de la Cuenta</span>
               <div className="flex items-center gap-1 text-[10px] text-slate-400">
@@ -220,7 +220,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
               {/* Usuario Login */}
-              <div className="p-2.5 rounded-lg bg-white dark:bg-[#1A1C29] border border-slate-200/80 dark:border-[#252636]">
+              <div className="p-2.5 rounded-lg bg-white dark:bg-[#232836] border border-slate-200/80 dark:border-white/[0.08]">
                 <span className="text-[10px] font-semibold text-slate-400 block">Usuario</span>
                 <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
                   @{currentUser.username}
@@ -228,7 +228,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
 
               {/* Rol */}
-              <div className="p-2.5 rounded-lg bg-white dark:bg-[#1A1C29] border border-slate-200/80 dark:border-[#252636]">
+              <div className="p-2.5 rounded-lg bg-white dark:bg-[#232836] border border-slate-200/80 dark:border-white/[0.08]">
                 <span className="text-[10px] font-semibold text-slate-400 block">Privilegio / Rol</span>
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
                   {roleLabel}
@@ -236,7 +236,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
 
               {/* Equipo */}
-              <div className="p-2.5 rounded-lg bg-white dark:bg-[#1A1C29] border border-slate-200/80 dark:border-[#252636]">
+              <div className="p-2.5 rounded-lg bg-white dark:bg-[#232836] border border-slate-200/80 dark:border-white/[0.08]">
                 <span className="text-[10px] font-semibold text-slate-400 block">Equipo Asignado</span>
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate block mt-0.5">
                   {teamName}
@@ -248,7 +248,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Editable Personal Data */}
           <div className="space-y-3.5">
             <h4 className="text-xs font-extrabold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <UserIcon className="w-3.5 h-3.5 text-[#00F0FF]" />
+              <UserIcon className="w-3.5 h-3.5 text-sky-500" />
               <span>Datos Personales</span>
             </h4>
 
@@ -263,7 +263,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Tu nombre completo"
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1A1C29] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] focus:bg-white dark:focus:bg-[#1E222D] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                   required
                 />
                 <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
@@ -283,7 +283,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@ejemplo.com"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1A1C29] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] focus:bg-white dark:focus:bg-[#1E222D] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                   />
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 </div>
@@ -300,7 +300,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     placeholder="999 999 999"
-                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1A1C29] focus:bg-white dark:focus:bg-[#161722] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#232836] focus:bg-white dark:focus:bg-[#1E222D] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                   />
                   <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                 </div>
@@ -309,7 +309,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
 
           {/* Security & Password Section */}
-          <div className="pt-2 border-t border-slate-100 dark:border-[#252636]/60">
+          <div className="pt-2 border-t border-slate-100 dark:border-white/[0.06]">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <KeyRound className="w-4 h-4 text-amber-500" />
@@ -320,14 +320,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <button
                 type="button"
                 onClick={() => setShowPasswordSection(!showPasswordSection)}
-                className="text-xs font-bold text-[#0090A0] dark:text-[#00F0FF] hover:underline cursor-pointer"
+                className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
               >
                 {showPasswordSection ? 'Ocultar cambio' : 'Modificar contraseña'}
               </button>
             </div>
 
             {showPasswordSection && (
-              <div className="bg-slate-50/70 dark:bg-[#161722] p-4 rounded-xl border border-slate-200/90 dark:border-[#252636] space-y-3 animate-in fade-in">
+              <div className="bg-slate-50/70 dark:bg-[#1E222D] p-4 rounded-xl border border-slate-200/90 dark:border-white/[0.08] space-y-3 animate-in fade-in">
                 {/* Contraseña Actual */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
@@ -339,7 +339,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder="Ingresa tu contraseña actual"
-                      className="w-full pl-9 pr-10 py-2.5 bg-white dark:bg-[#1A1C29] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                      className="w-full pl-9 pr-10 py-2.5 bg-white dark:bg-[#232836] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                     />
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                     <button
@@ -364,7 +364,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder="Mínimo 8 caracteres"
-                        className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-[#1A1C29] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-[#232836] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                       />
                       <KeyRound className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                     </div>
@@ -380,7 +380,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Repite la nueva clave"
-                        className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-[#1A1C29] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all"
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-white dark:bg-[#232836] text-xs sm:text-sm text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 outline-hidden transition-all"
                       />
                       <Check className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                     </div>
@@ -396,11 +396,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </form>
 
         {/* Sticky Action Footer */}
-        <div className="shrink-0 px-4 sm:px-6 py-3 border-t border-slate-100 dark:border-[#252636] bg-slate-50/90 dark:bg-[#161722]/90 backdrop-blur-md flex items-center justify-between gap-3">
+        <div className="shrink-0 px-4 sm:px-6 py-3 border-t border-slate-100 dark:border-white/[0.08] bg-slate-50/90 dark:bg-[#1E222D]/90 backdrop-blur-md flex items-center justify-between gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1A1C29] rounded-xl transition-colors cursor-pointer min-h-[38px]"
+            className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#232836] rounded-xl transition-colors cursor-pointer min-h-[38px]"
           >
             Cancelar
           </button>
@@ -412,7 +412,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               if (form) form.requestSubmit();
             }}
             disabled={loading}
-            className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs font-bold text-white dark:text-slate-950 bg-sky-600 hover:bg-sky-500 dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 disabled:opacity-50 rounded-xl transition-all shadow-md shadow-sky-600/20 dark:shadow-[#00F0FF]/25 cursor-pointer min-h-[38px]"
+            className="flex items-center gap-2 px-5 sm:px-6 py-2 text-xs font-bold text-white bg-sky-600 hover:bg-sky-700 active:scale-[0.99] disabled:opacity-50 rounded-xl transition-all shadow-md shadow-sky-600/20 dark:shadow-sky-600/15 cursor-pointer min-h-[38px]"
           >
             <Save className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span>{loading ? 'Guardando...' : 'Guardar Cambios'}</span>

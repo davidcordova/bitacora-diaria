@@ -213,25 +213,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
       {/* ================= BARRA SUPERIOR DE DASHBOARD ================= */}
       <div className="saas-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-2xl bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-600 dark:text-[#00F0FF] flex items-center justify-center shrink-0 shadow-xs border border-sky-500/25 dark:border-[#00F0FF]/25">
+          <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-200/70 dark:border-sky-500/20">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight font-heading">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight font-heading">
                 {isPersonalScope ? 'Mi Rendimiento' : 'Dashboard'}
               </h2>
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border border-sky-500/25 dark:border-[#00F0FF]/30">
-                <span className="w-2 h-2 rounded-full bg-sky-600 dark:bg-[#00F0FF] beacon-pulse" />
-                <span>{isPersonalScope ? 'Personal' : 'En vivo'}</span>
-              </div>
+              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                · {isPersonalScope ? 'Vista personal' : 'Equipo'}
+              </span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5 w-full sm:w-auto self-end sm:self-center flex-wrap">
           {/* Selector de Periodo Temporal */}
-          <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-xl border border-slate-200 dark:border-white/10 shrink-0">
+          <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] shrink-0">
             {[
               { id: 'today', label: 'Hoy' },
               { id: '7d', label: '7 Días' },
@@ -242,9 +241,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 key={p.id}
                 type="button"
                 onClick={() => setPeriodRange(p.id as any)}
-                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   periodRange === p.id
-                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-2xs'
+                    ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -255,16 +254,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
           {/* Selector de Ámbito: Global vs Personal (Solo para Líderes y Admin) */}
           {isLiderOrAdmin && (
-            <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-xl border border-slate-200 dark:border-white/10 shrink-0">
+            <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   setViewScope('global');
                   setBarMetricType('colaboradores');
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   viewScope === 'global'
-                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                    ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -276,9 +275,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   setViewScope('personal');
                   setBarMetricType('horarios');
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   viewScope === 'personal'
-                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                    ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -291,9 +290,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             type="button"
             onClick={fetchStats}
             title="Actualizar datos"
-            className="p-2 rounded-full text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition cursor-pointer shrink-0"
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition cursor-pointer shrink-0"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-sky-600 dark:text-[#00F0FF]' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-sky-600 dark:text-sky-400' : ''}`} />
           </button>
 
           {/* Filtro por equipo si es admin y está en vista global */}
@@ -303,11 +302,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <select
                 value={selectedTeamId}
                 onChange={(e) => setSelectedTeamId(e.target.value ? Number(e.target.value) : '')}
-                className="px-4 py-2 bg-slate-50 dark:bg-[#13141F] hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-full border border-slate-200 dark:border-white/10 focus:outline-hidden focus:border-[#00F0FF] cursor-pointer min-h-[38px]"
+                className="px-3.5 py-2 bg-slate-50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.06] text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-xl border border-slate-200 dark:border-white/[0.08] focus:outline-hidden focus:border-sky-500 cursor-pointer min-h-[38px]"
               >
-                <option value="" className="dark:bg-[#13141F]">Todos los Equipos</option>
+                <option value="" className="dark:bg-[#1E222D]">Todos los Equipos</option>
                 {teams.map((t) => (
-                  <option key={t.id} value={t.id} className="dark:bg-[#13141F]">
+                  <option key={t.id} value={t.id} className="dark:bg-[#1E222D]">
                     {t.nombre}
                   </option>
                 ))}
@@ -331,24 +330,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
         />
       ) : (
         <div className={`space-y-6 transition-opacity duration-200 ${loading ? 'opacity-65 pointer-events-none' : 'opacity-100'}`}>
-          {/* ================= 4 METRIC CARDS DE ALTO IMPACTO (ASPECT RATIO OPTIMIZADO) ================= */}
+          {/* ================= 4 METRIC CARDS ================= */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
             {/* Card 1: Horas Totales */}
-            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[144px]">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/10">
-                  <Clock className="w-5 h-5 text-sky-600 dark:text-[#00F0FF]" />
+                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/[0.08]">
+                  <Clock className="w-4.5 h-4.5 text-sky-600 dark:text-sky-400" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                   {isPersonalScope ? 'MI VOLUMEN' : 'VOLUMEN'}
                 </span>
               </div>
               <div>
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
                   {formatHoursClean(totalMinutos)}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 flex items-center gap-1.5 truncate">
-                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600 dark:bg-[#00F0FF] shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
                   <span>
                     {totalMinutos.toLocaleString('es-PE')} min en {totalBitacoras} {totalBitacoras === 1 ? 'jornada' : 'jornadas'}
                   </span>
@@ -356,23 +355,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               </div>
             </div>
 
-            {/* Card 2: SPOTLIGHT CARD HERO (CIAN A ÍNDIGO) */}
-            <div className="saas-card-accent p-5 sm:p-6 flex flex-col justify-between min-h-[148px] relative overflow-hidden group transition-all duration-300">
-              <div className="absolute -right-6 -bottom-6 w-36 h-36 bg-white/20 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform" />
-
+            {/* Card 2: SPOTLIGHT CARD */}
+            <div className="saas-card-accent p-5 sm:p-6 flex flex-col justify-between min-h-[144px] relative overflow-hidden">
               <div className="flex items-center justify-between relative z-10">
-                <div className="w-10 h-10 rounded-2xl bg-white/15 dark:bg-black/20 text-white dark:text-[#0B0C13] flex items-center justify-center backdrop-blur-xs">
-                  {isPersonalScope ? <Calendar className="w-5 h-5" /> : <Users className="w-5 h-5" />}
+                <div className="w-9 h-9 rounded-xl bg-white/15 text-white flex items-center justify-center">
+                  {isPersonalScope ? <Calendar className="w-4.5 h-4.5" /> : <Users className="w-4.5 h-4.5" />}
                 </div>
-                <span className="text-[11px] font-extrabold text-white dark:text-[#0B0C13]/90 uppercase tracking-widest bg-white/15 dark:bg-black/15 px-3 py-0.5 rounded-full font-mono">
+                <span className="text-[11px] font-semibold text-white/90 uppercase tracking-wider bg-white/15 px-2.5 py-0.5 rounded-md">
                   {isPersonalScope ? 'JORNADAS' : 'EQUIPO ACTIVO'}
                 </span>
               </div>
               <div className="relative z-10">
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-white dark:text-[#0B0C13] tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight font-heading truncate">
                   {isPersonalScope ? `${totalBitacoras} registradas` : totalColaboradores}
                 </div>
-                <div className="text-xs text-white/90 dark:text-[#0B0C13]/85 font-bold mt-1 truncate">
+                <div className="text-xs text-white/85 font-medium mt-1 truncate">
                   {isPersonalScope
                     ? 'Días con bitácora guardada en el periodo'
                     : 'Colaboradores supervisados con actividad'}
@@ -381,17 +378,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             </div>
 
             {/* Card 3: Total Actividades */}
-            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[144px]">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/10">
-                  <Layers className="w-5 h-5 text-[#8B5CF6]" />
+                <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-700 dark:text-slate-300 flex items-center justify-center border border-slate-200/60 dark:border-white/[0.08]">
+                  <Layers className="w-4.5 h-4.5 text-indigo-500 dark:text-indigo-400" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest font-mono">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                   ACTIVIDADES
                 </span>
               </div>
               <div>
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
                   {totalActividades}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
@@ -401,21 +398,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             </div>
 
             {/* Card 4: Tasa de Completitud & Eficiencia */}
-            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[148px] hover:shadow-md transition-all duration-300">
+            <div className="saas-card p-5 sm:p-6 flex flex-col justify-between min-h-[144px]">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-2xl bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-600 dark:text-[#00F0FF] flex items-center justify-center border border-sky-500/25 dark:border-[#00F0FF]/30">
-                  <CheckCircle2 className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-200/70 dark:border-emerald-500/20">
+                  <CheckCircle2 className="w-4.5 h-4.5" />
                 </div>
-                <span className="text-[11px] font-bold text-sky-700 dark:text-[#00F0FF] uppercase tracking-wider bg-sky-500/10 dark:bg-[#00F0FF]/10 px-2.5 py-0.5 rounded-full font-mono">
-                  {porcentajeCompletadas}% META
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 rounded-md">
+                  META
                 </span>
               </div>
               <div>
-                <div className="text-2xl sm:text-3xl lg:text-3xl font-extrabold text-sky-600 dark:text-[#00F0FF] tracking-tight font-heading truncate">
+                <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-heading truncate">
                   {porcentajeCompletadas}%
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 truncate">
-                  {isPersonalScope ? 'Tu efectividad sobre tareas asignadas' : 'Tasa de entrega satisfactoria'}
+                  {isPersonalScope ? 'Efectividad sobre tareas asignadas' : 'Tasa de entrega satisfactoria'}
                 </div>
               </div>
             </div>
@@ -425,7 +422,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="saas-card p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/60 dark:border-indigo-500/20">
                   <Zap className="w-4 h-4" />
                 </div>
                 <div>
@@ -436,12 +433,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     <span className="text-base font-extrabold text-slate-900 dark:text-white font-heading">
                       {formatHoursClean(promedioJornada)}
                     </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-md ${
                       promedioJornada >= 450
-                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                        ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                         : promedioJornada >= 360
-                        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
-                        : 'bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-slate-400'
+                        ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                        : 'bg-slate-100 dark:bg-white/[0.08] text-slate-600 dark:text-slate-400'
                     }`}>
                       {Math.min(100, Math.round((promedioJornada / 480) * 100))}% de 8h
                     </span>
@@ -453,7 +450,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
             <div className="saas-card p-4 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-cyan-500/10 text-[#00F0FF] border border-cyan-500/20">
+                <div className="p-2.5 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/60 dark:border-sky-500/20">
                   <Flame className="w-4 h-4" />
                 </div>
                 <div>
@@ -502,7 +499,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   {stats.alertas_apoyo.map((alerta) => (
                     <div
                       key={alerta.id}
-                      className="bg-white dark:bg-[#13141F] rounded-xl p-3 border border-amber-500/30 text-xs shadow-2xs space-y-1"
+                      className="bg-white dark:bg-[#1E222D] rounded-xl p-3 border border-amber-500/30 text-xs shadow-2xs space-y-1"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-900 dark:text-white">{alerta.fecha}</span>
@@ -547,7 +544,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   {stats.alertas_apoyo.map((alerta) => (
                     <div
                       key={alerta.id}
-                      className="bg-white dark:bg-[#13141F] rounded-2xl p-4 border border-amber-500/30 text-xs shadow-2xs space-y-1.5"
+                      className="bg-white dark:bg-[#1E222D] rounded-2xl p-4 border border-amber-500/30 text-xs shadow-2xs space-y-1.5"
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-slate-900 dark:text-white">{alerta.colaborador}</span>
@@ -571,10 +568,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
           {/* ================= SECCIÓN 1: GRÁFICO DE LÍNEAS / SPLINE ÁREA (TENDENCIA) ================= */}
           <div className="saas-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-white/5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100 dark:border-white/[0.06]">
               <div>
                 <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <LineChart className="w-4 h-4 text-[#00F0FF]" />
+                  <LineChart className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                   <span>
                     {isPersonalScope ? 'Mi Tendencia de Producción & Horas' : 'Tendencia Diaria de Producción & Tiempo'}
                   </span>
@@ -587,13 +584,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               </div>
 
               {/* Selector de Métrica */}
-              <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
+              <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] self-start sm:self-auto">
                 <button
                   type="button"
                   onClick={() => setSplineMetric('actividades')}
-                  className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     splineMetric === 'actividades'
-                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                      ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -602,9 +599,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                 <button
                   type="button"
                   onClick={() => setSplineMetric('minutos')}
-                  className={`px-3 py-1 text-xs font-bold rounded-full transition-all cursor-pointer ${
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     splineMetric === 'minutos'
-                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                      ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
@@ -625,22 +622,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             {/* Columna Izquierda: Gráfico Pastel / Donut (6 cols) */}
             <div className="lg:col-span-6 saas-card p-6 flex flex-col justify-between">
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <PieChart className="w-4 h-4 text-[#EC4899]" />
+                    <PieChart className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                     <span>
                       Desglose {donutCategory === 'tipo' ? 'por Tipo de Trabajo' : donutCategory === 'cliente' ? 'por Cliente / Proyecto' : 'por Estado'}
                     </span>
                   </h3>
 
                   {/* Toggle Tipo vs Estado vs Cliente */}
-                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
+                  <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setDonutCategory('tipo')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                         donutCategory === 'tipo'
-                          ? 'bg-[#EC4899] text-white shadow-xs'
+                          ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -649,9 +646,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     <button
                       type="button"
                       onClick={() => setDonutCategory('cliente')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                         donutCategory === 'cliente'
-                          ? 'bg-[#EC4899] text-white shadow-xs'
+                          ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -660,9 +657,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     <button
                       type="button"
                       onClick={() => setDonutCategory('estado')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                         donutCategory === 'estado'
-                          ? 'bg-[#EC4899] text-white shadow-xs'
+                          ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -683,9 +680,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
             {/* Columna Derecha: Gráfico de Barras con Gradiente (6 cols) */}
             <div className="lg:col-span-6 saas-card p-6 flex flex-col justify-between">
               <div>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-[#00F0FF]" />
+                    <BarChart3 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                     <span>
                       {barMetricType === 'colaboradores'
                         ? 'Horas / Analista'
@@ -696,14 +693,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                   </h3>
 
                   {/* Toggle Metric Types */}
-                  <div className="flex items-center bg-slate-100 dark:bg-black/30 p-1 rounded-full border border-slate-200 dark:border-white/10 self-start sm:self-auto">
+                  <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] self-start sm:self-auto">
                     {!isPersonalScope && (
                       <button
                         type="button"
                         onClick={() => setBarMetricType('colaboradores')}
-                        className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                        className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                           barMetricType === 'colaboradores'
-                            ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                            ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                             : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
@@ -713,9 +710,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     <button
                       type="button"
                       onClick={() => setBarMetricType('horarios')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                         barMetricType === 'horarios'
-                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                          ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -724,9 +721,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                     <button
                       type="button"
                       onClick={() => setBarMetricType('clientes')}
-                      className={`px-2.5 py-0.5 text-[11px] font-bold rounded-full transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 text-[11px] font-semibold rounded-lg transition-all cursor-pointer ${
                         barMetricType === 'clientes'
-                          ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 shadow-xs'
+                          ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
@@ -750,9 +747,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           {isPersonalScope ? (
             /* Vista Operador / Personal: Historial de sus jornadas */
             <div className="saas-card p-6">
-              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-[#00F0FF]" />
+                  <Activity className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                   <span>Historial de Mis Jornadas y Rendimiento</span>
                 </h3>
                 <span className="text-xs text-slate-400 font-mono">
@@ -763,7 +760,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/5 pb-2">
+                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/[0.06] pb-2">
                       <th className="pb-3">Fecha</th>
                       <th className="pb-3">Horas Registradas</th>
                       <th className="pb-3">Tareas Totales</th>
@@ -772,7 +769,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                       <th className="pb-3 text-right">Efectividad</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05]">
                     {stats?.jornadas_recientes && stats.jornadas_recientes.length > 0 ? (
                       stats.jornadas_recientes.map((j, i) => {
                         const rate =
@@ -780,9 +777,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             ? Math.round((j.actividades_completadas / j.total_actividades) * 100)
                             : 0;
                         return (
-                          <tr key={j.id || i} className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors">
+                          <tr key={j.id || i} className="hover:bg-slate-50 dark:hover:bg-white/[0.025] transition-colors">
                             <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono flex items-center gap-2">
-                              <Calendar className="w-3.5 h-3.5 text-[#00F0FF]" />
+                              <Calendar className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
                               <span>{formatDateDisplay(j.fecha)}</span>
                             </td>
                             <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">
@@ -791,7 +788,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">
                               {j.total_actividades}
                             </td>
-                            <td className="py-3.5 text-[#00A3BF] dark:text-[#00F0FF] font-bold font-mono">
+                            <td className="py-3.5 text-sky-700 dark:text-sky-400 font-bold font-mono">
                               {j.actividades_completadas}
                             </td>
                             <td className="py-3.5 text-slate-600 dark:text-slate-300">
@@ -807,7 +804,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                                   </span>
                                 </span>
                               ) : (
-                                <span className="text-emerald-500 font-medium flex items-center gap-1">
+                                <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>Sin bloqueos</span>
                                 </span>
@@ -815,12 +812,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             </td>
                             <td className="py-3.5 text-right">
                               <span
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold font-mono ${
                                   rate >= 80
-                                    ? 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                                    ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                                     : rate >= 50
-                                    ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30'
-                                    : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'
+                                    ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                    : 'bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-400'
                                 }`}
                               >
                                 {rate}%
@@ -843,9 +840,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
           ) : (
             /* Vista Admin / Líder: Tabla de colaboradores */
             <div className="saas-card p-6">
-              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/5">
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Users className="w-4 h-4 text-[#00F0FF]" />
+                  <Users className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                   <span>Productividad y Tasa de Éxito por Colaborador</span>
                 </h3>
                 <span className="text-xs text-slate-400 font-medium">Supervisión en tiempo real</span>
@@ -854,7 +851,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/5 pb-2">
+                    <tr className="text-slate-400 font-semibold border-b border-slate-100 dark:border-white/[0.06] pb-2">
                       <th className="pb-3">Colaborador</th>
                       <th className="pb-3">Equipo</th>
                       <th className="pb-3">Jornadas</th>
@@ -864,7 +861,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                       <th className="pb-3 text-right">Rendimiento</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05]">
                     {stats?.por_colaborador && stats.por_colaborador.length > 0 ? (
                       stats.por_colaborador.map((c, i) => {
                         const rate =
@@ -872,9 +869,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             ? Math.round((c.actividades_completadas / c.total_actividades) * 100)
                             : 0;
                         return (
-                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/3 transition-colors">
+                          <tr key={i} className="hover:bg-slate-50 dark:hover:bg-white/[0.025] transition-colors">
                             <td className="py-3.5 font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                              <span className="w-6 h-6 rounded-full bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center text-[10px] font-extrabold border border-[#00F0FF]/30">
+                              <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-white/[0.08] text-slate-700 dark:text-slate-200 flex items-center justify-center text-[10px] font-bold">
                                 {c.colaborador.charAt(0)}
                               </span>
                               <span>{c.colaborador}</span>
@@ -883,17 +880,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
                             <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.bitacoras_count}</td>
                             <td className="py-3.5 font-bold text-slate-900 dark:text-white font-mono">{formatHoursClean(c.total_minutos)}</td>
                             <td className="py-3.5 text-slate-600 dark:text-slate-300 font-mono">{c.total_actividades}</td>
-                            <td className="py-3.5 text-sky-700 dark:text-[#00F0FF] font-bold font-mono">
+                            <td className="py-3.5 text-sky-700 dark:text-sky-400 font-bold font-mono">
                               {c.actividades_completadas}
                             </td>
                             <td className="py-3.5 text-right">
                               <span
-                                className={`px-3 py-1 rounded-full text-[10px] font-bold font-mono ${
+                                className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold font-mono ${
                                   rate >= 80
-                                    ? 'bg-sky-500/10 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border border-sky-500/25 dark:border-[#00F0FF]/30'
+                                    ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
                                     : rate >= 50
-                                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                                    : 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border border-slate-500/30'
+                                    ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                    : 'bg-slate-100 dark:bg-white/[0.08] text-slate-500 dark:text-slate-400'
                                 }`}
                               >
                                 {rate}%

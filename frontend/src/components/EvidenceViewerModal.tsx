@@ -71,13 +71,13 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
       id="evidence-modal-backdrop"
     >
       <div
-        className="relative max-w-4xl w-full bg-[#13141F] border border-[#252636] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]"
+        className="relative max-w-4xl w-full bg-[#161922] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 bg-[#161722] border-b border-[#252636] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-3.5 bg-[#1E222D] border-b border-white/10 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="p-2 rounded-xl bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 flex items-center justify-center">
+            <span className="p-2 rounded-xl bg-sky-500/10 text-sky-500 border border-sky-500/30 flex items-center justify-center">
               <Paperclip className="w-4 h-4" />
             </span>
             <div className="min-w-0">
@@ -89,7 +89,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
                 {evidencias.length > 1 && (
                   <>
                     <span>•</span>
-                    <span className="font-bold text-[#00F0FF]">
+                    <span className="font-bold text-sky-500">
                       {currentIndex + 1} de {evidencias.length}
                     </span>
                   </>
@@ -104,7 +104,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
               download={current.nombre}
               target="_blank"
               rel="noreferrer"
-              className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-300 bg-[#161722] hover:bg-[#1C1D2A] hover:text-[#00F0FF] border border-[#252636] transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-300 bg-[#1E222D] hover:bg-[#232836] hover:text-sky-500 border border-white/10 transition flex items-center gap-1.5"
               title="Descargar o abrir en pestaña nueva"
             >
               <Download className="w-3.5 h-3.5" />
@@ -133,7 +133,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-[#1C1D2A] transition cursor-pointer"
+              className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-[#232836] transition cursor-pointer"
               title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -147,18 +147,18 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
             <img
               src={current.url}
               alt={current.nombre}
-              className="max-w-full max-h-[64vh] object-contain rounded-xl shadow-lg border border-[#252636]"
+              className="max-w-full max-h-[64vh] object-contain rounded-xl shadow-lg border border-white/10"
             />
           ) : isPdf ? (
             <div className="w-full h-full min-h-[500px] flex flex-col items-center justify-center">
               <iframe
                 src={`${current.url}#toolbar=0`}
                 title={current.nombre}
-                className="w-full h-[55vh] rounded-xl border border-[#252636] bg-white"
+                className="w-full h-[55vh] rounded-xl border border-white/10 bg-white"
               />
             </div>
           ) : (
-            <div className="text-center p-8 bg-[#161722] rounded-2xl border border-[#252636] max-w-sm">
+            <div className="text-center p-8 bg-[#1E222D] rounded-2xl border border-white/10 max-w-sm">
               <div className="mb-3 flex justify-center text-slate-400">
                 <FileText className="w-12 h-12" />
               </div>
@@ -168,7 +168,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
                 href={current.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 text-slate-950 rounded-full text-xs font-bold shadow-lg shadow-[#00F0FF]/20 transition"
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-full text-xs font-bold shadow-lg shadow-sky-600/15 transition"
               >
                 Abrir Archivo
               </a>
@@ -181,7 +181,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
               <button
                 type="button"
                 onClick={handlePrev}
-                className="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#161722]/80 hover:bg-[#1C1D2A] text-white shadow-xl border border-[#252636] transition cursor-pointer"
+                className="absolute left-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#1E222D]/80 hover:bg-[#232836] text-white shadow-xl border border-white/10 transition cursor-pointer"
                 title="Anterior (Flecha izquierda)"
               >
                 <ChevronLeft className="w-5 h-5" />
@@ -189,7 +189,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
               <button
                 type="button"
                 onClick={handleNext}
-                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#161722]/80 hover:bg-[#1C1D2A] text-white shadow-xl border border-[#252636] transition cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 rounded-full bg-[#1E222D]/80 hover:bg-[#232836] text-white shadow-xl border border-white/10 transition cursor-pointer"
                 title="Siguiente (Flecha derecha)"
               >
                 <ChevronRight className="w-5 h-5" />
@@ -200,7 +200,7 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
 
         {/* Modal Thumbnails Strip (if > 1) */}
         {evidencias.length > 1 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#161722] border-t border-[#252636] overflow-x-auto">
+          <div className="flex items-center gap-2 px-4 py-2.5 bg-[#1E222D] border-t border-white/10 overflow-x-auto">
             {evidencias.map((ev, idx) => {
               const evIsImg = ev.tipo?.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/i.test(ev.nombre);
               const isActive = idx === currentIndex;
@@ -210,13 +210,13 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
                   type="button"
                   onClick={() => setCurrentIndex(idx)}
                   className={`relative flex-shrink-0 w-12 h-12 rounded-xl overflow-hidden border-2 transition cursor-pointer ${
-                    isActive ? 'border-[#00F0FF] ring-2 ring-[#00F0FF]/30 scale-105' : 'border-[#252636] opacity-60 hover:opacity-100'
+                    isActive ? 'border-sky-500 ring-2 ring-sky-500/30 scale-105' : 'border-white/10 opacity-60 hover:opacity-100'
                   }`}
                 >
                   {evIsImg ? (
                     <img src={ev.url} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full bg-[#13141F] flex items-center justify-center text-slate-400">
+                    <div className="w-full h-full bg-[#161922] flex items-center justify-center text-slate-400">
                       <FileText className="w-4 h-4" />
                     </div>
                   )}

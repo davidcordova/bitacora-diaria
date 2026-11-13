@@ -236,7 +236,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
       )}
 
       {/* Search and filter controls bar */}
-      <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 space-y-3.5 shadow-sm transition-all duration-200">
+      <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/80 dark:border-white/[0.07] p-4 sm:p-5 space-y-3.5 shadow-2xs transition-all duration-200">
         <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
           {/* 1. Text Search Input */}
           <div className="relative flex-1 min-w-[220px]">
@@ -245,7 +245,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar en descripción de tareas, área o palabras clave..."
-              className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#161722] hover:bg-slate-100 dark:hover:bg-[#1C1D2A] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] focus:ring-1 focus:ring-[#00F0FF]/30 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.06] text-xs text-slate-800 dark:text-slate-100 rounded-xl border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-1 focus:ring-sky-500/25 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 absolute left-2.5 top-2.5 pointer-events-none" />
           </div>
@@ -257,24 +257,24 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 type="date"
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className={`pl-8 pr-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer outline-hidden ${
+                className={`pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
                   dateFilter
-                    ? 'bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/40'
-                    : 'bg-slate-50 dark:bg-[#161722] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
+                    ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-500/30'
+                    : 'bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06]'
                 }`}
                 title="Filtrar por fecha específica"
               />
-              <Calendar className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF] absolute left-2.5 pointer-events-none" />
+              <Calendar className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 absolute left-2.5 pointer-events-none" />
             </div>
 
             {/* Quick date presets */}
             <button
               type="button"
               onClick={() => setDateFilter(todayStr)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 dateFilter === todayStr
-                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1C1D2A]'
+                  ? 'bg-sky-600 text-white shadow-2xs'
+                  : 'bg-slate-100 dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-200 dark:hover:bg-white/[0.06]'
               }`}
             >
               Hoy
@@ -282,10 +282,10 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
             <button
               type="button"
               onClick={() => setDateFilter(yesterdayStr)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                 dateFilter === yesterdayStr
-                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1C1D2A]'
+                  ? 'bg-sky-600 text-white shadow-2xs'
+                  : 'bg-slate-100 dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-200 dark:hover:bg-white/[0.06]'
               }`}
             >
               Ayer
@@ -300,13 +300,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 onChange={(e) => setColaboradorFilter(e.target.value)}
                 className={`w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
                   colaboradorFilter
-                    ? 'bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/40'
-                    : 'bg-slate-50 dark:bg-[#161722] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-[#1C1D2A]'
+                    ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-500/30'
+                    : 'bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06]'
                 }`}
               >
-                <option value="" className="bg-white dark:bg-[#161722]">Todos los colaboradores</option>
+                <option value="" className="bg-white dark:bg-[#1E222D]">Todos los colaboradores</option>
                 {collaboratorsList.map((name) => (
-                  <option key={name} value={name} className="bg-white dark:bg-[#161722]">
+                  <option key={name} value={name} className="bg-white dark:bg-[#1E222D]">
                     {name}
                   </option>
                 ))}
@@ -322,21 +322,19 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               onChange={(e) => setFiltroActividades(e.target.value as any)}
               className={`w-full pl-8 pr-3 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer outline-hidden ${
                 filtroActividades === 'estancadas'
-                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/40'
-                  : filtroActividades === 'todas'
-                  ? 'bg-slate-50 dark:bg-[#161722] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-[#252636]'
-                  : 'bg-[#00F0FF]/15 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/40'
+                  ? 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30'
+                  : 'bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-white/[0.08]'
               }`}
               title="Filtrar visibilidad de actividades en el historial"
             >
-              <option value="activas" className="bg-white dark:bg-[#161722]">
+              <option value="activas" className="bg-white dark:bg-[#1E222D]">
                 Ocultar inactivas (Recomendado)
               </option>
-              <option value="todas" className="bg-white dark:bg-[#161722]">
+              <option value="todas" className="bg-white dark:bg-[#1E222D]">
                 Mostrar todas las tareas
               </option>
-              <option value="estancadas" className="bg-white dark:bg-[#161722]">
-                ⚠️ Solo estancadas (+7 días)
+              <option value="estancadas" className="bg-white dark:bg-[#1E222D]">
+                Solo estancadas (+7 días)
               </option>
             </select>
             <Filter className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
@@ -347,10 +345,10 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
             type="button"
             onClick={() => fetchFromServer(dateFilter, colaboradorFilter)}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-[#161722] hover:bg-slate-200 dark:hover:bg-[#1C1D2A] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 dark:bg-[#1E222D] hover:bg-slate-200 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0"
             title="Recargar bitácoras del servidor"
           >
-            <RotateCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
+            <RotateCcw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-600 dark:text-sky-400' : ''}`} />
             <span>{loading ? 'Cargando...' : 'Refrescar'}</span>
           </button>
 
@@ -359,7 +357,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
             <button
               type="button"
               onClick={clearFilters}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0"
               title="Limpiar todos los filtros activos"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -369,14 +367,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         </div>
 
         {/* Filter status summary pills */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-[#252636]/60 text-xs text-slate-500 dark:text-slate-400 flex-wrap gap-2">
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/[0.06] text-xs text-slate-500 dark:text-slate-400 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span>
               Mostrando <strong className="text-slate-800 dark:text-slate-200">{filtered.length}</strong> de <strong className="text-slate-800 dark:text-slate-200">{roleFilteredHistorial.length}</strong> bitácoras
             </span>
             {dateFilter && (
-              <span className="inline-flex items-center gap-1.5 bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                <Calendar className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF]" />
+              <span className="inline-flex items-center gap-1.5 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/25 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
+                <Calendar className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                 <span>{formatDateDisplay(dateFilter)}</span>
                 <button
                   type="button"
@@ -388,8 +386,8 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               </span>
             )}
             {!isAnalyst && colaboradorFilter && (
-              <span className="inline-flex items-center gap-1.5 bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30 px-2.5 py-0.5 rounded-full text-[11px] font-bold">
-                <UserIcon className="w-3 h-3 text-[#00A3BF] dark:text-[#00F0FF]" />
+              <span className="inline-flex items-center gap-1.5 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/25 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
+                <UserIcon className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                 <span>{colaboradorFilter}</span>
                 <button
                   type="button"
@@ -411,11 +409,11 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 <select
                   value={dateFilter}
                   onChange={(e) => setDateFilter(e.target.value)}
-                  className="bg-slate-50 dark:bg-[#161722] text-slate-700 dark:text-slate-200 text-[11px] font-semibold rounded-xl px-2.5 py-1 border border-slate-200/90 dark:border-[#252636] cursor-pointer outline-hidden"
+                  className="bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 text-[11px] font-semibold rounded-xl px-2.5 py-1 border border-slate-200/90 dark:border-white/[0.08] cursor-pointer outline-hidden"
                 >
-                  <option value="" className="bg-white dark:bg-[#161722]">Seleccionar fecha...</option>
+                  <option value="" className="bg-white dark:bg-[#1E222D]">Seleccionar fecha...</option>
                   {recordedDates.map((d) => (
-                    <option key={d} value={d} className="bg-white dark:bg-[#161722]">
+                    <option key={d} value={d} className="bg-white dark:bg-[#1E222D]">
                       {d} ({formatDateDisplay(d)})
                     </option>
                   ))}
@@ -424,14 +422,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
             )}
 
             {/* View Mode Switcher: Lista vs Tarjetas */}
-            <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-full border border-slate-200/80 dark:border-[#252636]">
+            <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => setDisplayMode('list')}
                 title="Vista de Lista"
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   displayMode === 'list'
-                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
+                    ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -442,9 +440,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 type="button"
                 onClick={() => setDisplayMode('grid')}
                 title="Vista de Cuadrícula / Tarjetas"
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   displayMode === 'grid'
-                    ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
+                    ? 'bg-white dark:bg-sky-600 text-slate-900 dark:text-white shadow-2xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
@@ -466,9 +464,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         />
       ) : displayMode === 'list' ? (
         /* VISTA DE LISTA MODERNA (TABLE / LIST VIEW) */
-        <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] shadow-sm overflow-hidden transition-all duration-200">
+        <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/80 dark:border-white/[0.07] shadow-2xs overflow-hidden transition-all duration-200">
           {/* Table Header (Desktop) */}
-          <div className="hidden lg:grid grid-cols-12 gap-3 px-6 py-3.5 bg-slate-50 dark:bg-[#161722] border-b border-slate-100 dark:border-[#252636] text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">
+          <div className="hidden lg:grid grid-cols-12 gap-3 px-6 py-3 bg-slate-50/70 dark:bg-[#1E222D]/60 border-b border-slate-100 dark:border-white/[0.06] text-[11px] font-bold text-slate-400 uppercase tracking-wider">
             <div className="col-span-2">Fecha</div>
             <div className="col-span-3">Colaborador / Área</div>
             <div className="col-span-2">Actividades & Tiempo</div>
@@ -478,7 +476,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
           </div>
 
           {/* Table Rows */}
-          <div className="divide-y divide-slate-100 dark:divide-[#252636]/60">
+          <div className="divide-y divide-slate-100 dark:divide-white/[0.05]">
             {filtered.slice(0, visibleCount).map((item, idx) => {
               const totalMin = item.actividades.reduce(
                 (sum, a) => sum + (Number(a.duracion_min) || 0),
@@ -489,14 +487,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 <div
                   key={item.id || idx}
                   onClick={() => setSelectedBitacoraForModal(item)}
-                  className="group px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-[#181A26] transition-colors cursor-pointer"
+                  className="group px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer"
                 >
                   {/* Desktop Row Layout */}
                   <div className="hidden lg:grid grid-cols-12 gap-3 items-center">
                     {/* Col 1: Fecha */}
                     <div className="col-span-2 flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30 flex items-center justify-center shrink-0">
-                        <Calendar className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF]" />
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border border-slate-200/70 dark:border-white/[0.08] flex items-center justify-center shrink-0">
+                        <Calendar className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                       </div>
                       <div>
                         <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
@@ -510,11 +508,11 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                     {/* Col 2: Colaborador / Área */}
                     <div className="col-span-3 flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-200 font-extrabold text-xs flex items-center justify-center border border-slate-200 dark:border-[#252636] shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center border border-slate-200/80 dark:border-white/[0.08] shrink-0">
                         {item.colaborador.charAt(0)}
                       </div>
                       <div className="truncate">
-                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00A3BF] dark:group-hover:text-[#00F0FF] transition-colors">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors">
                           {item.colaborador}
                         </div>
                         <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-1">
@@ -526,11 +524,11 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                     {/* Col 3: Actividades & Tiempo */}
                     <div className="col-span-2">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] text-xs font-bold border border-[#00F0FF]/25">
-                        <Clock className="w-3.5 h-3.5 text-[#00A3BF] dark:text-[#00F0FF]" />
+                      <div className="inline-flex items-center gap-1.5 text-slate-800 dark:text-slate-200 text-xs font-semibold">
+                        <Clock className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
                         <span>{formatDuration(totalMin)}</span>
                       </div>
-                      <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 ml-1">
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
                         {item.actividades.length} {item.actividades.length === 1 ? 'actividad' : 'actividades'}
                       </div>
                     </div>
@@ -563,13 +561,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                             <>
                               {actsToShow.slice(0, 2).map((act, aIdx) => (
                                 <div key={aIdx} className="text-xs text-slate-600 dark:text-slate-300 truncate flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-sky-600 dark:bg-[#00F0FF] shrink-0" />
+                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 shrink-0" />
                                   <span className="truncate">{stripHtml(act.descripcion)}</span>
                                 </div>
                               ))}
                               <div className="flex items-center gap-2 flex-wrap pt-0.5">
                                 {actsToShow.length > 2 && (
-                                  <span className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold">
+                                  <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold">
                                     +{actsToShow.length - 2} tareas más...
                                   </span>
                                 )}
@@ -587,13 +585,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                     {/* Col 5: Estado */}
                     <div className="col-span-1 text-center">
-                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 uppercase tracking-wider">
+                      <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-500/20">
                         {item.estado || 'Generada'}
                       </span>
                     </div>
 
                     {/* Col 6: Acciones */}
-                    <div className="col-span-1 flex items-center justify-end gap-1.5">
+                    <div className="col-span-1 flex items-center justify-end gap-1">
                       <button
                         type="button"
                         onClick={(e) => {
@@ -601,7 +599,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                           setSelectedBitacoraForModal(item);
                         }}
                         title="Ver Resumen Completo"
-                        className="p-2 text-slate-600 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -613,7 +611,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                           onLoadBitacora(item);
                         }}
                         title="Cargar y Continuar en esta Bitácora"
-                        className="p-2 text-slate-600 dark:text-slate-400 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 rounded-full transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
@@ -670,14 +668,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/[0.06]">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedBitacoraForModal(item);
                         }}
-                        className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] bg-slate-100 dark:bg-[#1A1C29] hover:bg-[#00F0FF]/10 dark:hover:bg-[#00F0FF]/15 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
+                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Ver Resumen</span>
@@ -690,7 +688,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                             e.stopPropagation();
                             onLoadBitacora(item);
                           }}
-                          className="flex items-center gap-1 text-xs font-bold text-[#0090A0] dark:text-[#00F0FF] bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
+                          className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                           <span>Cargar</span>
@@ -728,18 +726,18 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               <div
                 key={item.id || idx}
                 onClick={() => setSelectedBitacoraForModal(item)}
-                className="group relative bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 hover:border-[#00F0FF]/40 dark:hover:border-[#00F0FF]/40 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer border-l-4 border-l-[#00F0FF]"
+                className="group relative bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/80 dark:border-white/[0.07] p-5 hover:border-sky-300 dark:hover:border-sky-500/35 hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer"
               >
                 <div>
                   {/* Top metadata */}
-                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-[#252636]/60 mb-3">
+                  <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-white/[0.06] mb-3">
                     <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF]" />
+                      <Calendar className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                       <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
                         {formatDateDisplay(item.fecha)}
                       </span>
                     </div>
-                    <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 uppercase tracking-wider">
+                    <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-500/20">
                       {item.estado || 'Generada'}
                     </span>
                   </div>
@@ -763,7 +761,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                   </div>
 
                   {/* Actividades preview */}
-                  <div className="bg-slate-50/80 dark:bg-[#161722] rounded-xl p-3 mb-4 space-y-1.5 max-h-36 overflow-y-auto border border-slate-200/60 dark:border-[#252636]/60">
+                  <div className="bg-slate-50/80 dark:bg-[#1E222D]/70 rounded-xl p-3 mb-4 space-y-1.5 max-h-36 overflow-y-auto border border-slate-200/60 dark:border-white/[0.06]">
                     {(() => {
                       const actsToShow = (item.actividades || []).filter((act) => {
                         if (filtroActividades === 'todas') return true;
@@ -789,13 +787,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         <>
                           {actsToShow.slice(0, 3).map((act, aIdx) => (
                             <div key={aIdx} className="text-[11px] text-slate-700 dark:text-slate-300 flex items-start gap-1.5">
-                              <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">•</span>
+                              <span className="text-slate-400 font-bold">•</span>
                               <span className="truncate flex-1">{stripHtml(act.descripcion)}</span>
                             </div>
                           ))}
                           <div className="flex items-center gap-2 flex-wrap pt-1">
                             {actsToShow.length > 3 && (
-                              <span className="text-[10px] text-[#00A3BF] dark:text-[#00F0FF] font-bold">
+                              <span className="text-[10px] text-sky-600 dark:text-sky-400 font-semibold">
                                 +{actsToShow.length - 3} actividades más...
                               </span>
                             )}
@@ -812,7 +810,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-[#252636]/60 mt-auto">
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-white/[0.06] mt-auto">
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -820,7 +818,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         e.stopPropagation();
                         setSelectedBitacoraForModal(item);
                       }}
-                      className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#00A3BF] dark:hover:text-[#00F0FF] bg-slate-100 dark:bg-[#161722] hover:bg-[#00F0FF]/15 px-3 py-1.5 rounded-full border border-slate-200 dark:border-[#252636] transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] transition-colors cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5 text-slate-400" />
                       <span>Ver Resumen</span>
@@ -832,7 +830,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         e.stopPropagation();
                         onLoadBitacora(item);
                       }}
-                      className="flex items-center gap-1 text-xs font-bold text-[#0090A0] dark:text-[#00F0FF] bg-[#00F0FF]/15 hover:bg-[#00F0FF]/25 px-3 py-1.5 rounded-full border border-[#00F0FF]/30 transition-colors cursor-pointer"
+                      className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3 py-1.5 rounded-lg border border-sky-200/80 dark:border-sky-500/25 transition-colors cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span>Cargar</span>
@@ -848,7 +846,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         onDeleteBitacora(item.id as number);
                       }}
                       title="Eliminar registro"
-                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-full transition-colors cursor-pointer"
+                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -866,7 +864,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
           <button
             type="button"
             onClick={() => setVisibleCount((prev) => prev + 15)}
-            className="px-5 py-2.5 rounded-xl bg-white dark:bg-[#13141F] hover:bg-slate-50 dark:hover:bg-[#1A1C29] text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#252636] shadow-xs transition-all cursor-pointer"
+            className="px-5 py-2.5 rounded-xl bg-white dark:bg-[#161922] hover:bg-slate-50 dark:hover:bg-[#1E222D] text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] shadow-2xs transition-all cursor-pointer"
           >
             Mostrar más registros ({filtered.length - visibleCount} restantes)
           </button>

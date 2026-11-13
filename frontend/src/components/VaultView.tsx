@@ -120,7 +120,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   const [newCargoNombre, setNewCargoNombre] = useState('');
   const [newCargoArea, setNewCargoArea] = useState('Marketing');
   const [newEmpresaNombre, setNewEmpresaNombre] = useState('');
-  const [newEmpresaColor, setNewEmpresaColor] = useState('#00F0FF');
+  const [newEmpresaColor, setNewEmpresaColor] = useState('#0284C7');
   const [newMarcaNombre, setNewMarcaNombre] = useState('');
   const [newMarcaEmpresaId, setNewMarcaEmpresaId] = useState<number>(0);
 
@@ -230,7 +230,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     categoria: 'General',
     descripcion: '',
     icono: 'Link',
-    color: '#00F0FF',
+    color: '#0284C7',
     usuario: '',
     password: '',
     visibilidad: 'personal' as 'personal' | 'equipo' | 'global',
@@ -1195,7 +1195,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         categoria: link.categoria || 'General',
         descripcion: link.descripcion || '',
         icono: link.icono || 'Link',
-        color: link.color || '#00F0FF',
+        color: link.color || '#0284C7',
         usuario: link.usuario || '',
         password: link.password || '',
         visibilidad: (link.visibilidad as any) || 'personal',
@@ -1208,7 +1208,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         categoria: 'General',
         descripcion: '',
         icono: 'Link',
-        color: '#00F0FF',
+        color: '#0284C7',
         usuario: '',
         password: '',
         visibilidad: 'personal',
@@ -1364,7 +1364,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
       <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-white/10 rounded-2xl p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500 dark:text-[#00F0FF] border border-cyan-500/20">
+            <span className="p-2 rounded-xl bg-cyan-500/10 text-cyan-500 dark:text-sky-400 border border-cyan-500/20">
               <KeyRound className="w-5 h-5" />
             </span>
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -1405,7 +1405,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 onClick={() => setActiveTab('users')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'users'
-                    ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
+                    ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -1417,7 +1417,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 onClick={() => setActiveTab('vault')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'vault'
-                    ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
+                    ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -1429,7 +1429,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 onClick={() => setActiveTab('links')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeTab === 'links'
-                    ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
+                    ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
@@ -2410,7 +2410,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                         <div>
                           <h3 className="font-bold text-slate-900 dark:text-white text-base">{cred.plataforma}</h3>
                           {(!autoHideFilteredCols || !isTipoServicioFilteredInVault) && (
-                            <span className="text-xs text-cyan-600 dark:text-[#00F0FF] font-medium">{cred.tipo_servicio}</span>
+                            <span className="text-xs text-sky-600 dark:text-sky-400 font-medium">{cred.tipo_servicio}</span>
                           )}
                         </div>
                         {cred.url_acceso && (
@@ -2518,7 +2518,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     onClick={() => setLinkFilterScope(scope)}
                     className={`px-3 py-1.5 rounded-lg capitalize transition-all cursor-pointer ${
                       linkFilterScope === scope
-                        ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs font-semibold'
+                        ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs font-semibold'
                         : 'text-slate-600 dark:text-slate-400'
                     }`}
                   >
@@ -2633,7 +2633,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                     <div>
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-xs" style={{ backgroundColor: link.color || '#00F0FF' }}>
+                          <div className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white shadow-xs" style={{ backgroundColor: link.color || '#0284C7' }}>
                             {link.titulo.substring(0, 2).toUpperCase()}
                           </div>
                           <div>
@@ -2700,7 +2700,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                         )}
                       </div>
 
-                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-cyan-600 dark:text-[#00F0FF] hover:text-white text-xs font-semibold border border-cyan-500/30 transition-all">
+                      <a href={link.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 text-sky-600 dark:text-sky-400 hover:text-white text-xs font-semibold border border-cyan-500/30 transition-all">
                         <span>Abrir</span>
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
@@ -3842,7 +3842,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
             <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center space-y-2">
               <span className="text-[11px] text-slate-400 uppercase tracking-wider block font-medium">Contraseña Generada</span>
-              <div className="font-mono text-base font-bold text-[#00F0FF] select-all break-all tracking-wider">
+              <div className="font-mono text-base font-bold text-sky-500 select-all break-all tracking-wider">
                 {generatedQuickPass}
               </div>
               <button
@@ -4331,7 +4331,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   }}
                   className={`py-1.5 rounded-lg transition-all cursor-pointer ${
                     unlockMode === 'pin'
-                      ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
+                      ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                   }`}
                 >
@@ -4345,7 +4345,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   }}
                   className={`py-1.5 rounded-lg transition-all cursor-pointer ${
                     unlockMode === 'password'
-                      ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-[#00F0FF] shadow-xs'
+                      ? 'bg-white dark:bg-slate-700 text-sky-600 dark:text-sky-400 shadow-xs'
                       : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                   }`}
                 >

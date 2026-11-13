@@ -102,9 +102,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
       default:
         return {
           icon: Info,
-          iconColor: 'text-[#00A3BF] dark:text-[#00F0FF]',
-          bg: 'bg-sky-50/50 dark:bg-[#161722] border-sky-200/60 dark:border-[#252636]',
-          badge: 'bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border-[#00F0FF]/30',
+          iconColor: 'text-sky-600 dark:text-sky-400',
+          bg: 'bg-sky-50/50 dark:bg-[#1E222D] border-sky-200/60 dark:border-white/[0.08]',
+          badge: 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30',
           label: 'Info',
         };
     }
@@ -117,13 +117,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
       {/* Slide-in Notifications Panel */}
       <div
-        className="relative w-full sm:max-w-md h-full sm:h-[92vh] sm:rounded-3xl bg-white dark:bg-[#11121B] border-l sm:border border-slate-200 dark:border-[#252636] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-right duration-250"
+        className="relative w-full sm:max-w-md h-full sm:h-[92vh] sm:rounded-3xl bg-white dark:bg-[#11121B] border-l sm:border border-slate-200 dark:border-white/[0.08] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-right duration-250"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Panel Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#202230] bg-slate-50/80 dark:bg-[#161722]/80 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#202230] bg-slate-50/80 dark:bg-[#1E222D]/80 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-[#00F0FF]/15 border border-[#00F0FF]/30 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center shadow-xs">
+            <div className="w-9 h-9 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-600 dark:text-sky-400 flex items-center justify-center shadow-xs">
               <Bell className="w-5 h-5" />
             </div>
             <div>
@@ -132,7 +132,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   Notificaciones
                 </h3>
                 {unreadCount > 0 && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#00F0FF] text-slate-950 shadow-xs">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-600 text-white shadow-xs">
                     {unreadCount} nuevas
                   </span>
                 )}
@@ -156,13 +156,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         {/* Filter and Global Action Buttons */}
         <div className="px-4 py-2.5 border-b border-slate-100 dark:border-[#202230] bg-white dark:bg-[#11121B] flex items-center justify-between gap-2 shrink-0">
           {/* Tabs: Todas / No leídas */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#1A1C29] p-1 rounded-xl">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#232836] p-1 rounded-xl">
             <button
               type="button"
               onClick={() => setFilter('all')}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 filter === 'all'
-                  ? 'bg-white dark:bg-[#252636] text-slate-900 dark:text-white shadow-2xs'
+                  ? 'bg-white dark:bg-white/[0.08] text-slate-900 dark:text-white shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
               }`}
             >
@@ -173,7 +173,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               onClick={() => setFilter('unread')}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 filter === 'unread'
-                  ? 'bg-white dark:bg-[#252636] text-[#00A3BF] dark:text-[#00F0FF] shadow-2xs'
+                  ? 'bg-white dark:bg-white/[0.08] text-sky-600 dark:text-sky-400 shadow-2xs'
                   : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'
               }`}
             >
@@ -187,7 +187,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
               <button
                 type="button"
                 onClick={onMarkAllAsRead}
-                className="flex items-center gap-1 text-[11px] font-bold text-[#00A3BF] dark:text-[#00F0FF] hover:bg-[#00F0FF]/10 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-1 text-[11px] font-bold text-sky-600 dark:text-sky-400 hover:bg-sky-500/10 px-2 py-1 rounded-lg transition-colors cursor-pointer"
                 title="Marcar todas como leídas"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
@@ -212,7 +212,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 space-y-2.5">
           {filteredNotifications.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center p-8 text-center text-slate-400 dark:text-slate-500">
-              <div className="w-14 h-14 rounded-3xl bg-slate-100 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] flex items-center justify-center mb-3 text-slate-300 dark:text-slate-600">
+              <div className="w-14 h-14 rounded-3xl bg-slate-100 dark:bg-[#232836] border border-slate-200 dark:border-white/[0.08] flex items-center justify-center mb-3 text-slate-300 dark:text-slate-600">
                 <BellOff className="w-7 h-7" />
               </div>
               <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -237,7 +237,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                   }}
                   className={`group relative p-3.5 rounded-2xl border transition-all cursor-pointer ${cfg.bg} ${
                     !notif.read
-                      ? 'shadow-xs border-l-4 border-l-[#00F0FF]'
+                      ? 'shadow-xs border-l-4 border-l-sky-500'
                       : 'opacity-85 hover:opacity-100'
                   }`}
                 >
@@ -269,7 +269,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                     {/* Unread dot or Delete Button */}
                     <div className="shrink-0 flex flex-col items-end gap-1">
                       {!notif.read && (
-                        <span className="w-2 h-2 rounded-full bg-[#00F0FF] shadow-xs" title="No leída" />
+                        <span className="w-2 h-2 rounded-full bg-sky-500 shadow-xs" title="No leída" />
                       )}
                       <button
                         type="button"
@@ -291,7 +291,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Panel Footer */}
-        <div className="p-3 bg-slate-50/60 dark:bg-[#161722]/60 border-t border-slate-100 dark:border-[#202230] text-[11px] text-slate-400 dark:text-slate-500 text-center shrink-0">
+        <div className="p-3 bg-slate-50/60 dark:bg-[#1E222D]/60 border-t border-slate-100 dark:border-[#202230] text-[11px] text-slate-400 dark:text-slate-500 text-center shrink-0">
           Bitácora Diaria • Sistema de Notificaciones en Tiempo Real
         </div>
       </div>

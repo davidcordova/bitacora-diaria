@@ -27,7 +27,7 @@ import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
 import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
 import { defaultBitacora } from './utils/initialData';
 import { api, getAuthToken } from './services/api';
-import { getTodayLocalDateStr } from './utils/formatters';
+import { getTodayLocalDateStr, recalculateActivitiesNetDurations, calculateHoraFin } from './utils/formatters';
 import { confirmDialog, DialogHost } from './components/DialogHost';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
 import {
@@ -290,6 +290,24 @@ export function App() {
     }
   }, [currentUser]);
 
+  const applyClosedLineageToHistorial = useCallback((closedIds?: number[]) => {
+    if (!closedIds || closedIds.length === 0) return;
+    const idSet = new Set(closedIds.map((x) => Number(x)));
+    setHistorial((prev) =>
+      prev.map((b) => {
+        if (!b.actividades?.some((a) => a.id !== undefined && idSet.has(Number(a.id)) && a.estado !== 'completada')) {
+          return b;
+        }
+        return {
+          ...b,
+          actividades: b.actividades.map((a) =>
+            a.id !== undefined && idSet.has(Number(a.id)) ? { ...a, estado: 'completada' } : a
+          ),
+        };
+      })
+    );
+  }, []);
+
   // Única vía de guardado contra el servidor: envía, y fusiona la respuesta sin perder ediciones en vuelo
   const syncNow = async (sent: Bitacora, opts?: { mode?: 'replace' | 'merge' }) => {
     const deletedIds = Array.from(pendingDeletedIds.current);
@@ -297,6 +315,9 @@ export function App() {
     try {
       const res = await api.saveBitacora(sent, currentUser?.id, { mode: opts?.mode, deletedIds });
       deletedIds.forEach((id) => pendingDeletedIds.current.delete(id));
+      if (res.closed_lineage_ids && res.closed_lineage_ids.length > 0) {
+        applyClosedLineageToHistorial(res.closed_lineage_ids);
+      }
       if (res.bitacora) {
         setBitacora((prev) => {
           const m = mergeSavedBitacora(prev, sent, res.bitacora, pendingDeletedIds.current);
@@ -842,12 +863,12 @@ export function App() {
     if (!bitacoraFecha || bitacoraFecha === bitacora.fecha) {
       setBitacora((prev) => {
         const exists = prev.actividades.some((a) => a.id === restoredAct.id);
-        const nextActs = exists
+        const rawActs = exists
           ? prev.actividades.map((a) => (a.id === restoredAct.id ? { ...restoredAct, is_deleted: 0 } : a))
           : [...prev.actividades, { ...restoredAct, is_deleted: 0 }];
         return {
           ...prev,
-          actividades: nextActs,
+          actividades: recalculateActivitiesNetDurations(rawActs, prev.fecha),
         };
       });
       showToast('success', 'Actividad recuperada y añadida a tus actividades activas', 'Recuperada');
@@ -858,21 +879,28 @@ export function App() {
   };
 
   const handleAddActividad = (actData?: Actividad) => {
+    const hIni = actData?.hora_inicio !== undefined ? actData.hora_inicio : (bitacora.hora_inicio || '08:30');
+    const durMin = actData?.duracion_min !== undefined ? actData.duracion_min : 30;
+    const hFin = actData?.hora_fin || (hIni ? calculateHoraFin(hIni, durMin, bitacora.fecha) : '');
     const newAct: Actividad = {
       ...(actData || {}),
       id: actData?.id || `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       orden: bitacora.actividades.length,
-      hora_inicio: actData?.hora_inicio || bitacora.hora_inicio || '08:30',
-      duracion_min: actData?.duracion_min !== undefined ? actData.duracion_min : 30,
+      hora_inicio: hIni,
+      hora_fin: hFin,
+      duracion_min: durMin,
       tipo_trabajo: actData?.tipo_trabajo || 'Desarrollo',
       descripcion: actData?.descripcion || '',
       para_cliente: actData?.para_cliente || '',
       estado: actData?.estado || 'completada',
     };
-    setBitacora((prev) => ({
-      ...prev,
-      actividades: [...prev.actividades, newAct],
-    }));
+    setBitacora((prev) => {
+      const nextActs = recalculateActivitiesNetDurations([...prev.actividades, newAct], prev.fecha);
+      return {
+        ...prev,
+        actividades: nextActs,
+      };
+    });
   };
 
   const handleAddActividadConEstado = (estado: EstadoActividad) => {
@@ -880,7 +908,8 @@ export function App() {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       orden: bitacora.actividades.length,
       hora_inicio: '',
-      duracion_min: 30,
+      hora_fin: '',
+      duracion_min: 0,
       tipo_trabajo: 'Desarrollo',
       descripcion: '',
       para_cliente: '',
@@ -899,9 +928,13 @@ export function App() {
         ...updated[index],
         [field]: value,
       };
+      const nextActs =
+        field === 'hora_inicio' || field === 'hora_fin' || field === 'duracion_min'
+          ? recalculateActivitiesNetDurations(updated, prev.fecha)
+          : updated;
       return {
         ...prev,
-        actividades: updated,
+        actividades: nextActs,
       };
     });
   };
@@ -911,11 +944,12 @@ export function App() {
     if (!current) return;
 
     const previousBitacora = bitacora;
-    const updatedActs = [...bitacora.actividades];
-    updatedActs[index] = {
-      ...updatedActs[index],
+    const rawActs = [...bitacora.actividades];
+    rawActs[index] = {
+      ...rawActs[index],
       ...updatedData,
     };
+    const updatedActs = recalculateActivitiesNetDurations(rawActs, bitacora.fecha);
     const nextBitacora: Bitacora = {
       ...bitacora,
       actividades: updatedActs,
@@ -935,10 +969,27 @@ export function App() {
     if (persisted) {
       try {
         setAutoSaveStatus('saving');
-        await api.updateActividadDetalle(Number(current.id), updatedData);
+        const res = await api.updateActividadDetalle(Number(current.id), updatedData);
+        if (res.closed_lineage_ids && res.closed_lineage_ids.length > 0) {
+          applyClosedLineageToHistorial(res.closed_lineage_ids);
+        }
+        if (res.bitacora_actividades && res.bitacora_actividades.length > 0) {
+          setBitacora((prev) => {
+            if (prev.fecha !== previousBitacora.fecha) return prev;
+            const synced: Bitacora = {
+              ...prev,
+              tiempo_total_min: res.tiempo_total_min ?? prev.tiempo_total_min,
+              actividades: res.bitacora_actividades!,
+            };
+            if (uid) {
+              lastSavedSignature.current = getBitacoraSignature(synced, colab, uid);
+            }
+            return synced;
+          });
+        }
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
-        showToast('success', 'Detalle de actividad guardado');
+        showToast('success', 'Actividad actualizada');
       } catch (err: any) {
         const msg = err?.message || 'Error al guardar el detalle de la actividad';
         if (err?.status === 400 || err?.status === 403 || err?.status === 404) {
@@ -957,7 +1008,7 @@ export function App() {
         }
       }
     } else {
-      showToast('success', 'Detalle de actividad actualizado');
+      showToast('success', 'Actividad actualizada');
     }
   };
 
@@ -966,9 +1017,9 @@ export function App() {
     if (!act || act.estado === nuevoEstado) return;
 
     const labelMap: Record<EstadoActividad, string> = {
-      pendiente: 'Por Iniciar',
-      en_proceso: 'En Proceso',
-      en_revision: 'En Revisión',
+      pendiente: 'Por iniciar',
+      en_proceso: 'En proceso',
+      en_revision: 'En revisión',
       completada: 'Completada',
     };
     const label = labelMap[nuevoEstado] || 'Actualizada';
@@ -997,7 +1048,10 @@ export function App() {
 
     if (persisted) {
       try {
-        await api.updateActividadEstado(Number(act.id), nuevoEstado);
+        const res = await api.updateActividadEstado(Number(act.id), nuevoEstado);
+        if (res.closed_lineage_ids && res.closed_lineage_ids.length > 0) {
+          applyClosedLineageToHistorial(res.closed_lineage_ids);
+        }
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
         showToast('info', `Tarea marcada como "${label}"`);
@@ -1026,12 +1080,15 @@ export function App() {
     const persisted = !!act && isPersistedId(act.id);
     // Registrar la eliminación pendiente: viaja en el próximo guardado aunque falle la llamada directa
     if (persisted) pendingDeletedIds.current.add(String(act.id));
-    setBitacora((prev) => ({
-      ...prev,
-      actividades: act
+    setBitacora((prev) => {
+      const filtered = act
         ? prev.actividades.filter((a) => a !== act && !(act.id !== undefined && a.id === act.id))
-        : prev.actividades.filter((_, i) => i !== index),
-    }));
+        : prev.actividades.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        actividades: recalculateActivitiesNetDurations(filtered, prev.fecha),
+      };
+    });
     showToast('info', 'Actividad movida a la papelera (retención 15 días)');
     if (persisted) {
       try {
@@ -1271,7 +1328,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F4F7F9] dark:bg-[#0B0C13] text-slate-800 dark:text-slate-100 flex flex-row font-sans transition-colors duration-250">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F1117] text-slate-800 dark:text-slate-100 flex flex-row font-sans transition-colors duration-200">
       {/* Collapsible Sidebar Navigation with Mobile Drawer */}
       <Sidebar
         currentView={viewMode}
@@ -1318,7 +1375,7 @@ export function App() {
           <Suspense
             fallback={
               <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
-                <div className="w-8 h-8 rounded-full border-4 border-slate-200 dark:border-slate-800 border-t-sky-600 dark:border-t-[#00F0FF] animate-spin" />
+                <div className="w-8 h-8 rounded-full border-3 border-slate-200 dark:border-slate-800 border-t-sky-600 dark:border-t-sky-400 animate-spin" />
                 <span className="sr-only">Cargando vista…</span>
               </div>
             }

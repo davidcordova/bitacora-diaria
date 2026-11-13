@@ -154,6 +154,207 @@ export const getRefrigerioMinutos = (
   return Math.max(0, overlapEnd - overlapStart);
 };
 
+const parseHhMmToMin = (hhmm?: string): number | null => {
+  if (!hhmm) return null;
+  const parts = String(hhmm).trim().split(':');
+  if (parts.length < 2) return null;
+  const h = parseInt(parts[0], 10);
+  const m = parseInt(parts[1], 10);
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+};
+
+const subtractInterval = (
+  intervals: Array<[number, number]>,
+  subStart: number,
+  subEnd: number
+): Array<[number, number]> => {
+  if (subEnd <= subStart) return intervals;
+  const out: Array<[number, number]> = [];
+  for (const [a, b] of intervals) {
+    if (subEnd <= a || subStart >= b) {
+      out.push([a, b]);
+    } else {
+      if (a < subStart) out.push([a, subStart]);
+      if (subEnd < b) out.push([subEnd, b]);
+    }
+  }
+  return out;
+};
+
+const baseWorkingIntervals = (
+  startMin: number | null,
+  endMin: number | null,
+  fechaStr?: string
+): Array<[number, number]> => {
+  if (startMin === null || endMin === null) return [];
+  let e = endMin;
+  if (e < startMin) e += 24 * 60;
+  if (e <= startMin) return [];
+  let base: Array<[number, number]> = [[startMin, e]];
+  if (isDiaLaborable(fechaStr)) {
+    const lunchS = 13 * 60;
+    const lunchE = 14 * 60;
+    if (startMin < lunchS || e > lunchE) {
+      base = subtractInterval(base, lunchS, lunchE);
+    }
+  }
+  return base;
+};
+
+const intervalsEqual = (a: Array<[number, number]>, b: Array<[number, number]>): boolean => {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false;
+  }
+  return true;
+};
+
+const hasHigherPriority = (
+  grossJ: number,
+  baseJ: Array<[number, number]>,
+  idxJ: number,
+  grossI: number,
+  baseI: Array<[number, number]>,
+  idxI: number
+): boolean => {
+  if (grossJ !== grossI) return grossJ < grossI;
+  if (baseJ[0][0] !== baseI[0][0]) return baseJ[0][0] > baseI[0][0];
+  if (baseJ[baseJ.length - 1][1] !== baseI[baseI.length - 1][1]) {
+    return baseJ[baseJ.length - 1][1] > baseI[baseI.length - 1][1];
+  }
+  return idxJ > idxI;
+};
+
+/**
+ * Recalcula las duraciones netas recursivas de todas las actividades activas de una jornada,
+ * descontando automáticamente de las tareas largas el tiempo ocupado por tareas internas más específicas
+ * (soportando cualquier profundidad de anidamiento) sin alterar `hora_inicio` ni `hora_fin`.
+ */
+export const recalculateActivitiesNetDurations = (
+  actividades: Actividad[],
+  fechaStr?: string
+): Actividad[] => {
+  if (!actividades || actividades.length === 0) return actividades;
+
+  const parsed = actividades.map((act, idx) => {
+    if (act.is_deleted) {
+      return { idx, horaFin: act.hora_fin || '', base: [] as Array<[number, number]>, gross: act.duracion_min || 0, isTimed: false };
+    }
+    const hIni = (act.hora_inicio || '').trim();
+    let hFin = (act.hora_fin || '').trim();
+    const curDur = Math.max(0, Number(act.duracion_min) || 0);
+
+    if (!hIni) {
+      return { idx, horaFin: '', base: [] as Array<[number, number]>, gross: curDur, isTimed: false };
+    }
+    if (!hFin && curDur > 0) {
+      hFin = calculateHoraFin(hIni, curDur, fechaStr);
+    }
+    const sMin = parseHhMmToMin(hIni);
+    const eMin = hFin ? parseHhMmToMin(hFin) : null;
+    if (sMin === null || eMin === null) {
+      return { idx, horaFin: hFin, base: [] as Array<[number, number]>, gross: curDur, isTimed: false };
+    }
+    const base = baseWorkingIntervals(sMin, eMin, fechaStr);
+    const gross = base.reduce((acc, [a, b]) => acc + (b - a), 0);
+    return { idx, horaFin: hFin, base, gross, isTimed: true };
+  });
+
+  return actividades.map((act, idx) => {
+    const item = parsed[idx];
+    if (act.is_deleted || !item.isTimed || item.base.length === 0) {
+      const dur = item.isTimed ? 0 : Math.max(0, Number(act.duracion_min) || 0);
+      return {
+        ...act,
+        hora_fin: item.horaFin,
+        duracion_min: dur,
+        duracion_bruta_min: dur,
+        minutos_descontados: 0,
+      };
+    }
+
+    let eff = [...item.base];
+    for (const other of parsed) {
+      if (other.idx === item.idx || !other.isTimed || other.base.length === 0) continue;
+      if (intervalsEqual(other.base, item.base)) continue;
+      if (hasHigherPriority(other.gross, other.base, other.idx, item.gross, item.base, item.idx)) {
+        for (const [sj, ej] of other.base) {
+          eff = subtractInterval(eff, sj, ej);
+        }
+        if (eff.length === 0) break;
+      }
+    }
+
+    const netMin = Math.max(0, eff.reduce((acc, [a, b]) => acc + (b - a), 0));
+    const discounted = Math.max(0, item.gross - netMin);
+    return {
+      ...act,
+      hora_fin: item.horaFin,
+      duracion_min: netMin,
+      duracion_bruta_min: item.gross,
+      minutos_descontados: discounted,
+    };
+  });
+};
+
+/**
+ * Simula el impacto de solapamiento para el modal de creación/edición antes de guardar.
+ */
+export const previewCandidateOverlap = (
+  horaInicio: string,
+  horaFin: string,
+  existingActividades: Actividad[],
+  editingId?: number | string,
+  fechaStr?: string
+): {
+  grossMin: number;
+  netMin: number;
+  subtractedFromSelf: number;
+  subtractedFromContainers: number;
+} => {
+  const sMin = parseHhMmToMin(horaInicio);
+  const eMin = parseHhMmToMin(horaFin);
+  if (sMin === null || eMin === null) {
+    return { grossMin: 0, netMin: 0, subtractedFromSelf: 0, subtractedFromContainers: 0 };
+  }
+  const baseCand = baseWorkingIntervals(sMin, eMin, fechaStr);
+  const grossCand = baseCand.reduce((acc, [a, b]) => acc + (b - a), 0);
+  if (grossCand <= 0) {
+    return { grossMin: 0, netMin: 0, subtractedFromSelf: 0, subtractedFromContainers: 0 };
+  }
+
+  const others = (existingActividades || []).filter(
+    (a) => !a.is_deleted && (editingId === undefined || String(a.id) !== String(editingId))
+  );
+  const beforeSim = recalculateActivitiesNetDurations(others, fechaStr);
+  const candidateAct: Actividad = {
+    id: '__candidate__',
+    hora_inicio: horaInicio,
+    hora_fin: horaFin,
+    duracion_min: grossCand,
+    tipo_trabajo: '',
+    descripcion: '',
+    para_cliente: '',
+    estado: 'en_proceso',
+  };
+  const afterSim = recalculateActivitiesNetDurations([...others, candidateAct], fechaStr);
+  const candResult = afterSim[afterSim.length - 1];
+
+  let subtractedFromContainers = 0;
+  for (let i = 0; i < others.length; i++) {
+    const diff = Math.max(0, (beforeSim[i].duracion_min || 0) - (afterSim[i].duracion_min || 0));
+    subtractedFromContainers += diff;
+  }
+
+  return {
+    grossMin: grossCand,
+    netMin: candResult.duracion_min,
+    subtractedFromSelf: candResult.minutos_descontados || 0,
+    subtractedFromContainers,
+  };
+};
+
 /**
  * Retorna la hora actual en zona horaria de Perú (America/Lima) formateada en HH:MM.
  */
@@ -261,21 +462,21 @@ export const getEstadoBadgeInfo = (estado: string) => {
     case 'completada':
       return {
         label: 'Completada',
-        bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60',
+        bg: 'bg-emerald-50/80 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200/80 dark:border-emerald-500/20',
         dot: 'bg-emerald-500',
         icon: '✓',
       };
     case 'en_proceso':
       return {
         label: 'En proceso',
-        bg: 'bg-sky-50 dark:bg-[#00F0FF]/15 text-sky-700 dark:text-[#00F0FF] border-sky-200 dark:border-[#00F0FF]/30',
-        dot: 'bg-sky-600 dark:bg-[#00F0FF]',
+        bg: 'bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200/80 dark:border-sky-500/20',
+        dot: 'bg-sky-500 dark:bg-sky-400',
         icon: '⏳',
       };
     case 'en_revision':
       return {
         label: 'En revisión',
-        bg: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60',
+        bg: 'bg-amber-50/80 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200/80 dark:border-amber-500/20',
         dot: 'bg-amber-500',
         icon: '👁',
       };
@@ -283,7 +484,7 @@ export const getEstadoBadgeInfo = (estado: string) => {
     default:
       return {
         label: 'Por iniciar',
-        bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-[#252636]',
+        bg: 'bg-slate-100/80 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/70',
         dot: 'bg-slate-400',
         icon: '📋',
       };

@@ -530,12 +530,12 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   return (
     <div className="space-y-6">
       {/* ================= PANEL DE CONTROL UNIFICADO ================= */}
-      <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 shadow-sm space-y-3.5 transition-all duration-200">
+      <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 sm:p-5 shadow-sm space-y-3.5 transition-all duration-200">
         {/* FILA 1: TÍTULO, SELECTOR DE EQUIPO, LIVE BADGE Y ACCIONES GLOBALES */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-[#252636]/60">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00F0FF]/20 to-[#00A3BF]/20 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center shrink-0 border border-[#00F0FF]/30">
-              <Users className="w-5 h-5 text-[#00A3BF] dark:text-[#00F0FF]" />
+            <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
+              <Users className="w-5 h-5 text-sky-600 dark:text-sky-400" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -548,7 +548,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   <select
                     value={selectedTeamFilter}
                     onChange={(e) => setSelectedTeamFilter(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-[#252636] focus:outline-none focus:ring-1 focus:ring-[#00F0FF] cursor-pointer"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#232836] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
                   >
                     <option value="all">🏢 Todos los Equipos ({accessibleTeams.length})</option>
                     {accessibleTeams.map((t) => (
@@ -561,7 +561,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   <select
                     value={selectedTeamFilter}
                     onChange={(e) => setSelectedTeamFilter(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-[#252636] focus:outline-none focus:ring-1 focus:ring-[#00F0FF] cursor-pointer"
+                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#232836] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
                   >
                     {accessibleTeams.map((t) => (
                       <option key={t.id} value={t.id.toString()}>
@@ -570,7 +570,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                     ))}
                   </select>
                 ) : primaryTeam ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#00F0FF]/10 text-[#0090A0] dark:text-[#00F0FF] border border-[#00F0FF]/30">
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30">
                     {primaryTeam.nombre}
                   </span>
                 ) : null}
@@ -591,15 +591,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={loadAllTeamData}
               disabled={loading}
               title={`Última actualización: ${lastRefreshTime.toLocaleTimeString()}`}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-[#1A1C29] hover:bg-slate-200 dark:hover:bg-[#252636] text-slate-700 dark:text-slate-300 rounded-full text-xs font-bold transition-all cursor-pointer border border-slate-200 dark:border-[#252636]"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-[#232836] hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-300 rounded-full text-xs font-bold transition-all cursor-pointer border border-slate-200 dark:border-white/[0.08]"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#00F0FF]' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-500' : ''}`} />
               <span className="hidden sm:inline">Refrescar</span>
             </button>
 
             {/* Toggle de Vistas del Equipo: Feed en Vivo / Semáforo / Kanban */}
             {selectedMemberId === 'all' ? (
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-xl border border-slate-200/80 dark:border-[#252636] max-w-full overflow-x-auto scrollbar-none">
+              <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08] max-w-full overflow-x-auto scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setTeamTab('feed')}
@@ -639,7 +639,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
             ) : (
               /* Si está en modo individual, toggle Kanban / Resumen */
-              <div className="flex items-center bg-slate-100 dark:bg-[#161722] p-0.5 rounded-xl border border-slate-200/80 dark:border-[#252636]">
+              <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setSubView('kanban')}
@@ -674,7 +674,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px] border ${
                 copiedStandup
                   ? 'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20'
-                  : 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 hover:from-cyan-500/20 hover:to-blue-500/20 text-cyan-800 dark:text-[#00F0FF] border-cyan-500/30'
+                  : 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 hover:from-cyan-500/20 hover:to-blue-500/20 text-sky-700 dark:text-sky-400 border-cyan-500/30'
               }`}
               title="Copiar resumen del equipo en formato Daily Standup listo para Slack / Teams / WhatsApp"
             >
@@ -695,7 +695,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             <button
               type="button"
               onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-white dark:bg-[#1A1C29] hover:bg-slate-50 dark:hover:bg-[#252636] active:scale-95 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-[#252636] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px]"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-white dark:bg-[#232836] hover:bg-slate-50 dark:hover:bg-white/[0.08] active:scale-95 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px]"
               title="Descargar reporte en formato Excel CSV"
             >
               <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
@@ -716,12 +716,12 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           {/* Fecha actual formateada */}
           <div className="flex items-center gap-2.5">
-            <Calendar className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF]" />
+            <Calendar className="w-4 h-4 text-sky-600 dark:text-sky-400" />
             <span className="text-sm font-bold text-slate-900 dark:text-white">
               {formatDateLong(selectedDate)}
             </span>
             {isSelectedToday ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-600 text-white">
                 Hoy
               </span>
             ) : isSelectedYesterday ? (
@@ -729,7 +729,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 Ayer
               </span>
             ) : (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-400 border border-slate-200/90 dark:border-[#252636]">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-400 border border-slate-200/90 dark:border-white/[0.08]">
                 Histórico
               </span>
             )}
@@ -737,7 +737,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
           {/* Controles de fecha: < >, Hoy, Ayer, Selector de fecha nativo */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center bg-white dark:bg-[#1A1C29] p-0.5 rounded-full border border-slate-200/90 dark:border-[#252636] shadow-2xs">
+            <div className="flex items-center bg-white dark:bg-[#232836] p-0.5 rounded-full border border-slate-200/90 dark:border-white/[0.08] shadow-2xs">
               <button
                 type="button"
                 onClick={handlePrevDay}
@@ -761,8 +761,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={handleToday}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isSelectedToday
-                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-white/5'
+                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
+                  : 'bg-white dark:bg-[#232836] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/5'
               }`}
             >
               Hoy
@@ -772,8 +772,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={handleYesterday}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                 isSelectedYesterday
-                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-white dark:bg-[#1A1C29] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-[#252636] hover:bg-slate-100 dark:hover:bg-white/5'
+                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
+                  : 'bg-white dark:bg-[#232836] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/5'
               }`}
             >
               Ayer
@@ -783,14 +783,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               type="date"
               value={selectedDate}
               onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-              className="px-3 py-1.5 bg-white dark:bg-[#1A1C29] hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-full border border-slate-200/90 dark:border-[#252636] focus:border-[#00F0FF] outline-hidden cursor-pointer"
+              className="px-3 py-1.5 bg-white dark:bg-[#232836] hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-full border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 outline-hidden cursor-pointer"
               title="Elegir otra fecha"
             />
           </div>
         </div>
 
         {/* FILA 3: FILTRO DE COLABORADORES (PÍLDORAS HORIZONTALES) */}
-        <div className="pt-2 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-between gap-2 flex-wrap">
+        <div className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
             {/* Botón Todo el Equipo */}
             <button
@@ -798,8 +798,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={() => setSelectedMemberId('all')}
               className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
                 selectedMemberId === 'all'
-                  ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                  : 'bg-slate-100 dark:bg-[#161722] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-[#252636] hover:bg-slate-200 dark:hover:bg-[#1E2030]'
+                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
+                  : 'bg-slate-100 dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-200 dark:hover:bg-[#1E2030]'
               }`}
             >
               <Users className="w-3.5 h-3.5" />
@@ -807,8 +807,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <span
                 className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                   selectedMemberId === 'all'
-                    ? 'bg-white/20 text-white dark:bg-slate-950/20 dark:text-slate-950'
-                    : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 dark:bg-white/[0.08] text-slate-700 dark:text-slate-300'
                 }`}
               >
                 {allMembers.length}
@@ -835,21 +835,21 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   onClick={() => setSelectedMemberId(m.id)}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 ${
                     isSelected
-                      ? 'bg-sky-600 text-white dark:bg-[#00F0FF] dark:text-slate-950 font-extrabold shadow-sm'
-                      : 'bg-white dark:bg-[#161722] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1E2030] border border-slate-200/80 dark:border-[#252636]'
+                      ? 'bg-sky-600 text-white font-extrabold shadow-sm'
+                      : 'bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1E2030] border border-slate-200/80 dark:border-white/[0.08]'
                   }`}
                 >
                   <span
                     className={`w-2 h-2 rounded-full ${
-                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-white dark:bg-slate-950' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-white' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
                     }`}
                   />
                   <span>{m.full_name}</span>
                   <span
                     className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                       isSelected
-                        ? 'bg-white/20 text-white dark:bg-slate-950/20 dark:text-slate-950'
-                        : 'bg-slate-200 dark:bg-[#252636] text-slate-700 dark:text-slate-300'
+                        ? 'bg-white/20 text-white'
+                        : 'bg-slate-200 dark:bg-white/[0.08] text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {count}
@@ -864,7 +864,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             <button
               type="button"
               onClick={() => setSelectedMemberId('all')}
-              className="text-xs font-bold text-[#00A3BF] dark:text-[#00F0FF] hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+              className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
             >
               <span>← Volver a Todo el Equipo</span>
             </button>
@@ -891,15 +891,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 feedStatusFilter === 'en_revision'
                   ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/20 shadow-sm'
                   : pendingReviewTasks.length > 0
-                  ? 'bg-white dark:bg-[#13141F] border-purple-200 dark:border-purple-800/60 hover:border-purple-400 shadow-2xs'
-                  : 'bg-white dark:bg-[#13141F] border-slate-200/80 dark:border-[#252636] opacity-80 hover:opacity-100'
+                  ? 'bg-white dark:bg-[#161922] border-purple-200 dark:border-purple-800/60 hover:border-purple-400 shadow-2xs'
+                  : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08] opacity-80 hover:opacity-100'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   pendingReviewTasks.length > 0
                     ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300'
-                    : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-400'
+                    : 'bg-slate-100 dark:bg-[#232836] text-slate-400'
                 }`}>
                   <ShieldCheck className="w-5 h-5" />
                 </div>
@@ -924,7 +924,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
                 pendingReviewTasks.length > 0
                   ? 'bg-purple-600 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-500'
+                  : 'bg-slate-100 dark:bg-[#232836] text-slate-500'
               }`}>
                 {pendingReviewTasks.length}
               </span>
@@ -943,14 +943,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                 blockedMembers.length > 0
                   ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-700/60 hover:border-amber-400 shadow-2xs'
-                  : 'bg-white dark:bg-[#13141F] border-slate-200/80 dark:border-[#252636] opacity-80 hover:opacity-100'
+                  : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08] opacity-80 hover:opacity-100'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   blockedMembers.length > 0
                     ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300'
-                    : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-400'
+                    : 'bg-slate-100 dark:bg-[#232836] text-slate-400'
                 }`}>
                   <ShieldAlert className="w-5 h-5" />
                 </div>
@@ -968,7 +968,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
                 blockedMembers.length > 0
                   ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-[#1A1C29] text-slate-500'
+                  : 'bg-slate-100 dark:bg-[#232836] text-slate-500'
               }`}>
                 {blockedMembers.length}
               </span>
@@ -980,14 +980,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               onClick={() => setTeamTab('semaforo')}
               className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                 noLogMembers.length > 0
-                  ? 'bg-white dark:bg-[#13141F] border-slate-300 dark:border-[#2E3045] hover:border-sky-400 shadow-2xs'
+                  ? 'bg-white dark:bg-[#161922] border-slate-300 dark:border-[#2E3045] hover:border-sky-400 shadow-2xs'
                   : 'bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-200/80 dark:border-emerald-800/40'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   noLogMembers.length > 0
-                    ? 'bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300'
+                    ? 'bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-300'
                     : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
                 }`}>
                   <UserCheck className="w-5 h-5" />
@@ -1005,7 +1005,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
               <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
                 noLogMembers.length > 0
-                  ? 'bg-slate-200 dark:bg-[#252636] text-slate-800 dark:text-slate-200'
+                  ? 'bg-slate-200 dark:bg-white/[0.08] text-slate-800 dark:text-slate-200'
                   : 'bg-emerald-500 text-white'
               }`}>
                 {noLogMembers.length}
@@ -1022,9 +1022,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           {teamTab === 'feed' && (
             <div className="space-y-4">
               {/* Header & Feed Search */}
-              <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
                     <Radio className="w-4 h-4 animate-pulse" />
                   </div>
                   <div>
@@ -1044,7 +1044,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                     placeholder="Filtrar por tarea, cliente o miembro..."
                     value={feedSearch}
                     onChange={(e) => setFeedSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#1A1C29] border border-slate-200 dark:border-[#252636] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#00F0FF]/30 text-slate-800 dark:text-white placeholder:text-slate-400"
+                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#232836] border border-slate-200 dark:border-white/[0.08] rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 text-slate-800 dark:text-white placeholder:text-slate-400"
                   />
                   {feedSearch && (
                     <button
@@ -1060,7 +1060,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               {/* Feed Stream Cards */}
               {loading && liveActivities.length === 0 ? (
                 <div className="py-16 text-center text-slate-400">
-                  <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-[#00F0FF]" />
+                  <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-sky-500" />
                   <p className="text-sm font-medium">Sincronizando actividades del equipo en vivo...</p>
                 </div>
               ) : filteredLiveFeed.length === 0 ? (
@@ -1093,11 +1093,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                     return (
                       <div
                         key={act.id}
-                        className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-4 sm:p-5 shadow-xs hover:border-[#00F0FF]/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+                        className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 sm:p-5 shadow-xs hover:border-sky-500/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group"
                       >
                         <div className="flex items-start gap-3.5 flex-1 min-w-0">
                           {/* Avatar */}
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                          <div className="w-10 h-10 rounded-xl bg-sky-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
                             {act.colaborador.charAt(0)}
                           </div>
 
@@ -1107,7 +1107,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 {act.colaborador}
                               </span>
                               {act.team_name && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#1A1C29] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-[#252636]">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/[0.08]">
                                   {act.team_name}
                                 </span>
                               )}
@@ -1146,7 +1146,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                         </div>
 
                         {/* Status badge & Leader fast actions */}
-                        <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-[#252636]">
+                        <div className="flex items-center gap-2.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 dark:border-white/[0.08]">
                           {/* Estado Badge */}
                           <span
                             className={`px-3 py-1 rounded-full text-xs font-bold border inline-flex items-center gap-1.5 ${
@@ -1183,7 +1183,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             <button
                               type="button"
                               onClick={() => handleRejectActivity(act.id!)}
-                              className="px-2.5 py-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#1A1C29] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+                              className="px-2.5 py-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#232836] text-xs font-medium rounded-lg transition-colors cursor-pointer"
                               title="Reabrir / pasar a En Proceso"
                             >
                               Reabrir
@@ -1202,10 +1202,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           {teamTab === 'semaforo' && (
             <div className="space-y-6">
               {/* Radar Cards */}
-              <div className="bg-white dark:bg-[#13141F] rounded-2xl border border-slate-200/90 dark:border-[#252636] p-5 sm:p-6 shadow-sm space-y-4 transition-all duration-200">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-[#252636]/60 flex-wrap gap-2">
+              <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-5 sm:p-6 shadow-sm space-y-4 transition-all duration-200">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-white/[0.06] flex-wrap gap-2">
                   <div className="flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-[#00A3BF] dark:text-[#00F0FF]" />
+                    <TrendingUp className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                     <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 dark:text-slate-200">
                       Semáforo de Carga de Trabajo — {formatDateDisplay(selectedDate)}
                     </h3>
@@ -1231,12 +1231,12 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                       <div
                         key={wl.member.id}
                         onClick={() => setDrawerMemberId(wl.member.id)}
-                        className="p-4 rounded-xl border border-slate-200/90 dark:border-[#252636] bg-slate-50/60 dark:bg-[#161722]/80 hover:bg-white dark:hover:bg-[#1A1C29] hover:border-[#00F0FF]/40 dark:hover:border-[#00F0FF]/40 hover:shadow-md transition-all cursor-pointer relative group flex flex-col justify-between"
+                        className="p-4 rounded-xl border border-slate-200/90 dark:border-white/[0.08] bg-slate-50/60 dark:bg-[#1E222D]/80 hover:bg-white dark:hover:bg-[#232836] hover:border-sky-500/40 dark:hover:border-sky-500/40 hover:shadow-md transition-all cursor-pointer relative group flex flex-col justify-between"
                       >
                         <div>
                           <div className="flex items-start justify-between gap-1 mb-2.5">
                             <div className="flex items-center gap-2.5">
-                              <div className="w-9 h-9 rounded-xl bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] font-extrabold text-sm flex items-center justify-center shrink-0">
+                              <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 font-extrabold text-sm flex items-center justify-center shrink-0">
                                 {wl.member.full_name.charAt(0)}
                               </div>
                               <div>
@@ -1269,10 +1269,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             <div className="flex items-baseline justify-between">
                               <span className="text-slate-400 dark:text-slate-500 text-[11px] font-semibold">Horas ({formatDateDisplay(selectedDate)}):</span>
                               <div className="font-mono text-xl font-black text-slate-900 dark:text-white">
-                                <span className="text-[#00A3BF] dark:text-[#00F0FF]">{wl.hoursFormatted}h</span> <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">/ 8h</span>
+                                <span className="text-sky-600 dark:text-sky-400">{wl.hoursFormatted}h</span> <span className="text-slate-400 dark:text-slate-500 text-xs font-normal">/ 8h</span>
                               </div>
                             </div>
-                            <div className="w-full h-2 bg-slate-200/80 dark:bg-[#12131C] rounded-full overflow-hidden border border-slate-200/50 dark:border-[#252636]/60">
+                            <div className="w-full h-2 bg-slate-200/80 dark:bg-[#12131C] rounded-full overflow-hidden border border-slate-200/50 dark:border-white/[0.06]">
                               <div
                                 className={`h-full ${wl.barColor} transition-all duration-500`}
                                 style={{ width: `${percentage}%` }}
@@ -1282,7 +1282,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
                           {/* Task Summary Badges */}
                           <div className="flex items-center gap-1.5 text-[10px] text-slate-600 dark:text-slate-300 flex-wrap">
-                            <span className="bg-white dark:bg-[#1A1C29] px-2 py-0.5 rounded-full border border-slate-200 dark:border-[#252636] font-semibold">
+                            <span className="bg-white dark:bg-[#232836] px-2 py-0.5 rounded-full border border-slate-200 dark:border-white/[0.08] font-semibold">
                               {wl.activitiesCount} tareas
                             </span>
                             {wl.inReviewCount > 0 && (
@@ -1328,7 +1328,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                           </div>
                         )}
 
-                        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-[#252636]/60 flex items-center justify-between text-xs text-[#00A3BF] dark:text-[#00F0FF] font-bold group-hover:text-[#00D8E6]">
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between text-xs text-sky-600 dark:text-sky-400 font-bold group-hover:text-[#00D8E6]">
                           <span>Inspeccionar tareas</span>
                           <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
                         </div>
@@ -1351,7 +1351,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                       .map((wl) => (
                         <div
                           key={wl.member.id}
-                          className="p-3.5 bg-white dark:bg-[#161722] rounded-2xl border border-amber-200 dark:border-amber-800/60 flex flex-col justify-between gap-2"
+                          className="p-3.5 bg-white dark:bg-[#1E222D] rounded-2xl border border-amber-200 dark:border-amber-800/60 flex flex-col justify-between gap-2"
                         >
                           <div>
                             <div className="flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -1461,7 +1461,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <div>
                   <strong className="font-bold">¡Atención Líder!</strong> Este colaborador reportó que
                   necesita tu apoyo para avanzar:
-                  <div className="mt-1 font-semibold text-amber-950 dark:text-amber-100 bg-white/80 dark:bg-[#13141F] p-2.5 rounded-xl border border-amber-200 dark:border-amber-700/60">
+                  <div className="mt-1 font-semibold text-amber-950 dark:text-amber-100 bg-white/80 dark:bg-[#161922] p-2.5 rounded-xl border border-amber-200 dark:border-amber-700/60">
                     "{currentIndividualBitacora.apoyo_detalle || 'Sin detalle de apoyo'}"
                   </div>
                 </div>
@@ -1529,11 +1529,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             className="fixed inset-0"
             onClick={() => setDrawerMemberId(null)}
           />
-          <div className="relative bg-white dark:bg-[#13141F] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-[#252636] z-10 animate-in slide-in-from-right duration-300">
+          <div className="relative bg-white dark:bg-[#161922] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-white/[0.08] z-10 animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#252636] flex items-center justify-between bg-slate-50/70 dark:bg-[#161722] shrink-0">
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-white/[0.08] flex items-center justify-between bg-slate-50/70 dark:bg-[#1E222D] shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] text-slate-950 font-black flex items-center justify-center shadow-xs shrink-0">
+                <div className="w-10 h-10 rounded-2xl bg-sky-600 text-white font-black flex items-center justify-center shadow-xs shrink-0">
                   {drawerWorkload.member.full_name.charAt(0)}
                 </div>
                 <div>
@@ -1561,7 +1561,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <button
                 type="button"
                 onClick={() => setDrawerMemberId(null)}
-                className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer shrink-0"
+                className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1E222D] rounded-full transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1570,7 +1570,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             {/* Body */}
             <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5 space-y-4">
               {/* Daily metrics summary */}
-              <div className="bg-slate-50 dark:bg-[#161722] rounded-2xl p-3.5 border border-slate-200/70 dark:border-[#252636] space-y-2">
+              <div className="bg-slate-50 dark:bg-[#1E222D] rounded-2xl p-3.5 border border-slate-200/70 dark:border-white/[0.08] space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-semibold text-slate-600 dark:text-slate-400">Fecha inspeccionada:</span>
                   <span className="font-bold text-slate-900 dark:text-white">{formatDateDisplay(selectedDate)}</span>
@@ -1594,7 +1594,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                     <ShieldAlert className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                     <span>Requiere apoyo reportado:</span>
                   </div>
-                  <p className="italic bg-white/80 dark:bg-[#13141F] p-2.5 rounded-xl border border-amber-200 dark:border-amber-700/60 font-medium">
+                  <p className="italic bg-white/80 dark:bg-[#161922] p-2.5 rounded-xl border border-amber-200 dark:border-amber-700/60 font-medium">
                     "{drawerWorkload.supportDetail || 'Sin detalle de apoyo'}"
                   </p>
                   {drawerWorkload.member.phone && (
@@ -1608,7 +1608,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                         );
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                       }}
-                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 dark:text-slate-950 rounded-full font-bold shadow-xs cursor-pointer min-h-[40px]"
+                      className="w-full flex items-center justify-center gap-1.5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-full font-bold shadow-xs cursor-pointer min-h-[40px]"
                     >
                       <MessageCircle className="w-4 h-4" />
                       <span>Contactar por WhatsApp</span>
@@ -1632,7 +1632,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                       .map((act, idx) => (
                         <div
                           key={act.id || idx}
-                          className="p-3.5 bg-white dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] shadow-2xs space-y-2 hover:border-slate-300 dark:hover:border-[#00F0FF]/40 transition-colors"
+                          className="p-3.5 bg-white dark:bg-[#1E222D] rounded-2xl border border-slate-200 dark:border-white/[0.08] shadow-2xs space-y-2 hover:border-slate-300 dark:hover:border-sky-500/40 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="text-xs font-semibold text-slate-900 dark:text-white leading-snug flex-1">
@@ -1644,7 +1644,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60'
                                   : act.estado === 'en_revision'
                                   ? 'bg-[#A855F7]/15 text-[#C084FC] border border-[#A855F7]/30'
-                                  : 'bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] border border-[#00F0FF]/30'
+                                  : 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30'
                               }`}
                             >
                               {act.estado === 'completada'
@@ -1659,7 +1659,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                             <RevisionBadge actividad={act} compact />
                           )}
 
-                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-[#252636]">
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-white/[0.08]">
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-slate-400" />
                               <span>{act.hora_inicio || '08:30'} · {act.duracion_min || 0} min</span>
@@ -1680,7 +1680,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 <button
                                   type="button"
                                   onClick={() => act.id && handleRejectActivity(act.id)}
-                                  className="px-3 py-1 bg-slate-100 dark:bg-[#1A1C29] hover:bg-slate-200 dark:hover:bg-[#252636] text-slate-600 dark:text-slate-300 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
+                                  className="px-3 py-1 bg-slate-100 dark:bg-[#232836] hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-600 dark:text-slate-300 rounded-full text-[10px] font-medium transition-colors cursor-pointer"
                                 >
                                   Reabrir
                                 </button>
@@ -1702,14 +1702,14 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-[#252636] bg-slate-50/70 dark:bg-[#161722] flex items-center justify-between gap-3 shrink-0">
+            <div className="p-4 border-t border-slate-100 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#1E222D] flex items-center justify-between gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => {
                   setSelectedMemberId(drawerWorkload.member.id);
                   setDrawerMemberId(null);
                 }}
-                className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white dark:bg-gradient-to-r dark:from-[#00F0FF] dark:to-[#00A3BF] dark:hover:brightness-110 active:scale-98 dark:text-slate-950 rounded-full text-xs font-bold shadow-sm transition-all text-center cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 px-4 bg-sky-600 hover:bg-sky-700 active:scale-[0.99] text-white rounded-full text-xs font-bold shadow-sm transition-all text-center cursor-pointer min-h-[44px] flex items-center justify-center gap-1.5"
               >
                 <span>Ver en Pantalla Completa</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -1718,7 +1718,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <button
                 type="button"
                 onClick={() => setDrawerMemberId(null)}
-                className="py-2.5 px-5 bg-white hover:bg-slate-100 dark:bg-[#1A1C29] dark:hover:bg-[#252636] text-slate-700 dark:text-slate-200 rounded-full text-xs font-semibold border border-slate-200 dark:border-[#252636] shadow-2xs transition-all cursor-pointer min-h-[44px]"
+                className="py-2.5 px-5 bg-white hover:bg-slate-100 dark:bg-[#232836] dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-200 rounded-full text-xs font-semibold border border-slate-200 dark:border-white/[0.08] shadow-2xs transition-all cursor-pointer min-h-[44px]"
               >
                 Cerrar
               </button>

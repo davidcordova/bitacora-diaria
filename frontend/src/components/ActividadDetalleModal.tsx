@@ -91,26 +91,26 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
     switch (estado) {
       case 'completada':
         return {
-          bg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800/60',
+          bg: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25',
           label: 'Completada',
           icon: CheckCircle2,
         };
       case 'en_proceso':
         return {
-          bg: 'bg-cyan-50 dark:bg-[#00F0FF]/15 text-cyan-900 dark:text-[#00F0FF] border-cyan-300/80 dark:border-[#00F0FF]/40',
+          bg: 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25',
           label: 'En proceso',
           icon: Timer,
         };
       case 'en_revision':
         return {
-          bg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 border-purple-300/80 dark:border-purple-800/60',
+          bg: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25',
           label: 'En revisión',
           icon: Eye,
         };
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-100 dark:bg-[#1A1C29] text-slate-800 dark:text-slate-200 border-slate-300 dark:border-[#252636]',
+          bg: 'bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10',
           label: 'Por iniciar',
           icon: ListTodo,
         };
@@ -122,42 +122,39 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   const timeInfo = getTimeInStatusInfo(actividad.updated_at, actividad.created_at, actividad.estado);
   const hasAccumulated =
     Boolean(actividad.tiempo_acumulado_min && actividad.tiempo_acumulado_min > (actividad.duracion_min || 0));
+  const discountedMin = Number(actividad.minutos_descontados) || 0;
+  const grossMin = Number(actividad.duracion_bruta_min) || Number(actividad.duracion_min) || 0;
 
   const sharedNames = actividad.shared_with_names || [];
   const hasShared = (actividad.shared_with && actividad.shared_with.length > 0) || sharedNames.length > 0;
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
-        <div className="relative w-full max-w-2xl bg-white dark:bg-[#13141F] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200/90 dark:border-[#252636] overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+        <div className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 bg-slate-50 dark:bg-[#161722] border-b border-slate-100 dark:border-[#252636] shrink-0">
-            <div className="flex items-center gap-2.5 sm:gap-3">
-              <div className="p-2 rounded-xl bg-cyan-100/70 dark:bg-[#00F0FF]/15 text-cyan-800 dark:text-[#00F0FF] border border-cyan-300/80 dark:border-[#00F0FF]/30 shrink-0">
-                <FileText className="w-5 h-5" />
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-[#1A1E29] border-b border-slate-200/80 dark:border-white/[0.07] shrink-0">
+            <div className="flex items-center gap-2.5">
+              <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-white/10 shrink-0">
+                <FileText className="w-4 h-4" />
               </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                    Detalle de Actividad {index !== null ? `#${index + 1}` : ''}
-                  </h3>
-                  <span
-                    className={`inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full border ${statusConfig.bg}`}
-                  >
-                    <StatusIcon className="w-3.5 h-3.5" />
-                    <span>{statusConfig.label}</span>
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Visualización completa de descripción, tiempos invertidos, asignación y evidencias.
-                </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                  Actividad {index !== null ? `#${index + 1}` : ''}
+                </h3>
+                <span
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-md border ${statusConfig.bg}`}
+                >
+                  <StatusIcon className="w-3.5 h-3.5" />
+                  <span>{statusConfig.label}</span>
+                </span>
               </div>
             </div>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#161722] rounded-full transition-colors cursor-pointer shrink-0"
+              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0"
               title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -165,184 +162,170 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto min-h-0 flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-slate-50 dark:bg-[#161722] rounded-2xl border border-slate-200/80 dark:border-[#252636]">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-3.5 bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
               <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Hora Inicio
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Inicio
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
-                  <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                  <span>{actividad.hora_inicio || '--:--'}</span>
+                <div className="mt-1 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-100 tabular-nums">
+                  {actividad.hora_inicio || '—'}
                 </div>
               </div>
 
               <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Hora Fin
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Fin
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
-                  <Clock className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                  <span>{actividad.hora_fin || calculateHoraFin(actividad.hora_inicio, actividad.duracion_min, fecha) || '--:--'}</span>
+                <div className="mt-1 font-semibold text-xs sm:text-sm text-slate-800 dark:text-slate-100 tabular-nums">
+                  {actividad.hora_inicio
+                    ? actividad.hora_fin || calculateHoraFin(actividad.hora_inicio, actividad.duracion_min, fecha) || '—'
+                    : '—'}
                 </div>
               </div>
 
               <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Duración
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Tiempo Neto
                 </span>
-                <div className="flex items-center gap-1.5 mt-1 font-extrabold text-xs sm:text-sm text-[#00A88B] dark:text-[#00C9A7]">
-                  <Timer className="w-3.5 h-3.5 text-[#00C9A7]" />
-                  <span>{actividad.duracion_min} min</span>
-                  {actividad.duracion_min > 0 && (
-                    <span className="text-[10px] text-[#00A88B] dark:text-[#00C9A7] font-semibold lowercase">
-                      ({formatDuration(actividad.duracion_min)})
+                <div className="mt-1 font-bold text-xs sm:text-sm text-sky-700 dark:text-sky-400 tabular-nums">
+                  {formatDuration(actividad.duracion_min || 0)}
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Tipo
+                </span>
+                <div className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                  {actividad.tipo_trabajo || '—'}
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Cliente / Área
+                </span>
+                <div className="mt-1 font-medium text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                  {actividad.para_cliente || '—'}
+                </div>
+              </div>
+            </div>
+
+            {discountedMin > 0 && (
+              <div className="p-3 rounded-xl bg-sky-50/80 dark:bg-sky-500/10 border border-sky-200/80 dark:border-sky-500/20 text-xs text-sky-900 dark:text-sky-200">
+                Ventana total registrada: <strong>{formatDuration(grossMin)}</strong> · Se descontaron automáticamente{' '}
+                <strong>{formatDuration(discountedMin)}</strong> ocupados por actividades internas realizadas dentro de este horario.
+              </div>
+            )}
+
+            {/* Supporting Metadata */}
+            {(hasShared ||
+              actividad.created_by_name ||
+              actividad.parent_task_id ||
+              hasAccumulated ||
+              timeInfo.isStalled) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {hasShared && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 rounded-md text-xs text-slate-700 dark:text-slate-300">
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
+                    <span>
+                      Compartida con:{' '}
+                      {sharedNames.length > 0
+                        ? sharedNames.join(', ')
+                        : `${actividad.shared_with?.length} compañero(s)`}
                     </span>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Tipo de Trabajo
-                </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
-                  <Briefcase className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
-                  <span className="truncate">{actividad.tipo_trabajo || 'Sin clasificar'}</span>
-                </div>
-              </div>
-
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                  Para / Cliente
-                </span>
-                <div className="flex items-center gap-1.5 mt-1 font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
-                  <UserCheck className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 shrink-0" />
-                  <span className="truncate">{actividad.para_cliente || 'Interno'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Badges de soporte (Continuada / Acumulada / Tiempo en estado / Compartida) */}
-            <div className="flex flex-wrap items-center gap-2">
-              {hasShared && (
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 rounded-full text-xs font-bold text-indigo-800 dark:text-indigo-300">
-                  <Users className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                  <span>
-                    Trabajo en Paralelo con:{' '}
-                    {sharedNames.length > 0
-                      ? sharedNames.join(', ')
-                      : `${actividad.shared_with?.length} compañero(s)`}
                   </span>
-                </div>
-              )}
+                )}
 
-              {actividad.created_by_name && (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/40 text-xs font-semibold text-teal-800 dark:text-teal-300">
-                  <UserCheck className="w-3.5 h-3.5 text-teal-500" />
-                  <span>Registrada por: {actividad.created_by_name} (Colaborador de Apoyo)</span>
-                </div>
-              )}
+                {actividad.created_by_name && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-300">
+                    <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Registrada por: {actividad.created_by_name}</span>
+                  </span>
+                )}
 
-              {(actividad.parent_task_id || actividad.is_rollover) && (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-pink-700 dark:text-pink-300 bg-pink-50 dark:bg-[#EC4899]/15 border border-pink-200 dark:border-[#EC4899]/30 px-3 py-1 rounded-full">
-                  <RefreshCw className="w-3.5 h-3.5 text-[#EC4899]" />
-                  <span>Continuada de jornada previa</span>
-                </span>
-              )}
+                {hasAccumulated && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/[0.06] border border-slate-200 dark:border-white/10 px-2.5 py-1 rounded-md">
+                    <Timer className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{formatDuration(actividad.tiempo_acumulado_min || 0)} acumulados</span>
+                  </span>
+                )}
 
-              {actividad.parent_task_id && (
-                <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-3 rounded-2xl bg-cyan-50/80 dark:bg-cyan-950/30 border border-cyan-200 dark:border-cyan-800/40">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="p-1.5 rounded-lg bg-cyan-100 dark:bg-cyan-900/50 text-cyan-800 dark:text-[#00F0FF] shrink-0">
-                      <Link2 className="w-4 h-4" />
+                {timeInfo.isStalled && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-md border text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/25">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                    <span>{timeInfo.label}</span>
+                  </span>
+                )}
+
+                {actividad.parent_task_id && (
+                  <div className="w-full flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08]">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Link2 className="w-4 h-4 text-slate-400 shrink-0" />
+                      <div className="min-w-0 text-xs">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          {actividad.tipo_vinculo === 'subtarea'
+                            ? 'Subtarea de'
+                            : actividad.tipo_vinculo === 'bloqueado_por'
+                            ? 'Bloqueada por'
+                            : actividad.tipo_vinculo === 'relacionada'
+                            ? 'Relacionada con'
+                            : 'Continuación de'}
+                          :{' '}
+                        </span>
+                        <span className="text-slate-600 dark:text-slate-400 truncate">
+                          {actividad.parent_task_desc || `Actividad previa #${actividad.parent_task_id}`}
+                        </span>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <span className="text-xs font-bold text-cyan-900 dark:text-cyan-300 block">
-                        {actividad.tipo_vinculo === 'subtarea'
-                          ? 'Subtarea de'
-                          : actividad.tipo_vinculo === 'bloqueado_por'
-                          ? 'Bloqueada por'
-                          : actividad.tipo_vinculo === 'relacionada'
-                          ? 'Relacionada con'
-                          : 'Continuación de'}:
-                      </span>
-                      <span className="text-xs text-slate-800 dark:text-slate-200 font-medium truncate block">
-                        Ref #{actividad.parent_task_id} {actividad.parent_task_desc ? `— ${actividad.parent_task_desc}` : ''}
-                      </span>
-                    </div>
+                    {onNavigateToRef && (
+                      <button
+                        type="button"
+                        onClick={() => onNavigateToRef(actividad.parent_task_id!, actividad.tipo_vinculo)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-[#222735] hover:bg-slate-100 dark:hover:bg-white/10 text-sky-600 dark:text-sky-400 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors shrink-0 cursor-pointer self-start sm:self-auto"
+                      >
+                        <span>Ver origen</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
-                  {onNavigateToRef && (
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToRef(actividad.parent_task_id!, actividad.tipo_vinculo)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white dark:bg-[#00F0FF]/20 dark:hover:bg-[#00F0FF]/30 dark:text-[#00F0FF] text-xs font-bold transition-all shrink-0 cursor-pointer shadow-xs self-start sm:self-auto"
-                      title="Inspeccionar o navegar a la actividad referenciada"
-                    >
-                      <span>Ir a Referencia</span>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {hasAccumulated && (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-[#00A3BF] dark:text-[#00F0FF] bg-cyan-50 dark:bg-[#00F0FF]/15 border border-[#00F0FF]/30 px-3 py-1 rounded-full">
-                  <Timer className="w-3.5 h-3.5 text-[#00F0FF]" />
-                  <span>{actividad.tiempo_acumulado_min} min acumulados</span>
-                </span>
-              )}
-
-              {timeInfo.label && (
-                <span
-                  className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full border ${
-                    timeInfo.isStalled
-                      ? 'text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60'
-                      : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-[#161722] border-slate-200 dark:border-[#252636]'
-                  }`}
-                >
-                  {timeInfo.isStalled ? (
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500" />
-                  ) : (
-                    <History className="w-3.5 h-3.5 text-slate-400" />
-                  )}
-                  <span>{timeInfo.label}</span>
-                </span>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Full Description Box */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Descripción Detallada de la Actividad
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  Descripción
                 </label>
                 <button
                   type="button"
                   onClick={handleCopyDescription}
-                  className="flex items-center gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#00F0FF] dark:hover:text-[#00F0FF] hover:bg-slate-100 dark:hover:bg-[#161722] px-3 py-1 rounded-full transition-colors cursor-pointer"
+                  className="flex items-center gap-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] px-2.5 py-1 rounded-md transition-colors cursor-pointer"
                   title="Copiar descripción al portapapeles"
                 >
                   {copied ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-[#00F0FF]" />
-                      <span className="text-[#00A3BF] dark:text-[#00F0FF] font-bold">Copiado</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copiado</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Copiar texto</span>
+                      <span>Copiar</span>
                     </>
                   )}
                 </button>
               </div>
 
-              <div className="p-4 bg-slate-50/80 dark:bg-[#161722] rounded-2xl border border-slate-200 dark:border-[#252636] leading-relaxed text-sm text-slate-800 dark:text-slate-200 font-medium">
+              <div className="p-4 bg-slate-50/70 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07] leading-relaxed text-sm text-slate-800 dark:text-slate-200">
                 {actividad.descripcion ? (
                   <RichHtmlRenderer content={actividad.descripcion} />
                 ) : (
-                  <span className="text-slate-400 dark:text-slate-500 italic">No se registró descripción para esta tarea.</span>
+                  <span className="text-slate-400 dark:text-slate-500 italic">Sin descripción registrada.</span>
                 )}
               </div>
             </div>
@@ -350,67 +333,62 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
             {/* Comentarios u Observaciones */}
             {actividad.comentarios && (
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <MessageSquare className="w-4 h-4 text-cyan-600 dark:text-[#00F0FF]" />
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                    Comentarios / Observaciones
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Comentarios
                   </label>
                 </div>
-                <div className="p-3.5 bg-amber-500/5 dark:bg-amber-950/20 border border-amber-500/20 rounded-2xl text-xs text-slate-800 dark:text-amber-200/90 whitespace-pre-wrap leading-relaxed">
+                <div className="p-3 bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.07] rounded-xl text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
                   {actividad.comentarios}
                 </div>
               </div>
             )}
 
             {/* Attached Evidences */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Paperclip className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Evidencias Adjuntas ({displayEvidencias.length})
-                </label>
-              </div>
-
-              {displayEvidencias.length === 0 ? (
-                <div className="p-4 bg-slate-50/60 dark:bg-slate-900/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 text-center">
-                  No hay archivos o capturas adjuntas en esta actividad.
+            {displayEvidencias.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Evidencias adjuntas ({displayEvidencias.length})
+                  </label>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {displayEvidencias.map((ev, evIdx) => (
                     <button
                       key={ev.id || evIdx}
                       type="button"
                       onClick={() => handleOpenEvidence(evIdx)}
-                      className="flex items-center justify-between p-3 bg-white dark:bg-[#161722] hover:bg-slate-50 dark:hover:bg-[#1C1D2A] border border-slate-200 dark:border-[#252636] hover:border-[#00F0FF]/40 rounded-2xl transition-all cursor-pointer group text-left shadow-2xs"
+                      className="flex items-center justify-between p-2.5 bg-white dark:bg-[#1A1E29] hover:bg-slate-50 dark:hover:bg-[#222735] border border-slate-200/80 dark:border-white/[0.08] rounded-xl transition-colors cursor-pointer group text-left"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-xl bg-cyan-50 dark:bg-[#00F0FF]/15 text-[#00A3BF] dark:text-[#00F0FF] flex items-center justify-center shrink-0 border border-[#00F0FF]/30">
-                          <Paperclip className="w-4 h-4" />
+                        <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-300 flex items-center justify-center shrink-0">
+                          <Paperclip className="w-3.5 h-3.5" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#00F0FF]">
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
                             {ev.nombre}
                           </p>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                            Hacer clic para visualizar
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                            Ver archivo
                           </span>
                         </div>
                       </div>
-                      <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-[#00F0FF] shrink-0 ml-2" />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 shrink-0 ml-2" />
                     </button>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-50 dark:bg-[#161722] border-t border-slate-100 dark:border-[#252636] shrink-0 gap-2.5 flex-wrap">
-            {/* Quick status selector */}
+          <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-50/80 dark:bg-[#1A1E29] border-t border-slate-200/80 dark:border-white/[0.07] shrink-0 gap-2.5 flex-wrap">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 hidden sm:inline">
-                Cambiar estado:
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 hidden sm:inline">
+                Estado:
               </span>
               <select
                 value={actividad.estado}
@@ -419,16 +397,23 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                     onUpdateEstado(index, e.target.value as EstadoActividad);
                   }
                 }}
-                className={`text-xs font-bold rounded-full border px-3 py-1.5 cursor-pointer outline-none ${statusConfig.bg}`}
+                className={`text-xs font-semibold rounded-lg border px-2.5 py-1.5 cursor-pointer outline-none ${statusConfig.bg}`}
               >
-                <option value="completada" className="bg-white dark:bg-[#161722]">Completada</option>
-                <option value="en_proceso" className="bg-white dark:bg-[#161722]">En proceso</option>
-                <option value="en_revision" className="bg-white dark:bg-[#161722]">En revisión</option>
-                <option value="pendiente" className="bg-white dark:bg-[#161722]">Por iniciar</option>
+                <option value="completada" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Completada</option>
+                <option value="en_proceso" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En proceso</option>
+                <option value="en_revision" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En revisión</option>
+                <option value="pendiente" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Por iniciar</option>
               </select>
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer min-h-[36px]"
+              >
+                Cerrar
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -437,18 +422,10 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                     onClose();
                   }
                 }}
-                className="flex items-center gap-1.5 px-4 sm:px-5 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-[#00F0FF] to-[#00A3BF] hover:brightness-110 active:scale-98 rounded-full shadow-sm transition-all cursor-pointer min-h-[38px]"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors cursor-pointer min-h-[36px]"
               >
-                <Edit3 className="w-4 h-4 shrink-0" />
-                <span>Editar Actividad</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 sm:px-5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1A1C29] rounded-full transition-colors cursor-pointer min-h-[38px]"
-              >
-                Cerrar
+                <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                <span>Editar</span>
               </button>
             </div>
           </div>
