@@ -86,7 +86,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
       : currentUser.role === 'lider' || currentUser.is_leader
       ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30'
-      : 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30';
+      : 'bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-500/25';
 
   const teamName =
     currentUser.team_name ||
@@ -160,7 +160,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-lg bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] overflow-hidden my-auto animate-in zoom-in-95 duration-200"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-100 dark:border-white/[0.08] bg-slate-50/70 dark:bg-[#1E222D]/80 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
@@ -184,7 +188,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0"
+            className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
             title="Cerrar modal"
           >
             <X className="w-5 h-5" />

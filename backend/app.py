@@ -4,39 +4,42 @@ import base64
 import sqlite3
 import threading
 import time
-import io
-import csv
 import re
-import html
 import logging
-import secrets
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_from_directory, send_file, g
+from flask import Flask, request, jsonify, send_from_directory, g
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-try:
-    import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    _HAS_OPENPYXL = True
-except ImportError:
-    openpyxl = None
-    _HAS_OPENPYXL = False
-    logging.getLogger('bitacora').warning("openpyxl no está instalado: la exportación .xlsx no estará disponible")
 
 from database import (
     get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str,
-    MIN_PASSWORD_LENGTH, WEAK_DEFAULT_PASSWORDS, get_schema_version,
+    get_schema_version,
 )
-from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 from security import (
     register_security, issue_token, login_is_throttled,
     register_login_failure, clear_login_failures,
-    issue_vault_token, vault_unlocked, VAULT_UNLOCK_SECONDS, VAULT_MAX_FAILED_UNLOCKS,
-    user_can_review_owner,
+    user_can_access_owner, user_can_review_owner,
+)
+from helpers import (
+    validate_new_password,
+    generate_temp_password,
+    is_dia_laborable,
+    calculate_hora_fin,
+    sanitize_evidencias,
+    strip_html_text,
+    format_actividad_dict,
+    slim_actividad_for_summary,
+    fetch_enriched_bitacora_activities,
+    check_and_notify_stagnant_activities,
+    get_default_hora_inicio,
+    _mask_vault_secrets,
 )
 from routes.system_routes import system_bp, normalize_client_name
 from routes.mcp_routes import mcp_bp
+from routes.admin_routes import admin_bp
+from routes.supervision_routes import supervision_bp
+from routes.buzon_routes import buzon_bp
+from routes.vault_routes import vault_bp
 from activity_lifecycle import (
     normalize_desc_key,
     enrich_activities_with_net_info,
@@ -57,19 +60,11 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 register_security(app)
 app.register_blueprint(system_bp)
 app.register_blueprint(mcp_bp)
+app.register_blueprint(admin_bp)
+app.register_blueprint(supervision_bp)
+app.register_blueprint(buzon_bp)
+app.register_blueprint(vault_bp)
 
-
-def validate_new_password(password):
-    """Devuelve un mensaje de error si la contraseña no cumple la política mínima, o None."""
-    if not password or len(password) < MIN_PASSWORD_LENGTH:
-        return f"La contraseña debe tener al menos {MIN_PASSWORD_LENGTH} caracteres"
-    if password in WEAK_DEFAULT_PASSWORDS or password.lower() in ('12345678', '123456789', 'password', 'contraseña'):
-        return "Esa contraseña es demasiado común. Elige otra"
-    return None
-
-
-def generate_temp_password():
-    return 'Tmp-' + secrets.token_urlsafe(8)
 
 @app.teardown_appcontext
 def close_open_connections(exception=None):
@@ -84,315 +79,19 @@ def close_open_connections(exception=None):
     if hasattr(g, '_db_conn'):
         g._db_conn = None
 
+
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER') or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def is_dia_laborable(fecha_str=None):
-    if not fecha_str:
-        return True
-    try:
-        d = datetime.strptime(str(fecha_str).strip()[:10], '%Y-%m-%d')
-        return d.weekday() < 5
-    except Exception:
-        return True
-
-
-def calculate_hora_fin(hora_inicio, duracion_min, fecha=None):
-    if not hora_inicio:
-        return ''
-    try:
-        parts = str(hora_inicio).strip().split(':')
-        h = int(parts[0])
-        m = int(parts[1])
-        dur = int(duracion_min or 0)
-        start_min = h * 60 + m
-        refrig_inicio = 13 * 60  # 13:00 -> 780
-        refrig_fin = 14 * 60     # 14:00 -> 840
-        refrig_dur = 60
-
-        laborable = is_dia_laborable(fecha)
-        if not laborable or dur <= 0:
-            total = start_min + max(0, dur)
-        else:
-            effective_start = start_min
-            if effective_start < refrig_fin and effective_start >= refrig_inicio:
-                effective_start = refrig_fin
-
-            end_min = effective_start + dur
-            if start_min < refrig_inicio and end_min > refrig_inicio:
-                end_min += refrig_dur
-            total = end_min
-
-        final_h = (total // 60) % 24
-        final_m = total % 60
-        return f"{final_h:02d}:{final_m:02d}"
-    except Exception:
-        return ''
-
-def sanitize_evidencias(evidencias_input, descripcion):
-    """
-    Elimina evidencias duplicadas y filtra aquellas cuyas URLs o nombres de archivo
-    ya se encuentran incrustados en el HTML de la descripción (WYSIWYG inline).
-    """
-    if not evidencias_input:
-        return []
-    if isinstance(evidencias_input, str):
-        try:
-            evidencias_input = json.loads(evidencias_input)
-        except Exception:
-            return []
-    if not isinstance(evidencias_input, list):
-        return []
-
-    desc = descripcion or ''
-    cleaned = []
-    seen = set()
-    for ev in evidencias_input:
-        if not isinstance(ev, dict):
-            continue
-        url = (ev.get('url') or '').strip()
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        filename = os.path.basename(url).split('?')[0]
-        # Si la imagen o archivo ya está incrustado en el cuerpo de la descripción, no se duplica en evidencias adjuntas
-        if (url and url in desc) or (filename and filename in desc):
-            continue
-        # Descartar imagen duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
-        if '_' in filename:
-            parts = filename.split('_')
-            if len(parts) >= 2 and len(parts[0]) == 8 and len(parts[1]) == 6:
-                ts_prefix = f"{parts[0]}_{parts[1]}"
-                if ts_prefix in desc:
-                    continue
-        cleaned.append(ev)
-    return cleaned
-
-# Helper para normalizar evidencias y tareas compartidas en el diccionario de una actividad
-def format_actividad_dict(act_row, users_map=None, fecha=None):
-    a_dict = dict(act_row)
-    act_fecha = fecha or a_dict.get('fecha')
-    if not a_dict.get('hora_fin') and a_dict.get('hora_inicio'):
-        a_dict['hora_fin'] = calculate_hora_fin(a_dict.get('hora_inicio'), a_dict.get('duracion_min'), act_fecha)
-
-    a_dict['evidencias'] = sanitize_evidencias(a_dict.get('evidencias'), a_dict.get('descripcion', ''))
-
-    raw_parent_desc = a_dict.get('parent_task_desc')
-    if raw_parent_desc:
-        clean_parent = re.sub(r'<[^>]+>', ' ', str(raw_parent_desc))
-        clean_parent = re.sub(r'\s+', ' ', html.unescape(clean_parent)).strip()
-        a_dict['parent_task_desc'] = clean_parent
-
-    sw_val = a_dict.get('shared_with')
-    if isinstance(sw_val, str):
-        try:
-            a_dict['shared_with'] = json.loads(sw_val)
-        except Exception:
-            a_dict['shared_with'] = []
-    elif isinstance(sw_val, list):
-        a_dict['shared_with'] = sw_val
-    else:
-        a_dict['shared_with'] = []
-
-    if users_map:
-        if isinstance(a_dict.get('shared_with'), list):
-            a_dict['shared_with_names'] = [
-                users_map[uid] for uid in a_dict['shared_with'] if uid in users_map
-            ]
-        creator_id = a_dict.get('created_by_user_id')
-        if creator_id and creator_id in users_map:
-            a_dict['created_by_name'] = users_map[creator_id]
-        updater_id = a_dict.get('updated_by_user_id')
-        if updater_id and updater_id in users_map:
-            a_dict['updated_by_name'] = users_map[updater_id]
-        reviewer_id = a_dict.get('revisado_por')
-        if reviewer_id and reviewer_id in users_map:
-            a_dict['revisado_por_nombre'] = users_map[reviewer_id]
-
-    # Cálculo preciso de días transcurridos sin cambios / estancamiento
-    now_dt = get_peru_now().replace(tzinfo=None)
-    last_touch_str = a_dict.get('updated_at') or a_dict.get('created_at') or (f"{act_fecha} 12:00:00" if act_fecha else None)
-    days_inactive = 0
-    if last_touch_str and a_dict.get('estado') != 'completada':
-        try:
-            clean_ts = str(last_touch_str).strip()
-            if 'T' in clean_ts:
-                clean_ts = clean_ts.replace('T', ' ').split('.')[0].split('+')[0]
-            else:
-                clean_ts = clean_ts.split('.')[0]
-            if len(clean_ts) == 10:
-                clean_ts += ' 12:00:00'
-            dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
-            days_inactive = max(0, (now_dt - dt).days)
-        except Exception:
-            days_inactive = 0
-
-    a_dict['dias_sin_cambio'] = days_inactive
-    a_dict['is_stagnant'] = bool(days_inactive >= 7 and a_dict.get('estado') != 'completada')
-    return a_dict
-
-
-def check_and_notify_stagnant_activities(user_id=None, cursor=None, conn=None):
-    """
-    Detecta actividades sin avance/cambio en estado != 'completada' durante >= 7 días.
-    Emite una notificación de advertencia al cumplir 7 días y de forma recurrente cada 7 días mientras no cambie de estado.
-    """
-    should_close = False
-    if not cursor:
-        if not conn:
-            conn = get_db()
-            should_close = True
-        cursor = conn.cursor()
-
-    now_dt = get_peru_now().replace(tzinfo=None)
-    now_peru_str = get_peru_now_str()
-
-    query = '''
-        SELECT a.id, a.bitacora_id, a.descripcion, a.estado, a.created_at, a.updated_at,
-               a.last_stagnant_notified_at, a.created_by_user_id,
-               b.user_id as bitacora_user_id, b.colaborador, b.fecha as bitacora_fecha
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        WHERE a.estado != 'completada'
-          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-          AND COALESCE(a.rollover_dismissed, 0) = 0
-          AND NOT EXISTS (
-              SELECT 1 FROM actividades a_child
-              JOIN bitacoras b_child ON a_child.bitacora_id = b_child.id
-              WHERE a_child.parent_task_id = a.id
-                AND COALESCE(a_child.tipo_vinculo, 'continuacion') IN ('', 'continuacion')
-                AND b_child.fecha > b.fecha
-          )
-    '''
-    params = []
-    if user_id:
-        query += ' AND (b.user_id = ? OR a.created_by_user_id = ?)'
-        params.extend([user_id, user_id])
-
-    query += ' ORDER BY a.id ASC'
-    rows = cursor.execute(query, params).fetchall()
-
-    notified_items = []
-    stagnant_items = []
-
-    for r in rows:
-        act = dict(r)
-        last_touch_str = act.get('updated_at') or act.get('created_at')
-        if not last_touch_str and act.get('bitacora_fecha'):
-            last_touch_str = f"{act['bitacora_fecha']} 12:00:00"
-
-        last_touch_dt = None
-        if last_touch_str:
-            try:
-                clean_ts = str(last_touch_str).strip()
-                if 'T' in clean_ts:
-                    clean_ts = clean_ts.replace('T', ' ').split('.')[0].split('+')[0]
-                else:
-                    clean_ts = clean_ts.split('.')[0]
-                if len(clean_ts) == 10:
-                    clean_ts += ' 12:00:00'
-                last_touch_dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
-            except Exception:
-                pass
-
-        if not last_touch_dt:
-            continue
-
-        days_inactive = (now_dt - last_touch_dt).days
-        if days_inactive >= 7:
-            act['dias_estancada'] = days_inactive
-            stagnant_items.append(act)
-
-            # Verificar si corresponde notificar hoy (notificación inicial a los 7 días y recurrente cada 7 días)
-            last_notif_str = act.get('last_stagnant_notified_at')
-            should_notify = False
-
-            if not last_notif_str:
-                should_notify = True
-            else:
-                try:
-                    clean_n = str(last_notif_str).strip().split('.')[0]
-                    last_notif_dt = datetime.strptime(clean_n[:19], '%Y-%m-%d %H:%M:%S')
-                    days_since_notif = (now_dt - last_notif_dt).days
-                    if days_since_notif >= 7:
-                        should_notify = True
-                except Exception:
-                    should_notify = True
-
-            if should_notify:
-                target_user = act.get('created_by_user_id') or act.get('bitacora_user_id')
-                if target_user:
-                    raw_desc = act.get('descripcion') or 'Actividad sin descripción'
-                    clean_desc = re.sub(r'<[^>]+>', '', raw_desc).strip()
-                    if len(clean_desc) > 80:
-                        clean_desc = clean_desc[:77] + '...'
-
-                    st_label = act.get('estado', 'pendiente').replace('_', ' ').capitalize()
-                    notif_title = f"⚠️ Tarea pendiente sin cambios ({days_inactive} días)"
-                    notif_msg = (
-                        f'La actividad "{clean_desc}" se encuentra en estado "{st_label}" '
-                        f'desde hace {days_inactive} días sin registrar avances ni modificaciones. '
-                        f'Por favor, actualiza su avance o cambia su estado.'
-                    )
-
-                    cursor.execute('''
-                        INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                        VALUES (?, ?, ?, 'warning', 0, ?)
-                    ''', (target_user, notif_title, notif_msg, now_peru_str))
-
-                    cursor.execute('''
-                        UPDATE actividades SET last_stagnant_notified_at = ? WHERE id = ?
-                    ''', (now_peru_str, act['id']))
-
-                    notified_items.append({
-                        'actividad_id': act['id'],
-                        'user_id': target_user,
-                        'dias_inactiva': days_inactive,
-                        'title': notif_title
-                    })
-
-    if conn:
-        try:
-            conn.commit()
-        except Exception:
-            pass
-        if should_close:
-            conn.close()
-
-    return {
-        'stagnant_count': len(stagnant_items),
-        'notified_count': len(notified_items),
-        'stagnant_activities': stagnant_items,
-        'notified': notified_items
-    }
-
-# Configuración de CORS manual y limpia
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,X-MCP-API-Key,X-Vault-Token,Mcp-Session-Id'
     response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS,PATCH'
-    response.headers['Access-Control-Expose-Headers'] = 'Mcp-Session-Id,WWW-Authenticate'
+    response.headers['Access-Control-Expose-Headers'] = 'Mcp-Session-Id,WWW-Authenticate,X-Total-Count,X-Has-More'
     return response
 
-def get_default_hora_inicio(cursor=None):
-    if cursor:
-        try:
-            row = cursor.execute("SELECT value FROM system_settings WHERE key = 'hora_inicio_default'").fetchone()
-            if row and row['value']:
-                return row['value']
-        except Exception:
-            pass
-        return '08:30'
-    try:
-        conn = get_db()
-        row = conn.execute("SELECT value FROM system_settings WHERE key = 'hora_inicio_default'").fetchone()
-        if row and row['value']:
-            return row['value']
-    except Exception:
-        pass
-    return '08:30'
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -410,26 +109,12 @@ def health_check():
         "database": "ok" if db_ok else "error",
         "schema_version": get_schema_version() if db_ok else None,
         "service": "Bitácora API",
-        "version": "2.3.0",
+        "version": "2.4.0",
         "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
         "peru_date": get_peru_today_str(),
         "timezone": "America/Lima (UTC-5)",
     }
     return jsonify(payload), (200 if db_ok else 503)
-
-
-def _mask_vault_secrets(item, fields, unlocked):
-    """Descifra los secretos solo si la bóveda está desbloqueada; si no, los oculta.
-
-    `has_<campo>` indica al cliente si existe un valor guardado aunque esté oculto.
-    """
-    item['secret_locked'] = not unlocked
-    for f in fields:
-        raw = item.get(f)
-        item[f'has_{f}'] = bool(raw)
-        if not raw:
-            continue
-        item[f] = decrypt_vault_secret(raw) if unlocked else None
 
 
 # ==================== CONFIGURACIONES GLOBALES (SETTINGS) ====================
@@ -460,7 +145,7 @@ def handle_settings():
 
     rows = cursor.execute("SELECT key, value FROM system_settings").fetchall()
     settings = {r['key']: r['value'] for r in rows}
-    
+
     defaults = {
         'hora_inicio_default': '08:30',
         'system_title': 'Bitácora Diaria de Actividades | Marketing Alterno Perú',
@@ -480,6 +165,7 @@ def handle_settings():
     conn.close()
     return jsonify(settings), 200
 
+
 @app.route('/api/admin/clean-production-data', methods=['POST', 'OPTIONS'])
 def clean_production_data():
     """Purga todas las bitácoras, actividades y usuarios de prueba dejando el sistema limpio en producción con sólo el admin"""
@@ -488,28 +174,28 @@ def clean_production_data():
     if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
         return jsonify({"error": "Acción deshabilitada en producción por seguridad (borra o inyecta datos masivamente). "
                                  "Actívala temporalmente con ENABLE_MAINTENANCE_ENDPOINTS=1 y un respaldo previo."}), 410
-        
+
     conn = get_db()
     cursor = conn.cursor()
     try:
         cursor.execute("UPDATE actividades SET parent_task_id = NULL")
         cursor.execute("UPDATE users SET team_id = NULL")
         cursor.execute("UPDATE teams SET lider_id = NULL")
-        
+
         cursor.execute("DELETE FROM actividades")
         cursor.execute("DELETE FROM bitacoras")
         cursor.execute("DELETE FROM buzon_votos")
         cursor.execute("DELETE FROM buzon_sugerencias")
-        
+
         for tbl in ['tasks', 'audit_logs', 'notifications', 'evidencias']:
             try:
                 cursor.execute(f"DELETE FROM {tbl}")
             except Exception:
                 pass
-                
+
         cursor.execute("DELETE FROM teams")
         cursor.execute("DELETE FROM users WHERE username != 'admin'")
-        
+
         cursor.execute('''
             INSERT INTO system_settings (key, value, updated_at) VALUES ('system_mode', 'production', CURRENT_TIMESTAMP)
             ON CONFLICT(key) DO UPDATE SET value = 'production', updated_at = CURRENT_TIMESTAMP
@@ -529,6 +215,7 @@ def clean_production_data():
         conn.close()
         return jsonify({"error": f"Error al limpiar datos: {str(e)}"}), 500
 
+
 @app.route('/api/admin/seed-demo-data', methods=['POST', 'OPTIONS'])
 def seed_demo_data():
     """Restaura los datos de prueba (usuarios, equipos y bitácoras de ejemplo) para modo demostración"""
@@ -537,11 +224,11 @@ def seed_demo_data():
     if os.environ.get('ENABLE_MAINTENANCE_ENDPOINTS') != '1':
         return jsonify({"error": "Acción deshabilitada en producción por seguridad (borra o inyecta datos masivamente). "
                                  "Actívala temporalmente con ENABLE_MAINTENANCE_ENDPOINTS=1 y un respaldo previo."}), 410
-        
+
     try:
         from seed_data import seed_team_and_activities
         seed_team_and_activities()
-        
+
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute('''
@@ -564,8 +251,6 @@ def seed_demo_data():
 
 # ==================== GESTIÓN DE ARCHIVOS Y EVIDENCIAS ====================
 
-# Extensiones permitidas para evidencias. Se excluyen deliberadamente html/svg/js/xml
-# porque se servirían desde el mismo dominio y permitirían XSS almacenado.
 ALLOWED_UPLOAD_EXTENSIONS = {
     'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'heic',
     'pdf', 'txt', 'csv', 'log',
@@ -588,16 +273,15 @@ def _upload_ext(name):
 def upload_file():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     try:
         os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-        # Caso 1: Archivo enviado vía multipart/form-data (explorador o drag & drop)
         if 'file' in request.files:
             file = request.files['file']
             if not file or file.filename == '':
                 return jsonify({"error": "No se seleccionó ningún archivo"}), 400
-                
+
             orig_filename = file.filename or 'evidencia'
             safe_name = secure_filename(orig_filename)
             if not safe_name:
@@ -608,10 +292,10 @@ def upload_file():
             unique_name = f"{timestamp}_{safe_name}"
             filepath = os.path.join(UPLOAD_FOLDER, unique_name)
             file.save(filepath)
-            
+
             file_size = os.path.getsize(filepath)
             mime_type = file.content_type or 'application/octet-stream'
-            
+
             return jsonify({
                 "url": f"/api/uploads/{unique_name}",
                 "nombre": orig_filename,
@@ -619,7 +303,6 @@ def upload_file():
                 "tamano": file_size
             }), 201
 
-        # Caso 2: Imagen pegada como Base64 (capturas con Ctrl+V)
         data = request.get_json() or {}
         base64_data = data.get('base64')
         if base64_data:
@@ -635,7 +318,6 @@ def upload_file():
                 base64_str = base64_data
                 mime_type = 'image/png'
 
-            # Las capturas pegadas solo pueden ser imágenes rasterizadas
             if mime_type not in BASE64_MIME_EXT:
                 return jsonify({"error": "Solo se permiten capturas de imagen (PNG, JPG, GIF, WEBP)"}), 400
             if _upload_ext(safe_nombre) not in BASE64_MIME_EXT.values():
@@ -651,9 +333,9 @@ def upload_file():
                 return jsonify({"error": "La imagen pegada no tiene un formato válido"}), 400
             with open(filepath, 'wb') as f:
                 f.write(binary_bytes)
-                
+
             file_size = len(binary_bytes)
-            
+
             return jsonify({
                 "url": f"/api/uploads/{unique_name}",
                 "nombre": safe_nombre,
@@ -665,12 +347,12 @@ def upload_file():
     except Exception as e:
         return jsonify({"error": f"Error al procesar el archivo: {str(e)}"}), 500
 
+
 @app.route('/api/uploads/<path:filename>', methods=['GET'])
 def serve_uploaded_file(filename):
-    # Archivos que el navegador podría ejecutar/renderizar (html, svg, etc. subidos antes del
-    # endurecimiento) se fuerzan como descarga para evitar XSS desde el mismo dominio.
     as_attachment = _upload_ext(filename) not in INLINE_UPLOAD_EXTENSIONS
     return send_from_directory(UPLOAD_FOLDER, filename, as_attachment=as_attachment)
+
 
 # ==================== AUTHENTICATION ====================
 
@@ -678,17 +360,17 @@ def serve_uploaded_file(filename):
 def login():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     data = request.get_json() or {}
     username = (data.get('username') or '').strip().lower()
     password = data.get('password') or ''
-    
+
     if not username or not password:
         return jsonify({"error": "Usuario y contraseña requeridos"}), 400
 
     if login_is_throttled(username):
         return jsonify({"error": "Demasiados intentos fallidos. Espera 15 minutos o contacta al administrador."}), 429
-        
+
     conn = get_db()
     cursor = conn.cursor()
     user = cursor.execute('''
@@ -699,14 +381,14 @@ def login():
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE LOWER(u.username) = ?
     ''', (username,)).fetchone()
-    
+
     if not user:
         register_login_failure(username)
         return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
-        
+
     if not user['is_active']:
         return jsonify({"error": "Usuario desactivado. Contacta al administrador"}), 403
-        
+
     stored_hash = user['password_hash']
     password_matches = False
     try:
@@ -714,19 +396,18 @@ def login():
     except Exception:
         password_matches = False
 
-    # Compatibilidad con contraseñas legadas en texto plano: se aceptan una vez y se migran a hash
     if not password_matches and stored_hash and stored_hash == password:
         password_matches = True
         stored_hash = generate_password_hash(password)
         cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (stored_hash, user['id']))
         conn.commit()
-        
+
     if not password_matches:
         register_login_failure(username)
         return jsonify({"error": "Usuario o contraseña incorrectos"}), 401
 
     clear_login_failures(username)
-        
+
     role_name = 'analista' if user['role'] in ('operador', 'analista') else user['role']
     is_leader = (user['lider_id'] == user['id']) or (role_name == 'lider') or (role_name == 'admin')
     user_dict = {
@@ -741,46 +422,46 @@ def login():
         "is_leader": is_leader,
         "must_change_password": bool(user['must_change_password'])
     }
-    
+
     return jsonify({
         "message": "Autenticación exitosa",
         "user": user_dict,
         "token": issue_token(user['id'], stored_hash)
     }), 200
 
+
 @app.route('/api/auth/change-password', methods=['POST', 'OPTIONS'])
 def change_password():
     """Permite a cualquier usuario cambiar su contraseña validando la anterior, o al admin actualizarla."""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     data = request.get_json() or {}
     user_id = data.get('user_id')
     current_password = data.get('current_password') or ''
     new_password = (data.get('new_password') or '').strip()
-    
+
     if not user_id:
         return jsonify({"error": "Identificador de usuario requerido"}), 400
-        
+
     pw_error = validate_new_password(new_password)
     if pw_error:
         return jsonify({"error": pw_error}), 400
-        
+
     conn = get_db()
     cursor = conn.cursor()
     user = cursor.execute("SELECT id, username, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
-    
+
     if not user:
         conn.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
-        
+
     stored_hash = user['password_hash']
     acting_user = getattr(g, 'current_user', None) or {}
     is_self_change = int(user['id']) == int(acting_user.get('id', -1))
     if not is_self_change and acting_user.get('role') != 'admin':
         conn.close()
         return jsonify({"error": "Solo un administrador puede cambiar la contraseña de otro usuario"}), 403
-    # Cambiar la propia contraseña exige siempre la contraseña actual
     if is_self_change and not current_password:
         conn.close()
         return jsonify({"error": "Debes ingresar tu contraseña actual"}), 400
@@ -792,58 +473,56 @@ def change_password():
             password_matches = (stored_hash == current_password)
         if not password_matches and stored_hash == current_password:
             password_matches = True
-            
+
         if not password_matches:
             conn.close()
             return jsonify({"error": "La contraseña actual es incorrecta"}), 400
         if current_password == new_password:
             conn.close()
             return jsonify({"error": "La nueva contraseña debe ser distinta de la actual"}), 400
-            
+
     new_hash = generate_password_hash(new_password)
-    # Cambio propio: deja de ser temporal. Cambio hecho por un admin: es temporal, el usuario debe cambiarla.
     cursor.execute("UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?",
                    (new_hash, 0 if is_self_change else 1, user_id))
     conn.commit()
     conn.close()
-    
+
     resp = {
         "success": True,
         "message": "Contraseña actualizada exitosamente"
     }
-    # Las sesiones previas quedan invalidadas: entregar un token nuevo a quien cambió su propia clave
     if is_self_change:
         resp["token"] = issue_token(user['id'], new_hash)
     return jsonify(resp), 200
+
 
 @app.route('/api/auth/profile', methods=['PUT', 'OPTIONS'])
 def update_profile():
     """Permite al propio usuario actualizar su nombre, correo, teléfono y opcionalmente su contraseña sin poder modificar roles ni equipos."""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     data = request.get_json() or {}
     user_id = data.get('user_id')
     if not user_id:
         return jsonify({"error": "Identificador de usuario requerido"}), 400
-        
+
     full_name = (data.get('full_name') or '').strip()
     email = (data.get('email') or '').strip()
     phone = (data.get('phone') or '').strip()
     current_password = data.get('current_password') or ''
     new_password = (data.get('new_password') or '').strip()
-    
+
     if not full_name:
         return jsonify({"error": "El nombre completo es obligatorio"}), 400
-        
+
     conn = get_db()
     cursor = conn.cursor()
     u = cursor.execute("SELECT id, username, password_hash, role, team_id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
     if not u:
         conn.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
-        
-    # Si desea cambiar contraseña
+
     if new_password:
         pw_error = validate_new_password(new_password)
         if pw_error:
@@ -852,7 +531,7 @@ def update_profile():
         if not current_password:
             conn.close()
             return jsonify({"error": "Debes ingresar tu contraseña actual para establecer una nueva"}), 400
-            
+
         stored_hash = u['password_hash']
         password_matches = False
         try:
@@ -861,11 +540,11 @@ def update_profile():
             password_matches = (stored_hash == current_password)
         if not password_matches and stored_hash == current_password:
             password_matches = True
-            
+
         if not password_matches:
             conn.close()
             return jsonify({"error": "La contraseña actual es incorrecta"}), 400
-            
+
         new_hash = generate_password_hash(new_password)
         cursor.execute("""
             UPDATE users 
@@ -879,9 +558,9 @@ def update_profile():
             SET full_name = ?, email = ?, phone = ?
             WHERE id = ?
         """, (full_name, email, phone, user_id))
-        
+
     conn.commit()
-    
+
     updated_u = cursor.execute("""
         SELECT u.id, u.username, u.email, u.full_name, u.role, u.phone, u.team_id, u.is_active,
                t.nombre as team_name,
@@ -890,367 +569,20 @@ def update_profile():
         LEFT JOIN teams t ON u.team_id = t.id
         WHERE u.id = ?
     """, (user_id,)).fetchone()
-    
+
     conn.close()
-    
+
     resp = {
         "success": True,
         "message": "Perfil actualizado correctamente",
         "user": dict(updated_u)
     }
-    # Cambiar la contraseña invalida el token anterior: entregar uno nuevo para no cerrar la sesión
     if new_hash:
         resp["token"] = issue_token(user_id, new_hash)
     return jsonify(resp), 200
 
-# ==================== USERS CRUD ====================
 
-@app.route('/api/users', methods=['GET'])
-def get_users_list():
-    conn = get_db()
-    users = conn.execute('''
-        SELECT u.id, u.username, u.email, u.full_name, u.role, u.phone, u.team_id, u.is_active,
-               t.nombre as team_name,
-               CASE WHEN t.lider_id = u.id THEN 1 ELSE 0 END as is_team_leader
-        FROM users u
-        LEFT JOIN teams t ON u.team_id = t.id
-        WHERE u.is_active = 1
-        ORDER BY u.full_name ASC
-    ''').fetchall()
-    conn.close()
-    return jsonify([dict(u) for u in users])
-
-@app.route('/api/admin/users', methods=['GET', 'POST', 'OPTIONS'])
-def admin_users():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if request.method == 'GET':
-        users = cursor.execute('''
-            SELECT u.id, u.username, u.email, u.full_name, u.role, u.phone, u.team_id, u.is_active, u.created_at,
-                   t.nombre as team_name,
-                   CASE WHEN t.lider_id = u.id THEN 1 ELSE 0 END as is_team_leader
-            FROM users u
-            LEFT JOIN teams t ON u.team_id = t.id
-            ORDER BY u.id ASC
-        ''').fetchall()
-        conn.close()
-        return jsonify([dict(u) for u in users])
-        
-    elif request.method == 'POST':
-        data = request.get_json() or {}
-        username = (data.get('username') or '').strip().lower()
-        full_name = (data.get('full_name') or '').strip()
-        email = (data.get('email') or '').strip()
-        phone = (data.get('phone') or '').strip()
-        password = (data.get('password') or '').strip()
-        temp_password = None
-        if not password:
-            temp_password = password = generate_temp_password()
-        role = data.get('role') or 'analista'
-        team_id = data.get('team_id') or None
-        
-        if not username or not full_name:
-            conn.close()
-            return jsonify({"error": "Usuario y Nombre completo son requeridos"}), 400
-            
-        existing = cursor.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
-        if existing:
-            conn.close()
-            return jsonify({"error": f"El nombre de usuario '{username}' ya existe"}), 400
-            
-        pw_error = validate_new_password(password)
-        if pw_error:
-            conn.close()
-            return jsonify({"error": pw_error}), 400
-            
-        p_hash = generate_password_hash(password)
-        # Toda contraseña asignada por un admin es temporal: el colaborador la cambia en su primer ingreso
-        cursor.execute('''
-            INSERT INTO users (username, email, phone, password_hash, full_name, role, team_id, is_active, must_change_password, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1, 1, CURRENT_TIMESTAMP)
-        ''', (username, email, phone, p_hash, full_name, role, team_id))
-        user_id = cursor.lastrowid
-        # Vincular bitácoras previas huérfanas que coincidan por nombre o usuario
-        cursor.execute(
-            "UPDATE OR IGNORE bitacoras SET user_id = ? WHERE user_id IS NULL AND (LOWER(TRIM(colaborador)) = LOWER(TRIM(?)) OR LOWER(TRIM(colaborador)) = LOWER(TRIM(?)))",
-            (user_id, full_name, username),
-        )
-        conn.commit()
-        
-        new_u = cursor.execute("SELECT id, username, email, phone, full_name, role, team_id FROM users WHERE id = ?", (user_id,)).fetchone()
-        conn.close()
-        resp = {"message": "Usuario creado con éxito", "user": dict(new_u)}
-        if temp_password:
-            resp["temp_password"] = temp_password
-        return jsonify(resp), 201
-
-@app.route('/api/admin/users/<int:user_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def admin_user_detail(user_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if request.method == 'PUT':
-        data = request.get_json() or {}
-        raw_username = (data.get('username') or '').strip().lower()
-        full_name = data.get('full_name')
-        email = data.get('email')
-        phone = data.get('phone')
-        role = data.get('role')
-        team_id = data.get('team_id')
-        is_active = data.get('is_active', 1)
-        password = data.get('password')
-        
-        current_u = cursor.execute("SELECT id, username FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not current_u:
-            conn.close()
-            return jsonify({"error": "Usuario no encontrado"}), 404
-            
-        target_username = current_u['username']
-        if raw_username and raw_username != current_u['username'].lower():
-            if current_u['username'] == 'admin':
-                conn.close()
-                return jsonify({"error": "No se puede renombrar el usuario de la cuenta root admin"}), 400
-            # Validar que no exista otro con ese username
-            dup = cursor.execute("SELECT id FROM users WHERE LOWER(username) = ? AND id != ?", (raw_username, user_id)).fetchone()
-            if dup:
-                conn.close()
-                return jsonify({"error": f"El nombre de usuario '{raw_username}' ya está en uso por otro colaborador"}), 400
-            target_username = raw_username
-
-        if password and len(password.strip()) > 0:
-            pw_error = validate_new_password(password.strip())
-            if pw_error:
-                conn.close()
-                return jsonify({"error": pw_error}), 400
-            p_hash = generate_password_hash(password.strip())
-            # Si el admin cambia la contraseña de otra persona, queda como temporal
-            acting = getattr(g, 'current_user', None) or {}
-            must_change = 0 if int(acting.get('id', -1)) == int(user_id) else 1
-            cursor.execute('''
-                UPDATE users SET
-                    username = ?,
-                    full_name = COALESCE(?, full_name),
-                    email = COALESCE(?, email),
-                    phone = COALESCE(?, phone),
-                    role = COALESCE(?, role),
-                    team_id = ?,
-                    is_active = ?,
-                    password_hash = ?,
-                    must_change_password = ?
-                WHERE id = ?
-            ''', (target_username, full_name, email, phone, role, team_id, is_active, p_hash, must_change, user_id))
-        else:
-            cursor.execute('''
-                UPDATE users SET
-                    username = ?,
-                    full_name = COALESCE(?, full_name),
-                    email = COALESCE(?, email),
-                    phone = COALESCE(?, phone),
-                    role = COALESCE(?, role),
-                    team_id = ?,
-                    is_active = ?
-                WHERE id = ?
-            ''', (target_username, full_name, email, phone, role, team_id, is_active, user_id))
-            
-        conn.commit()
-        updated = cursor.execute("SELECT id, username, email, phone, full_name, role, team_id, is_active FROM users WHERE id = ?", (user_id,)).fetchone()
-        conn.close()
-        return jsonify({"message": "Usuario actualizado con éxito", "user": dict(updated)})
-        
-    elif request.method == 'DELETE':
-        if user_id == 1:
-            conn.close()
-            return jsonify({"error": "No se puede eliminar ni desactivar al Administrador Principal"}), 400
-            
-        permanent = request.args.get('permanent', 'false').lower() in ('true', '1', 'yes')
-        mode = request.args.get('mode', '')
-        if mode == 'permanent':
-            permanent = True
-            
-        if permanent:
-            try:
-                # 1. Desvincular liderazgo en equipos
-                cursor.execute("UPDATE teams SET lider_id = NULL WHERE lider_id = ?", (user_id,))
-                # 2. Desvincular dependencias en actividades (tanto hacia sus tareas como de sus tareas)
-                cursor.execute('''
-                    UPDATE actividades SET parent_task_id = NULL 
-                    WHERE parent_task_id IN (SELECT id FROM actividades WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?))
-                ''', (user_id,))
-                cursor.execute('''
-                    UPDATE actividades SET parent_task_id = NULL 
-                    WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?)
-                ''', (user_id,))
-                # 3. Eliminar actividades y bitácoras asociadas
-                cursor.execute('''
-                    DELETE FROM actividades 
-                    WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?)
-                ''', (user_id,))
-                cursor.execute("DELETE FROM bitacoras WHERE user_id = ?", (user_id,))
-                
-                for tbl in ['tasks', 'audit_logs', 'notifications']:
-                    try:
-                        cursor.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (user_id,))
-                    except Exception:
-                        pass
-                        
-                # 4. Eliminar el usuario definitivamente
-                cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-                conn.commit()
-                conn.close()
-                return jsonify({"success": True, "message": "Usuario eliminado definitivamente del sistema"})
-            except Exception as e:
-                conn.rollback()
-                conn.close()
-                return jsonify({"error": f"Error al eliminar usuario: {str(e)}"}), 500
-        else:
-            # Alternar o desactivar
-            curr = cursor.execute("SELECT is_active FROM users WHERE id = ?", (user_id,)).fetchone()
-            if not curr:
-                conn.close()
-                return jsonify({"error": "Usuario no encontrado"}), 404
-            new_active = 0 if curr['is_active'] == 1 else 1
-            msg = "Usuario desactivado correctamente" if new_active == 0 else "Usuario reactivado correctamente"
-            cursor.execute("UPDATE users SET is_active = ? WHERE id = ?", (new_active, user_id))
-            conn.commit()
-            conn.close()
-            return jsonify({"success": True, "message": msg, "is_active": new_active})
-
-# ==================== TEAMS CRUD ====================
-
-@app.route('/api/admin/teams', methods=['GET', 'POST', 'OPTIONS'])
-def admin_teams():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if request.method == 'GET':
-        teams = cursor.execute('''
-            SELECT t.id, t.nombre, t.descripcion, t.lider_id, t.created_at,
-                   u.full_name as lider_nombre, u.username as lider_username
-            FROM teams t
-            LEFT JOIN users u ON t.lider_id = u.id
-            ORDER BY t.nombre ASC
-        ''').fetchall()
-        
-        result = []
-        for t in teams:
-            t_dict = dict(t)
-            members = cursor.execute('''
-                SELECT id, username, full_name, role, email, phone
-                FROM users
-                WHERE team_id = ? AND is_active = 1
-            ''', (t['id'],)).fetchall()
-            t_dict['members'] = [dict(m) for m in members]
-            t_dict['members_count'] = len(members)
-            result.append(t_dict)
-            
-        conn.close()
-        return jsonify(result)
-        
-    elif request.method == 'POST':
-        data = request.get_json() or {}
-        nombre = (data.get('nombre') or '').strip()
-        descripcion = data.get('descripcion', '')
-        lider_id = data.get('lider_id') or None
-        
-        if not nombre:
-            conn.close()
-            return jsonify({"error": "El nombre del equipo es requerido"}), 400
-            
-        cursor.execute('''
-            INSERT INTO teams (nombre, descripcion, lider_id)
-            VALUES (?, ?, ?)
-        ''', (nombre, descripcion, lider_id))
-        team_id = cursor.lastrowid
-        
-        member_ids = data.get('member_ids')
-        effective_members = set()
-        if member_ids and isinstance(member_ids, list):
-            effective_members.update(member_ids)
-            
-        # Si se asignó un líder, actualizar su rol a líder si no es admin y agregarlo al equipo
-        if lider_id:
-            cursor.execute('''
-                UPDATE users SET team_id = ?, role = CASE WHEN role = 'admin' THEN 'admin' ELSE 'lider' END
-                WHERE id = ?
-            ''', (team_id, lider_id))
-            effective_members.add(lider_id)
-            
-        if effective_members:
-            placeholders = ','.join(['?'] * len(effective_members))
-            cursor.execute(f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})", [team_id] + list(effective_members))
-            
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Equipo creado con éxito", "team_id": team_id}), 201
-
-@app.route('/api/admin/teams/<int:team_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def admin_team_detail(team_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    if request.method == 'PUT':
-        data = request.get_json() or {}
-        nombre = data.get('nombre')
-        descripcion = data.get('descripcion')
-        lider_id = data.get('lider_id')
-        member_ids = data.get('member_ids') # opcional lista de IDs para asignar
-        
-        cursor.execute('''
-            UPDATE teams SET
-                nombre = COALESCE(?, nombre),
-                descripcion = COALESCE(?, descripcion),
-                lider_id = ?
-            WHERE id = ?
-        ''', (nombre, descripcion, lider_id, team_id))
-        
-        # Obtener lider efectivo del equipo
-        effective_lider_id = lider_id
-        if effective_lider_id is None:
-            team_row = cursor.execute("SELECT lider_id FROM teams WHERE id = ?", (team_id,)).fetchone()
-            if team_row:
-                effective_lider_id = team_row['lider_id']
-                
-        if effective_lider_id:
-            cursor.execute('''
-                UPDATE users SET team_id = ?, role = CASE WHEN role = 'admin' THEN 'admin' ELSE 'lider' END
-                WHERE id = ?
-            ''', (team_id, effective_lider_id))
-            
-        if member_ids is not None and isinstance(member_ids, list):
-            # Asignar miembros indicados a este equipo, asegurando que el líder también mantenga su team_id
-            cursor.execute("UPDATE users SET team_id = NULL WHERE team_id = ?", (team_id,))
-            effective_members = set(member_ids)
-            if effective_lider_id:
-                effective_members.add(effective_lider_id)
-            if effective_members:
-                placeholders = ','.join(['?'] * len(effective_members))
-                cursor.execute(f"UPDATE users SET team_id = ? WHERE id IN ({placeholders})", [team_id] + list(effective_members))
-                
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Equipo actualizado correctamente"})
-        
-    elif request.method == 'DELETE':
-        cursor.execute("UPDATE users SET team_id = NULL WHERE team_id = ?", (team_id,))
-        cursor.execute("DELETE FROM teams WHERE id = ?", (team_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Equipo eliminado correctamente"})
-
-# ==================== BITACORAS CRUD & TEAM SUPERVISION ====================
+# ==================== BITACORAS CRUD & ROLLOVER ====================
 
 def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
     """
@@ -1303,8 +635,6 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
             if (cr['max_fecha'] or '') > prev_f:
                 completed_max_fecha_by_desc[dk] = cr['max_fecha']
 
-    # Filtrar duplicados entre días previos (quedarnos solo con el eslabón más reciente por descripción)
-    # y cerrar silenciosamente los que ya fueron completados en una fecha igual o posterior.
     filtered_tasks = []
     stale_to_close = []
     seen_desc_keys = set()
@@ -1317,8 +647,6 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
             stale_to_close.append(task['id'])
             continue
         if desc_key in seen_desc_keys:
-            # Existe una copia abierta más reciente de la misma tarea en otro día previo;
-            # descartar rollover del duplicado más antiguo para arrastrar una sola vez.
             cursor.execute("UPDATE actividades SET rollover_dismissed = 1 WHERE id = ?", (task['id'],))
             continue
         seen_desc_keys.add(desc_key)
@@ -1334,15 +662,13 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
     if not filtered_tasks:
         return len(stale_to_close)
 
-    # Orden cronológico ascendente para mantener el orden natural en la bitácora del día
     filtered_tasks.reverse()
 
-    # Buscar si ya existe bitácora de hoy para este colaborador
     today_b = cursor.execute('''
         SELECT id FROM bitacoras
-        WHERE (user_id = ? OR LOWER(TRIM(colaborador)) = LOWER(TRIM(?))) AND fecha = ?
+        WHERE (user_id = ? OR LOWER(TRIM(b_col)) = LOWER(TRIM(?))) AND fecha = ?
         ORDER BY id ASC LIMIT 1
-    ''', (u_id, u_name or '', today_str)).fetchone()
+    '''.replace('b_col', 'colaborador'), (u_id, u_name or '', today_str)).fetchone()
 
     today_b_id = None
     if today_b:
@@ -1370,7 +696,6 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
                 (u_id, today_str)
             ).fetchone()['id']
 
-    # IDs y descripciones de tareas que ya existen hoy (incluyendo enviadas hoy a papelera, para no recrearlas)
     existing_parent_ids = set(
         r[0] for r in cursor.execute(
             "SELECT parent_task_id FROM actividades WHERE bitacora_id = ? AND parent_task_id IS NOT NULL",
@@ -1440,208 +765,34 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
 
     return rolled_count + len(stale_to_close)
 
-# ==================== DELEGACIONES Y USUARIOS DE APOYO ====================
-
-@app.route('/api/admin/delegations', methods=['GET', 'OPTIONS'])
-def get_delegations():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        rows = cursor.execute('''
-            SELECT d.*, 
-                   u_del.full_name as delegate_name, u_del.username as delegate_username,
-                   u_tar.full_name as target_name, u_tar.username as target_username,
-                   t.nombre as team_name,
-                   u_asg.full_name as assigned_by_name
-            FROM user_delegations d
-            JOIN users u_del ON d.delegate_user_id = u_del.id
-            JOIN users u_tar ON d.target_user_id = u_tar.id
-            LEFT JOIN teams t ON d.team_id = t.id
-            LEFT JOIN users u_asg ON d.assigned_by = u_asg.id
-            ORDER BY d.id DESC
-        ''').fetchall()
-        res = [dict(r) for r in rows]
-        conn.close()
-        return jsonify(res), 200
-    except Exception as e:
-        conn.close()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/admin/delegations', methods=['POST', 'OPTIONS'])
-def create_delegation():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    data = request.get_json() or {}
-    delegate_id = data.get('delegate_user_id')
-    target_ids = data.get('target_user_ids')
-    target_id = data.get('target_user_id')
-    assigned_by = data.get('assigned_by', 1)
-    motivo = data.get('motivo', 'Apoyo en registro de actividades')
-    
-    if target_ids is None and target_id is not None:
-        target_ids = [target_id]
-    elif not isinstance(target_ids, list):
-        target_ids = [target_ids] if target_ids else []
-        
-    # Filtrar destinatarios válidos y que no sea el mismo usuario
-    valid_target_ids = []
-    for tid in target_ids:
-        try:
-            n_tid = int(tid)
-            if delegate_id and n_tid != int(delegate_id):
-                valid_target_ids.append(n_tid)
-        except (ValueError, TypeError):
-            pass
-            
-    # Eliminar duplicados preservando orden
-    valid_target_ids = list(dict.fromkeys(valid_target_ids))
-    
-    if not delegate_id or len(valid_target_ids) == 0:
-        return jsonify({"error": "Debe especificar el usuario de apoyo y al menos un colaborador destinatario válido"}), 400
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        created_count = 0
-        names_assigned = []
-        for t_id in valid_target_ids:
-            target_user = cursor.execute("SELECT team_id, full_name FROM users WHERE id = ?", (t_id,)).fetchone()
-            if not target_user:
-                continue
-            
-            team_id = target_user['team_id']
-            existing = cursor.execute('''
-                SELECT id FROM user_delegations 
-                WHERE delegate_user_id = ? AND target_user_id = ?
-            ''', (delegate_id, t_id)).fetchone()
-            
-            if existing:
-                cursor.execute('''
-                    UPDATE user_delegations 
-                    SET is_active = 1, motivo = ?, assigned_by = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                ''', (motivo, assigned_by, existing['id']))
-            else:
-                cursor.execute('''
-                    INSERT INTO user_delegations (delegate_user_id, target_user_id, team_id, motivo, is_active, assigned_by)
-                    VALUES (?, ?, ?, ?, 1, ?)
-                ''', (delegate_id, t_id, team_id, motivo, assigned_by))
-            
-            created_count += 1
-            names_assigned.append(target_user['full_name'])
-        
-        # Notificar al usuario designado como apoyo
-        if created_count > 0:
-            if created_count == 1:
-                notif_msg = f"Has sido designado como apoyo para registrar actividades de {names_assigned[0]}."
-            else:
-                notif_msg = f"Has sido designado como apoyo para {created_count} colaboradores: {', '.join(names_assigned[:3])}{' y otros más' if created_count > 3 else ''}."
-                
-            cursor.execute('''
-                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (?, 'Designación de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
-            ''', (delegate_id, notif_msg))
-        
-        conn.commit()
-        conn.close()
-        return jsonify({
-            "message": f"Se han asignado {created_count} colaborador(es) como apoyo exitosamente",
-            "count": created_count
-        }), 201
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/admin/delegations/<int:del_id>', methods=['DELETE', 'OPTIONS'])
-def delete_delegation(del_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM user_delegations WHERE id = ?", (del_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Delegación eliminada exitosamente"}), 200
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/admin/delegations/by-delegate/<int:del_user_id>', methods=['DELETE', 'OPTIONS'])
-def delete_delegations_by_delegate(del_user_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM user_delegations WHERE delegate_user_id = ?", (del_user_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"message": "Todas las asignaciones de apoyo han sido eliminadas"}), 200
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/api/delegations/my-targets', methods=['GET', 'OPTIONS'])
-def get_my_delegated_targets():
-    if request.method == 'OPTIONS':
-        return jsonify([]), 200
-    user_id = request.args.get('user_id')
-    if not user_id:
-        return jsonify([]), 200
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        u = cursor.execute("SELECT id, role FROM users WHERE id = ?", (user_id,)).fetchone()
-        if not u:
-            conn.close()
-            return jsonify([]), 200
-        
-        if u['role'] == 'admin':
-            # Los administradores tienen acceso global de apoyo para todos los colaboradores activos
-            rows = cursor.execute('''
-                SELECT u.id, u.username, u.full_name, u.role, u.team_id, t.nombre as team_name, 'Acceso Administrativo' as motivo
-                FROM users u
-                LEFT JOIN teams t ON u.team_id = t.id
-                WHERE u.is_active = 1 AND u.id != ?
-                ORDER BY u.full_name ASC
-            ''', (user_id,)).fetchall()
-        else:
-            rows = cursor.execute('''
-                SELECT u.id, u.username, u.full_name, u.role, u.team_id, t.nombre as team_name, d.motivo
-                FROM user_delegations d
-                JOIN users u ON d.target_user_id = u.id
-                LEFT JOIN teams t ON u.team_id = t.id
-                WHERE d.delegate_user_id = ? AND d.is_active = 1 AND u.is_active = 1
-                ORDER BY u.full_name ASC
-            ''', (user_id,)).fetchall()
-        
-        res = [dict(r) for r in rows]
-        conn.close()
-        return jsonify(res), 200
-    except Exception as e:
-        conn.close()
-        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/bitacoras', methods=['GET'])
 def get_bitacoras():
     conn = get_db()
     cursor = conn.cursor()
-    
+
     fecha = request.args.get('fecha')
     colaborador = request.args.get('colaborador')
     team_id = request.args.get('team_id')
     user_id = request.args.get('user_id')
     requesting_user_id = request.args.get('requesting_user_id')
-    
+    is_summary = str(request.args.get('summary') or '').lower() in ('1', 'true', 'yes')
+
+    default_limit = 500 if fecha else 200
+    try:
+        limit = int(request.args.get('limit') or default_limit)
+    except (TypeError, ValueError):
+        limit = default_limit
+    limit = max(1, min(500, limit))
+
+    try:
+        offset = int(request.args.get('offset') or 0)
+    except (TypeError, ValueError):
+        offset = 0
+    offset = max(0, offset)
+
     today_str = get_peru_today_str()
-    # Si la petición incluye la fecha de hoy o no especifica fecha, asegurar rollover catch-up para el usuario activo
-    if not fecha or fecha == today_str:
+    if offset == 0 and (not fecha or fecha == today_str):
         target_uid = user_id or requesting_user_id
         if target_uid:
             target_user = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
@@ -1655,59 +806,53 @@ def get_bitacoras():
                 rolled = rollover_user_open_tasks(cursor, target_user['id'], target_user['full_name'], today_str, get_peru_now_str())
                 if rolled > 0:
                     conn.commit()
-    
-    query = '''
-        SELECT b.*, u.team_id, t.nombre as team_name
-        FROM bitacoras b
-        LEFT JOIN users u ON b.user_id = u.id
-        LEFT JOIN teams t ON u.team_id = t.id
-        WHERE 1=1
-    '''
+
+    where_sql = "WHERE 1=1"
     params = []
-    
-    # PRIVACIDAD ESTRICTA POR ROL:
+
     if requesting_user_id:
         req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
         if req_u:
             r_role = req_u['role']
             if r_role in ('analista', 'operador'):
-                # Los analistas/operadores pueden ver sus propias bitácoras o las que tienen asignadas como apoyo
-                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
+                where_sql += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
                 params.extend([req_u['id'], req_u['full_name'], req_u['username'], req_u['id']])
             elif r_role == 'lider':
-                # Un líder SOLO puede ver bitácoras de los equipos que lidera o pertenece
                 leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
                 if team_id and str(team_id).isdigit() and int(team_id) in leader_teams:
-                    pass  # Se filtrará por team_id exacto más abajo
+                    pass
                 elif leader_teams:
                     placeholders = ','.join(['?'] * len(leader_teams))
-                    query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
+                    where_sql += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
                     params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
                 else:
-                    query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
+                    where_sql += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
                     params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-    
+
     if fecha:
-        query += " AND b.fecha = ?"
+        where_sql += " AND b.fecha = ?"
         params.append(fecha)
     if colaborador:
-        query += " AND (b.colaborador LIKE ? OR u.username LIKE ?)"
+        where_sql += " AND (b.colaborador LIKE ? OR u.username LIKE ?)"
         params.extend([f"%{colaborador}%", f"%{colaborador}%"])
     if team_id:
-        query += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
+        where_sql += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
         params.extend([team_id, team_id])
     if user_id:
-        query += " AND (b.user_id = ? OR u.id = ?)"
+        where_sql += " AND (b.user_id = ? OR u.id = ?)"
         params.extend([user_id, user_id])
-    if fecha:
-        query += " ORDER BY b.fecha DESC, b.id DESC LIMIT 500"
-    else:
-        query += " ORDER BY b.fecha DESC, b.id DESC LIMIT 200"
-    bitacoras = cursor.execute(query, params).fetchall()
+
+    from_sql = '''
+        FROM bitacoras b
+        LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN teams t ON u.team_id = t.id
+    '''
+    total_count = cursor.execute(f"SELECT COUNT(*) {from_sql} {where_sql}", params).fetchone()[0]
+
+    query = f"SELECT b.*, u.team_id, t.nombre as team_name {from_sql} {where_sql} ORDER BY b.fecha DESC, b.id DESC LIMIT ? OFFSET ?"
+    bitacoras = cursor.execute(query, [*params, limit, offset]).fetchall()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    
-    # Carga de actividades en lote (antes: 1 consulta por bitácora → N+1).
-    # El CTE recursivo de tiempo acumulado solo se evalúa en tareas vinculadas (CASE es perezoso).
+
     acts_by_bitacora = {}
     bitacora_ids = [b['id'] for b in bitacoras]
     CHUNK = 400
@@ -1742,67 +887,50 @@ def get_bitacoras():
         b_dict = dict(b)
         acts = acts_by_bitacora.get(b['id'], [])
         formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
-        b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
+        enriched = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
+        if is_summary:
+            b_dict['actividades'] = [slim_actividad_for_summary(item) for item in enriched]
+            b_dict['resumen_texto'] = ''
+            b_dict['is_summary'] = True
+        else:
+            b_dict['actividades'] = enriched
         result.append(b_dict)
-        
+
     conn.close()
-    return jsonify(result)
+    resp = jsonify(result)
+    resp.headers['X-Total-Count'] = str(total_count)
+    resp.headers['X-Has-More'] = '1' if (offset + len(result)) < total_count else '0'
+    return resp
+
 
 @app.route('/api/bitacoras/<int:bitacora_id>', methods=['GET'])
 def get_bitacora(bitacora_id):
     conn = get_db()
     cursor = conn.cursor()
-    b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
+    b = cursor.execute('''
+        SELECT b.*, u.team_id, t.nombre as team_name
+        FROM bitacoras b
+        LEFT JOIN users u ON b.user_id = u.id
+        LEFT JOIN teams t ON u.team_id = t.id
+        WHERE b.id = ?
+    ''', (bitacora_id,)).fetchone()
     if not b:
         conn.close()
         return jsonify({"error": "Bitácora no encontrada"}), 404
-        
+
     b_dict = dict(b)
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    acts = cursor.execute('''
-        SELECT a.*,
-          p.descripcion as parent_task_desc,
-          p.estado as parent_task_estado,
-          COALESCE((
-            WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
-              SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
-              UNION ALL
-              SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
-              FROM actividades prev
-              JOIN lineage l ON prev.id = l.parent_task_id
-              WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
-            )
-            SELECT SUM(duracion_min) FROM lineage
-          ), a.duracion_min) AS tiempo_acumulado_min
-        FROM actividades a
-        LEFT JOIN actividades p ON a.parent_task_id = p.id
-        WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        ORDER BY a.orden ASC, a.id ASC
-    ''', (bitacora_id,)).fetchall()
-    formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
-    b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
+    b_dict['actividades'] = fetch_enriched_bitacora_activities(cursor, bitacora_id, fecha=b_dict.get('fecha'), users_map=users_map)
     conn.close()
     return jsonify(b_dict)
 
-@app.route('/api/bitacoras', methods=['POST', 'OPTIONS'])
-def save_bitacora():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    data = request.get_json() or {}
-    fecha = data.get('fecha')
-    colaborador = data.get('colaborador')
-    area = data.get('area', 'Sistemas')
-    user_id = data.get('user_id')
-    
-    if not fecha or not colaborador:
-        return jsonify({"error": "Fecha y Colaborador son requeridos"}), 400
 
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Canonicalizar user_id y colaborador con la tabla users
-    if not user_id:
+def _resolve_target_owner_and_proxy(cursor, raw_user_id, raw_colaborador, requesting_user_id):
+    """Canonicaliza titular (user_id, colaborador) y valida autorización de Modo Apoyo."""
+    user_id = raw_user_id
+    colaborador = (raw_colaborador or '').strip()
+
+    if not user_id and colaborador:
         u_match = cursor.execute(
             "SELECT id, full_name FROM users WHERE LOWER(full_name) = LOWER(?) OR LOWER(username) = LOWER(?)",
             (colaborador, colaborador)
@@ -1810,52 +938,289 @@ def save_bitacora():
         if u_match:
             user_id = u_match['id']
             colaborador = u_match['full_name']
-    else:
+    elif user_id:
         u_by_id = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (user_id,)).fetchone()
         if u_by_id:
+            user_id = u_by_id['id']
             colaborador = u_by_id['full_name']
 
-    # Verificación de Modo Apoyo / Delegación
-    requesting_user_id = data.get('requesting_user_id')
-    effective_creator_id = requesting_user_id or user_id
-    is_proxy_mode = False
+    if not user_id and requesting_user_id:
+        req_role_row = cursor.execute("SELECT id, role, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+        if req_role_row and req_role_row['role'] != 'admin':
+            user_id = int(req_role_row['id'])
+            colaborador = req_role_row['full_name']
 
+    is_proxy_mode = False
     if requesting_user_id and user_id and int(requesting_user_id) != int(user_id):
         req_u = cursor.execute("SELECT id, role, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
         if not req_u:
-            conn.close()
-            return jsonify({"error": "Usuario solicitante no válido"}), 403
-        
-        if req_u['role'] != 'admin':
-            delegation = cursor.execute('''
-                SELECT id FROM user_delegations 
-                WHERE delegate_user_id = ? AND target_user_id = ? AND is_active = 1
-            ''', (requesting_user_id, user_id)).fetchone()
-            if not delegation:
-                conn.close()
-                return jsonify({"error": "No tienes autorización de apoyo para registrar tareas de este colaborador"}), 403
+            return None, None, False, ("Usuario solicitante no válido", 403)
+        if not user_can_access_owner(dict(req_u, team_id=cursor.execute("SELECT team_id FROM users WHERE id = ?", (requesting_user_id,)).fetchone()['team_id']), user_id):
+            return None, None, False, ("No tienes autorización de apoyo para registrar tareas de este colaborador", 403)
         is_proxy_mode = True
 
-    # REGLA DE CIERRE: El usuario de apoyo NO puede cerrar formalmente la jornada del titular
+    return user_id, colaborador, is_proxy_mode, None
+
+
+def _find_or_create_bitacora(cursor, user_id, colaborador, fecha, area='Sistemas', hora_inicio='', now_peru=None):
+    """Obtiene o crea de forma segura la cabecera de bitácora para (user_id, fecha)."""
+    now_peru = now_peru or get_peru_now_str()
+
+    def _find():
+        if user_id:
+            row = cursor.execute(
+                "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
+                (user_id, fecha)
+            ).fetchone()
+            if not row and colaborador:
+                row = cursor.execute(
+                    "SELECT id FROM bitacoras WHERE user_id IS NULL AND LOWER(colaborador) = LOWER(?) AND fecha = ? ORDER BY id ASC LIMIT 1",
+                    (colaborador, fecha)
+                ).fetchone()
+        else:
+            row = cursor.execute(
+                "SELECT id FROM bitacoras WHERE LOWER(colaborador) = LOWER(?) AND fecha = ? ORDER BY id ASC LIMIT 1",
+                (colaborador, fecha)
+            ).fetchone()
+        return row['id'] if row else None
+
+    b_id = _find()
+    if b_id:
+        return b_id
+
+    eff_hora = hora_inicio or get_default_hora_inicio(cursor)
+    try:
+        cursor.execute('''
+            INSERT INTO bitacoras (
+                user_id, fecha, hora_inicio, colaborador, area,
+                pendientes, necesita_apoyo, prioridad_siguiente,
+                tiempo_total_min, estado, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, '', 'No', '', 0, 'generada', ?, ?)
+        ''', (user_id, fecha, eff_hora, colaborador, area or 'Sistemas', now_peru, now_peru))
+        return cursor.lastrowid
+    except sqlite3.IntegrityError:
+        b_id = _find()
+        if not b_id:
+            raise
+        return b_id
+
+
+def _sync_shared_copies_same_day(cursor, owner_user_id, fecha, shared_with_val, shared_uuid, act_payload, now_peru):
+    """Sincroniza copias de una tarea compartida hacia las bitácoras del mismo día de los co-autores."""
+    touched_bitacoras = set()
+    if not shared_with_val or not shared_uuid:
+        return touched_bitacoras
+
+    evidencias_json = act_payload['evidencias_json']
+    counterpart_shared = json.dumps([owner_user_id] if owner_user_id else [])
+
+    for target_uid in shared_with_val:
+        if owner_user_id and str(target_uid) == str(owner_user_id):
+            continue
+        target_u = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
+        if not target_u:
+            continue
+
+        target_b_id = _find_or_create_bitacora(
+            cursor,
+            target_u['id'],
+            target_u['full_name'],
+            fecha,
+            area='Sistemas',
+            hora_inicio=act_payload['hora_inicio'] or get_default_hora_inicio(cursor),
+            now_peru=now_peru,
+        )
+
+        existing_sync_act = cursor.execute(
+            "SELECT id, is_deleted FROM actividades WHERE bitacora_id = ? AND shared_uuid = ?",
+            (target_b_id, shared_uuid)
+        ).fetchone()
+
+        if existing_sync_act:
+            if existing_sync_act['is_deleted']:
+                continue
+            cursor.execute('''
+                UPDATE actividades SET
+                    hora_inicio = ?,
+                    hora_fin = ?,
+                    duracion_min = ?,
+                    tipo_trabajo = ?,
+                    descripcion = ?,
+                    para_cliente = ?,
+                    estado = ?,
+                    evidencias = ?,
+                    shared_with = ?,
+                    updated_at = ?
+                WHERE id = ?
+            ''', (
+                act_payload['hora_inicio'],
+                act_payload['hora_fin'],
+                act_payload['duracion_min'],
+                act_payload['tipo_trabajo'],
+                act_payload['descripcion'],
+                act_payload['para_cliente'],
+                act_payload['estado'],
+                evidencias_json,
+                counterpart_shared,
+                now_peru,
+                existing_sync_act['id']
+            ))
+        else:
+            next_ord = cursor.execute(
+                "SELECT COALESCE(MAX(orden), 0) + 1 FROM actividades WHERE bitacora_id = ?",
+                (target_b_id,)
+            ).fetchone()[0]
+            cursor.execute('''
+                INSERT INTO actividades (
+                    bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
+                    tipo_trabajo, descripcion, para_cliente, estado,
+                    evidencias, shared_with, shared_uuid, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                target_b_id,
+                next_ord,
+                act_payload['hora_inicio'],
+                act_payload['hora_fin'],
+                act_payload['duracion_min'],
+                act_payload['tipo_trabajo'],
+                act_payload['descripcion'],
+                act_payload['para_cliente'],
+                act_payload['estado'],
+                evidencias_json,
+                counterpart_shared,
+                shared_uuid,
+                now_peru,
+                now_peru
+            ))
+
+        touched_bitacoras.add(target_b_id)
+    return touched_bitacoras
+
+
+@app.route('/api/bitacoras/header', methods=['PATCH', 'POST', 'OPTIONS'])
+@app.route('/api/bitacoras/<int:bitacora_id>/header', methods=['PATCH', 'POST', 'OPTIONS'])
+def update_bitacora_header(bitacora_id=None):
+    """Actualiza atómicamente solo la cabecera/cierre de una bitácora sin reenviar ni pisar `actividades[]`."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json() or {}
+    conn = get_db()
+    cursor = conn.cursor()
+    now_peru = get_peru_now_str()
+    requesting_user_id = data.get('requesting_user_id') or (getattr(g, 'current_user', None) or {}).get('id')
+
+    target_b = None
+    if bitacora_id is not None:
+        target_b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
+        if not target_b:
+            conn.close()
+            return jsonify({"error": "Bitácora no encontrada"}), 404
+        user_id = target_b['user_id']
+        colaborador = target_b['colaborador']
+        fecha = target_b['fecha']
+        is_proxy_mode = bool(requesting_user_id and user_id and int(requesting_user_id) != int(user_id))
+    else:
+        raw_b_id = data.get('id') or data.get('bitacora_id')
+        fecha = (data.get('fecha') or '').strip()
+        user_id, colaborador, is_proxy_mode, err = _resolve_target_owner_and_proxy(
+            cursor, data.get('user_id'), data.get('colaborador'), requesting_user_id
+        )
+        if err:
+            conn.close()
+            return jsonify({"error": err[0]}), err[1]
+
+        if raw_b_id and str(raw_b_id).isdigit():
+            row = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (int(raw_b_id),)).fetchone()
+            if row and (not fecha or row['fecha'] == fecha) and (
+                row['user_id'] is None or not user_id or str(row['user_id']) == str(user_id)
+            ):
+                target_b = row
+                bitacora_id = row['id']
+                fecha = row['fecha']
+                colaborador = colaborador or row['colaborador']
+                user_id = user_id or row['user_id']
+
+        if not target_b:
+            if not fecha or not (colaborador or user_id):
+                conn.close()
+                return jsonify({"error": "Se requiere bitacora_id o (fecha y colaborador/user_id)"}), 400
+            bitacora_id = _find_or_create_bitacora(
+                cursor,
+                user_id,
+                colaborador,
+                fecha,
+                area=data.get('area') or 'Sistemas',
+                hora_inicio=data.get('hora_inicio') or '',
+                now_peru=now_peru,
+            )
+            target_b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
+
+    allowed_cols = (
+        'hora_inicio', 'area', 'pendientes', 'necesita_apoyo',
+        'apoyo_detalle', 'prioridad_siguiente', 'resumen_texto', 'estado'
+    )
+    updates = []
+    params = []
+    for col in allowed_cols:
+        if col in data and data[col] is not None:
+            val = data[col]
+            if col == 'estado' and is_proxy_mode and val in ('completada', 'cerrada', 'cerrada_sistema'):
+                val = target_b['estado'] or 'generada'
+            updates.append(f"{col} = ?")
+            params.append(str(val))
+
+    if updates:
+        updates.append("updated_at = ?")
+        params.append(now_peru)
+        params.append(bitacora_id)
+        cursor.execute(f"UPDATE bitacoras SET {', '.join(updates)} WHERE id = ?", params)
+        conn.commit()
+
+    updated_b = dict(cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone())
+    conn.close()
+    return jsonify({
+        "success": True,
+        "bitacora_id": bitacora_id,
+        "header": updated_b,
+    }), 200
+
+
+@app.route('/api/bitacoras', methods=['POST', 'OPTIONS'])
+def save_bitacora():
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json() or {}
+    fecha = data.get('fecha')
+    colaborador = data.get('colaborador')
+    area = data.get('area', 'Sistemas')
+    user_id = data.get('user_id')
+
+    if not fecha or not colaborador:
+        return jsonify({"error": "Fecha y Colaborador son requeridos"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    requesting_user_id = data.get('requesting_user_id')
+    user_id, colaborador, is_proxy_mode, err = _resolve_target_owner_and_proxy(
+        cursor, user_id, colaborador, requesting_user_id
+    )
+    if err:
+        conn.close()
+        return jsonify({"error": err[0]}), err[1]
+
+    effective_creator_id = requesting_user_id or user_id
+
     estado_req = data.get('estado', 'generada')
     if is_proxy_mode and estado_req in ('completada', 'cerrada', 'cerrada_sistema'):
         estado_to_save = 'generada'
     else:
         estado_to_save = estado_req
 
-    # Modo de sincronización:
-    #  - 'replace' (por defecto): el cliente es la fuente de verdad para lo que envía.
-    #  - 'merge': push de un borrador local potencialmente desactualizado; solo agrega lo nuevo
-    #    y nunca pisa cambios más recientes del servidor.
     sync_mode = str(data.get('sync_mode') or 'replace').lower()
     is_merge = sync_mode == 'merge'
-
-    # Un usuario no administrador no puede crear bitácoras "huérfanas" a nombre libre
-    if not user_id and requesting_user_id:
-        req_role_row = cursor.execute("SELECT role, full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
-        if req_role_row and req_role_row['role'] != 'admin':
-            user_id = int(requesting_user_id)
-            colaborador = req_role_row['full_name']
 
     header_fields = {
         'hora_inicio': data.get('hora_inicio', '') or '',
@@ -1869,7 +1234,6 @@ def save_bitacora():
 
     def _update_header(b_id):
         if is_merge:
-            # Solo completar campos vacíos en el servidor; jamás sobrescribir datos existentes
             sets = ", ".join(
                 f"{k} = CASE WHEN COALESCE({k}, '') = '' THEN ? ELSE {k} END" for k in header_fields
             )
@@ -1908,8 +1272,6 @@ def save_bitacora():
         if not isinstance(actividades_data, list):
             actividades_data = []
 
-        # 1) Resolver la bitácora destino. El id del cliente solo se respeta si corresponde
-        #    exactamente al mismo titular y la misma fecha (evita mover/pisar otras jornadas).
         bitacora_id = None
         raw_b_id = data.get('id')
         if raw_b_id is not None and str(raw_b_id).isdigit():
@@ -1939,15 +1301,13 @@ def save_bitacora():
                 ))
                 bitacora_id = cursor.lastrowid
             except sqlite3.IntegrityError:
-                # Otra petición concurrente creó la bitácora (índice único user_id+fecha)
                 bitacora_id = _find_by_owner_date()
                 if not bitacora_id:
                     raise
                 _update_header(bitacora_id)
 
-        # 2) Emparejar actividades entrantes con las existentes (sin heurísticas posicionales)
         all_rows = [dict(r) for r in cursor.execute(
-            "SELECT id, orden, shared_uuid, client_uid, updated_at, is_deleted, estado, revisado_at FROM actividades WHERE bitacora_id = ? ORDER BY orden ASC, id ASC",
+            "SELECT id, orden, shared_uuid, client_uid, updated_at, updated_by_user_id, is_deleted, estado, revisado_at FROM actividades WHERE bitacora_id = ? ORDER BY orden ASC, id ASC",
             (bitacora_id,)
         ).fetchall()]
         active_by_id = {r['id']: r for r in all_rows if not r.get('is_deleted')}
@@ -1969,7 +1329,6 @@ def save_bitacora():
                 return str(raw)[:80]
             return None
 
-        # Fase 1: id numérico
         for idx, act in enumerate(actividades_data):
             raw = act.get('id')
             if raw is None or not str(raw).isdigit():
@@ -1979,10 +1338,8 @@ def save_bitacora():
                 matched_target_ids[idx] = num
                 used_ids.add(num)
             elif num in deleted_ids_set:
-                # Fue enviada a la papelera: no resucitarla desde un estado desactualizado
                 skip_idx.add(idx)
 
-        # Fase 2: shared_uuid (tareas compartidas)
         for idx, act in enumerate(actividades_data):
             if idx in matched_target_ids or idx in skip_idx:
                 continue
@@ -1998,7 +1355,6 @@ def save_bitacora():
                 if su in deleted_shared:
                     skip_idx.add(idx)
 
-        # Fase 3: client_uid (actividades creadas offline / en vuelo)
         for idx, act in enumerate(actividades_data):
             if idx in matched_target_ids or idx in skip_idx:
                 continue
@@ -2024,14 +1380,21 @@ def save_bitacora():
                 continue
             target_act_id = matched_target_ids.get(idx)
 
-            # En modo merge, si el servidor tiene una versión distinta de la que conocía el
-            # cliente, el servidor gana (evita pisar ediciones hechas desde otro dispositivo).
-            if target_act_id and is_merge:
-                srv_upd = active_by_id[target_act_id].get('updated_at')
+            if target_act_id:
+                srv_row_chk = active_by_id[target_act_id]
+                srv_upd = srv_row_chk.get('updated_at')
                 cli_upd = act.get('updated_at')
-                if not cli_upd or (srv_upd and str(srv_upd) != str(cli_upd)):
-                    conflicts += 1
-                    continue
+                if is_merge:
+                    if not cli_upd or (srv_upd and str(srv_upd) != str(cli_upd)):
+                        conflicts += 1
+                        continue
+                elif cli_upd and srv_upd and str(srv_upd) > str(cli_upd):
+                    # Protección contra sobrescritura concurrente entre Titular y Modo Apoyo:
+                    # si otro usuario actualizó esta actividad más recientemente en el servidor, conservar la versión nueva.
+                    srv_updater = srv_row_chk.get('updated_by_user_id')
+                    if srv_updater and effective_creator_id and int(srv_updater) != int(effective_creator_id):
+                        conflicts += 1
+                        continue
 
             evidencias_clean = sanitize_evidencias(act.get('evidencias', []), act.get('descripcion', ''))
             evidencias_json = json.dumps(evidencias_clean)
@@ -2063,14 +1426,14 @@ def save_bitacora():
                 act_hora_fin = ''
             client_uid = _client_uid_of(act)
 
-            # Una decisión del líder (aprobar/devolver) que el cliente aún no conoce no debe ser
-            # pisada por un autoguardado con el estado viejo (p. ej. volver a 'en_revision').
             estado_to_write = act.get('estado', 'completada')
             if target_act_id:
                 srv_row = active_by_id[target_act_id]
                 srv_rev = srv_row.get('revisado_at')
                 if srv_rev and str(act.get('revisado_at') or '') != str(srv_rev):
                     estado_to_write = srv_row.get('estado') or estado_to_write
+
+            norm_cliente = normalize_client_name(act.get('para_cliente', ''))
 
             if target_act_id:
                 cursor.execute('''
@@ -2093,7 +1456,7 @@ def save_bitacora():
                     duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
-                    normalize_client_name(act.get('para_cliente', '')),
+                    norm_cliente,
                     estado_to_write,
                     evidencias_json,
                     shared_with_json,
@@ -2128,7 +1491,7 @@ def save_bitacora():
                     duracion,
                     act.get('tipo_trabajo', ''),
                     act.get('descripcion', ''),
-                    normalize_client_name(act.get('para_cliente', '')),
+                    norm_cliente,
                     estado_to_write,
                     evidencias_json,
                     shared_with_json,
@@ -2148,104 +1511,23 @@ def save_bitacora():
             if estado_to_write == 'completada' and saved_id:
                 completed_in_save.append(saved_id)
 
-            # Sincronización automática de tarea compartida en paralelo con el otro usuario
             if shared_with_val and shared_uuid:
-                for target_uid in shared_with_val:
-                    if str(target_uid) != str(user_id):
-                        target_u = cursor.execute("SELECT id, full_name FROM users WHERE id = ?", (target_uid,)).fetchone()
-                        if target_u:
-                            target_b = cursor.execute(
-                                "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
-                                (target_u['id'], fecha)
-                            ).fetchone()
-                            if not target_b:
-                                try:
-                                    cursor.execute('''
-                                        INSERT INTO bitacoras (
-                                            user_id, fecha, hora_inicio, colaborador, area,
-                                            pendientes, necesita_apoyo, prioridad_siguiente,
-                                            tiempo_total_min, estado, created_at, updated_at
-                                        ) VALUES (?, ?, ?, ?, 'Sistemas', '', 'No', '', 0, 'generada', ?, ?)
-                                    ''', (target_u['id'], fecha, act_hora_inicio or get_default_hora_inicio(cursor), target_u['full_name'], now_peru, now_peru))
-                                    target_b_id = cursor.lastrowid
-                                except sqlite3.IntegrityError:
-                                    target_b_id = cursor.execute(
-                                        "SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ? ORDER BY id ASC LIMIT 1",
-                                        (target_u['id'], fecha)
-                                    ).fetchone()['id']
-                            else:
-                                target_b_id = target_b['id']
+                touched = _sync_shared_copies_same_day(
+                    cursor, user_id, fecha, shared_with_val, shared_uuid,
+                    {
+                        'hora_inicio': act_hora_inicio,
+                        'hora_fin': act_hora_fin,
+                        'duracion_min': duracion,
+                        'tipo_trabajo': act.get('tipo_trabajo', ''),
+                        'descripcion': act.get('descripcion', ''),
+                        'para_cliente': norm_cliente,
+                        'estado': estado_to_write,
+                        'evidencias_json': evidencias_json,
+                    },
+                    now_peru,
+                )
+                shared_bitacoras_touched.update(touched)
 
-                            existing_sync_act = cursor.execute(
-                                "SELECT id, is_deleted FROM actividades WHERE bitacora_id = ? AND shared_uuid = ?",
-                                (target_b_id, shared_uuid)
-                            ).fetchone()
-
-                            counterpart_shared = json.dumps([user_id])
-
-                            if existing_sync_act:
-                                if existing_sync_act['is_deleted']:
-                                    # El colaborador la descartó: respetar su decisión
-                                    continue
-                                cursor.execute('''
-                                    UPDATE actividades SET
-                                        hora_inicio = ?,
-                                        hora_fin = ?,
-                                        duracion_min = ?,
-                                        tipo_trabajo = ?,
-                                        descripcion = ?,
-                                        para_cliente = ?,
-                                        estado = ?,
-                                        evidencias = ?,
-                                        shared_with = ?,
-                                        updated_at = ?
-                                    WHERE id = ?
-                                ''', (
-                                    act_hora_inicio,
-                                    act_hora_fin,
-                                    duracion,
-                                    act.get('tipo_trabajo', ''),
-                                    act.get('descripcion', ''),
-                                    act.get('para_cliente', ''),
-                                    estado_to_write,
-                                    evidencias_json,
-                                    counterpart_shared,
-                                    now_peru,
-                                    existing_sync_act['id']
-                                ))
-                            else:
-                                next_ord = cursor.execute(
-                                    "SELECT COALESCE(MAX(orden), 0) + 1 FROM actividades WHERE bitacora_id = ?",
-                                    (target_b_id,)
-                                ).fetchone()[0]
-                                cursor.execute('''
-                                    INSERT INTO actividades (
-                                        bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
-                                        tipo_trabajo, descripcion, para_cliente, estado,
-                                        evidencias, shared_with, shared_uuid, created_at, updated_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                ''', (
-                                    target_b_id,
-                                    next_ord,
-                                    act_hora_inicio,
-                                    act_hora_fin,
-                                    duracion,
-                                    act.get('tipo_trabajo', ''),
-                                    act.get('descripcion', ''),
-                                    act.get('para_cliente', ''),
-                                    estado_to_write,
-                                    evidencias_json,
-                                    counterpart_shared,
-                                    shared_uuid,
-                                    now_peru,
-                                    now_peru
-                                ))
-
-                            shared_bitacoras_touched.add(target_b_id)
-
-        # 3) Eliminaciones: SOLO las solicitadas explícitamente por el cliente (deleted_ids).
-        #    Las actividades ausentes del payload ya NO se envían implícitamente a la papelera
-        #    (podían ser tareas compartidas, de apoyo o del rollover que el cliente aún no veía).
         if not is_merge:
             for raw_del in (data.get('deleted_ids') or []):
                 if raw_del is None or not str(raw_del).isdigit():
@@ -2256,19 +1538,16 @@ def save_bitacora():
                     relink_children_before_delete(cursor, [del_id])
                     cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, del_id))
 
-        # 4) Recalcular duraciones netas recursivas (solapamientos anidados) y totales desde la base
         recalculate_bitacora_durations(cursor, bitacora_id, fecha=fecha, now_peru=now_peru)
         for tb_id in shared_bitacoras_touched:
             recalculate_bitacora_durations(cursor, tb_id, fecha=fecha, now_peru=now_peru)
 
-        # 5) Propagar cierre hacia atrás en cadenas de continuación si se completaron tareas
         closed_lineage_ids = []
         if completed_in_save:
             closed_lineage_ids = propagate_completion_across_lineage(cursor, completed_in_save, now_peru)
 
         conn.commit()
-        
-        # Notificar al titular si las actividades fueron ingresadas en Modo Apoyo
+
         if is_proxy_mode:
             try:
                 del_user = cursor.execute("SELECT full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
@@ -2284,29 +1563,8 @@ def save_bitacora():
         users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
         b = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
         b_dict = dict(b)
-        acts = cursor.execute('''
-            SELECT a.*,
-              p.descripcion as parent_task_desc,
-              p.estado as parent_task_estado,
-              CASE WHEN a.parent_task_id IS NULL THEN a.duracion_min ELSE COALESCE((
-                WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
-                  SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
-                  UNION ALL
-                  SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
-                  FROM actividades prev
-                  JOIN lineage l ON prev.id = l.parent_task_id
-                  WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
-                )
-                SELECT SUM(duracion_min) FROM lineage
-              ), a.duracion_min) END AS tiempo_acumulado_min
-            FROM actividades a 
-            LEFT JOIN actividades p ON a.parent_task_id = p.id 
-            WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0) 
-            ORDER BY a.orden ASC, a.id ASC
-        ''', (bitacora_id,)).fetchall()
-        formatted_list = [format_actividad_dict(a, users_map, b_dict.get('fecha')) for a in acts]
-        b_dict['actividades'] = enrich_activities_with_net_info(formatted_list, fecha=b_dict.get('fecha'))
-        
+        b_dict['actividades'] = fetch_enriched_bitacora_activities(cursor, bitacora_id, fecha=b_dict.get('fecha'), users_map=users_map)
+
         conn.close()
         return jsonify({
             "message": "Bitácora guardada con éxito",
@@ -2314,11 +1572,14 @@ def save_bitacora():
             "conflicts": conflicts,
             "closed_lineage_ids": closed_lineage_ids,
         }), 200
-        
+
     except Exception as e:
         conn.rollback()
         conn.close()
         return jsonify({"error": str(e)}), 500
+
+
+# ==================== ACTIVIDADES ATOMIC CRUD & REVISION ====================
 
 def _same_day_shared_siblings(cursor, act_id, shared_uuid):
     """Copias activas de una tarea compartida en bitácoras de OTROS usuarios del MISMO día."""
@@ -2335,55 +1596,9 @@ def _same_day_shared_siblings(cursor, act_id, shared_uuid):
           AND a.bitacora_id != (SELECT bitacora_id FROM actividades WHERE id = ?)
     ''', (shared_uuid, act_id, act_id, act_id)).fetchall()
 
-@app.route('/api/actividades/<int:act_id>/estado', methods=['PATCH', 'OPTIONS'])
-def update_actividad_estado(act_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    data = request.get_json() or {}
-    nuevo_estado = data.get('estado')
-    if not nuevo_estado:
-        return jsonify({"error": "Estado es requerido"}), 400
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    now_peru = get_peru_now_str()
-    act = cursor.execute('''
-        SELECT a.id, a.shared_uuid, a.estado, a.descripcion, b.user_id AS owner_id, b.colaborador
-        FROM actividades a JOIN bitacoras b ON a.bitacora_id = b.id WHERE a.id = ?
-    ''', (act_id,)).fetchone()
-    if not act:
-        conn.close()
-        return jsonify({"error": "Actividad no encontrada"}), 404
-    cursor.execute(
-        "UPDATE actividades SET estado = ?, updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
-        (nuevo_estado, now_peru, act_id)
-    )
-    sib_ids = []
-    for sib in _same_day_shared_siblings(cursor, act_id, act['shared_uuid']):
-        cursor.execute(
-            "UPDATE actividades SET estado = ?, updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
-            (nuevo_estado, now_peru, sib['id'])
-        )
-        sib_ids.append(sib['id'])
 
-    closed_lineage_ids = []
-    if nuevo_estado == 'completada':
-        closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
-    elif nuevo_estado == 'en_revision' and act['estado'] != 'en_revision':
-        _notify_reviewers(cursor, act['owner_id'], act['colaborador'], act['descripcion'])
-    conn.commit()
-    conn.close()
-    return jsonify({
-        "success": True,
-        "id": act_id,
-        "nuevo_estado": nuevo_estado,
-        "closed_lineage_ids": closed_lineage_ids,
-    })
-
-
-def _plain_snippet(html, limit=80):
-    text = re.sub(r'<[^>]+>', ' ', html or '')
-    text = re.sub(r'\s+', ' ', text).strip()
+def _plain_snippet(raw_html, limit=80):
+    text = strip_html_text(raw_html)
     return (text[:limit] + '…') if len(text) > limit else text
 
 
@@ -2408,8 +1623,260 @@ def _notify_reviewers(cursor, owner_id, colaborador, descripcion):
         logger.warning("[Notif revisión] %s", ne)
 
 
+@app.route('/api/actividades', methods=['POST', 'OPTIONS'])
+def create_actividad_atomica():
+    """Crea una única actividad de forma atómica (idempotente por `client_uid`), evitando reenviar toda la bitácora."""
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+
+    data = request.get_json() or {}
+    act_in = data.get('actividad') if isinstance(data.get('actividad'), dict) else data
+    fecha = (data.get('fecha') or act_in.get('fecha') or '').strip()
+    area = (data.get('area') or 'Sistemas').strip()
+    hora_inicio_jornada = (data.get('hora_inicio_jornada') or '').strip()
+
+    conn = get_db()
+    cursor = conn.cursor()
+    now_peru = get_peru_now_str()
+    requesting_user_id = data.get('requesting_user_id') or (getattr(g, 'current_user', None) or {}).get('id')
+
+    raw_b_id = data.get('bitacora_id') or act_in.get('bitacora_id')
+    user_id, colaborador, is_proxy_mode, err = _resolve_target_owner_and_proxy(
+        cursor, data.get('user_id'), data.get('colaborador'), requesting_user_id
+    )
+    if err:
+        conn.close()
+        return jsonify({"error": err[0]}), err[1]
+
+    bitacora_id = None
+    if raw_b_id and str(raw_b_id).isdigit():
+        b_row = cursor.execute("SELECT * FROM bitacoras WHERE id = ?", (int(raw_b_id),)).fetchone()
+        if b_row:
+            acting_user = getattr(g, 'current_user', None)
+            if acting_user and not user_can_access_owner(acting_user, b_row['user_id']):
+                conn.close()
+                return jsonify({"error": "No tienes permisos para modificar esta bitácora"}), 403
+            if not fecha or b_row['fecha'] == fecha:
+                bitacora_id = b_row['id']
+                fecha = b_row['fecha']
+                user_id = user_id or b_row['user_id']
+                colaborador = colaborador or b_row['colaborador']
+                is_proxy_mode = bool(requesting_user_id and user_id and int(requesting_user_id) != int(user_id))
+
+    if not bitacora_id:
+        if not fecha or not (user_id or colaborador):
+            conn.close()
+            return jsonify({"error": "Fecha y Colaborador son requeridos para registrar la actividad"}), 400
+        bitacora_id = _find_or_create_bitacora(
+            cursor, user_id, colaborador, fecha, area=area, hora_inicio=hora_inicio_jornada, now_peru=now_peru
+        )
+
+    effective_creator_id = requesting_user_id or user_id
+    raw_client_uid = act_in.get('client_uid') or (
+        act_in.get('id') if act_in.get('id') is not None and not str(act_in.get('id')).isdigit() else None
+    )
+    client_uid = str(raw_client_uid)[:80] if raw_client_uid and str(raw_client_uid).strip() else None
+
+    # Idempotencia por client_uid en la misma bitácora
+    existing_row = None
+    if client_uid:
+        existing_row = cursor.execute(
+            "SELECT id, is_deleted FROM actividades WHERE bitacora_id = ? AND client_uid = ? LIMIT 1",
+            (bitacora_id, client_uid)
+        ).fetchone()
+        if existing_row and existing_row['is_deleted']:
+            conn.close()
+            return jsonify({"error": "La actividad ya fue eliminada previamente"}), 409
+
+    try:
+        duracion = max(0, int(act_in.get('duracion_min', 0) or 0))
+    except (TypeError, ValueError):
+        duracion = 0
+
+    act_hora_inicio = (act_in.get('hora_inicio') or '').strip()
+    if act_hora_inicio:
+        act_hora_fin = (act_in.get('hora_fin') or '').strip() or calculate_hora_fin(act_hora_inicio, duracion, fecha)
+    else:
+        act_hora_fin = ''
+
+    descripcion = act_in.get('descripcion', '') or ''
+    tipo_trabajo = act_in.get('tipo_trabajo', '') or ''
+    norm_cliente = normalize_client_name(act_in.get('para_cliente', ''))
+    estado = act_in.get('estado', 'en_proceso') or 'en_proceso'
+    comentarios = act_in.get('comentarios', '') or ''
+    tipo_vinculo = act_in.get('tipo_vinculo', 'continuacion') or 'continuacion'
+    parent_task_id = (
+        int(act_in['parent_task_id'])
+        if act_in.get('parent_task_id') and str(act_in['parent_task_id']).isdigit()
+        else None
+    )
+
+    evidencias_clean = sanitize_evidencias(act_in.get('evidencias', []), descripcion)
+    evidencias_json = json.dumps(evidencias_clean)
+
+    shared_with_val = act_in.get('shared_with', [])
+    if not isinstance(shared_with_val, list):
+        try:
+            shared_with_val = json.loads(shared_with_val) if shared_with_val else []
+        except Exception:
+            shared_with_val = []
+    shared_with_json = json.dumps(shared_with_val)
+    shared_uuid = act_in.get('shared_uuid')
+    if shared_with_val and not shared_uuid:
+        shared_uuid = f"sync-{int(time.time()*1000)}-{user_id or 0}"
+
+    try:
+        if existing_row:
+            act_id = existing_row['id']
+            cursor.execute('''
+                UPDATE actividades SET
+                    hora_inicio = ?, hora_fin = ?, duracion_min = ?,
+                    tipo_trabajo = ?, descripcion = ?, para_cliente = ?,
+                    estado = ?, evidencias = ?, shared_with = ?,
+                    shared_uuid = COALESCE(?, shared_uuid),
+                    comentarios = ?, parent_task_id = ?, tipo_vinculo = ?,
+                    updated_by_user_id = ?, updated_at = ?, last_stagnant_notified_at = NULL
+                WHERE id = ?
+            ''', (
+                act_hora_inicio, act_hora_fin, duracion,
+                tipo_trabajo, descripcion, norm_cliente,
+                estado, evidencias_json, shared_with_json,
+                shared_uuid, comentarios, parent_task_id, tipo_vinculo,
+                effective_creator_id, now_peru, act_id
+            ))
+        else:
+            next_orden = cursor.execute(
+                "SELECT COALESCE(MAX(orden), -1) + 1 FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+                (bitacora_id,)
+            ).fetchone()[0]
+            cursor.execute('''
+                INSERT INTO actividades (
+                    bitacora_id, orden, hora_inicio, hora_fin, duracion_min,
+                    tipo_trabajo, descripcion, para_cliente, estado, evidencias,
+                    shared_with, shared_uuid, client_uid, comentarios, parent_task_id, tipo_vinculo,
+                    created_by_user_id, updated_by_user_id, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                bitacora_id, next_orden, act_hora_inicio, act_hora_fin, duracion,
+                tipo_trabajo, descripcion, norm_cliente, estado, evidencias_json,
+                shared_with_json, shared_uuid, client_uid, comentarios, parent_task_id, tipo_vinculo,
+                effective_creator_id, effective_creator_id, now_peru, now_peru
+            ))
+            act_id = cursor.lastrowid
+
+        touched = _sync_shared_copies_same_day(
+            cursor, user_id, fecha, shared_with_val, shared_uuid,
+            {
+                'hora_inicio': act_hora_inicio,
+                'hora_fin': act_hora_fin,
+                'duracion_min': duracion,
+                'tipo_trabajo': tipo_trabajo,
+                'descripcion': descripcion,
+                'para_cliente': norm_cliente,
+                'estado': estado,
+                'evidencias_json': evidencias_json,
+            },
+            now_peru,
+        )
+
+        recalculate_bitacora_durations(cursor, bitacora_id, fecha=fecha, now_peru=now_peru)
+        for tb_id in touched:
+            recalculate_bitacora_durations(cursor, tb_id, fecha=fecha, now_peru=now_peru)
+
+        closed_lineage_ids = []
+        if estado == 'completada':
+            closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id], now_peru)
+        elif estado == 'en_revision':
+            _notify_reviewers(cursor, user_id, colaborador, descripcion)
+
+        if is_proxy_mode and user_id:
+            try:
+                del_user = cursor.execute("SELECT full_name FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
+                del_name = del_user['full_name'] if del_user else "Un colaborador de apoyo"
+                cursor.execute('''
+                    INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
+                    VALUES (?, 'Registro de Apoyo', ?, 'info', 0, CURRENT_TIMESTAMP)
+                ''', (user_id, f"{del_name} registró una actividad de apoyo en tu bitácora del {fecha}."))
+            except Exception as ne:
+                logger.warning("[Notif proxy create] %s", ne)
+
+        conn.commit()
+
+        users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
+        b_info = cursor.execute("SELECT tiempo_total_min FROM bitacoras WHERE id = ?", (bitacora_id,)).fetchone()
+        tiempo_total = b_info['tiempo_total_min'] if b_info else 0
+        enriched_acts = fetch_enriched_bitacora_activities(cursor, bitacora_id, fecha=fecha, users_map=users_map)
+        created_act = next((a for a in enriched_acts if a.get('id') == act_id), None)
+
+        conn.close()
+        return jsonify({
+            "success": True,
+            "bitacora_id": bitacora_id,
+            "actividad": created_act,
+            "bitacora_actividades": enriched_acts,
+            "tiempo_total_min": tiempo_total,
+            "closed_lineage_ids": closed_lineage_ids,
+        }), (200 if existing_row else 201)
+    except Exception as e:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/actividades/<int:act_id>/estado', methods=['PATCH', 'OPTIONS'])
+def update_actividad_estado(act_id):
+    if request.method == 'OPTIONS':
+        return jsonify({}), 200
+    data = request.get_json() or {}
+    nuevo_estado = data.get('estado')
+    if not nuevo_estado:
+        return jsonify({"error": "Estado es requerido"}), 400
+
+    conn = get_db()
+    cursor = conn.cursor()
+    now_peru = get_peru_now_str()
+    acting_uid = (getattr(g, 'current_user', None) or {}).get('id') or data.get('requesting_user_id')
+    act = cursor.execute('''
+        SELECT a.id, a.bitacora_id, a.shared_uuid, a.estado, a.descripcion, b.user_id AS owner_id, b.colaborador, b.fecha AS bitacora_fecha
+        FROM actividades a JOIN bitacoras b ON a.bitacora_id = b.id WHERE a.id = ?
+    ''', (act_id,)).fetchone()
+    if not act:
+        conn.close()
+        return jsonify({"error": "Actividad no encontrada"}), 404
+    cursor.execute(
+        "UPDATE actividades SET estado = ?, updated_by_user_id = COALESCE(?, updated_by_user_id), updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
+        (nuevo_estado, acting_uid, now_peru, act_id)
+    )
+    sib_ids = []
+    for sib in _same_day_shared_siblings(cursor, act_id, act['shared_uuid']):
+        cursor.execute(
+            "UPDATE actividades SET estado = ?, updated_at = ?, last_stagnant_notified_at = NULL WHERE id = ?",
+            (nuevo_estado, now_peru, sib['id'])
+        )
+        sib_ids.append(sib['id'])
+
+    closed_lineage_ids = []
+    if nuevo_estado == 'completada':
+        closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
+    elif nuevo_estado == 'en_revision' and act['estado'] != 'en_revision':
+        _notify_reviewers(cursor, act['owner_id'], act['colaborador'], act['descripcion'])
+    conn.commit()
+
+    primary_b_id = act['bitacora_id']
+    b_info = cursor.execute("SELECT tiempo_total_min FROM bitacoras WHERE id = ?", (primary_b_id,)).fetchone() if primary_b_id else None
+    enriched_acts = fetch_enriched_bitacora_activities(cursor, primary_b_id, fecha=act['bitacora_fecha']) if primary_b_id else []
+    conn.close()
+    return jsonify({
+        "success": True,
+        "id": act_id,
+        "nuevo_estado": nuevo_estado,
+        "closed_lineage_ids": closed_lineage_ids,
+        "bitacora_actividades": enriched_acts,
+        "tiempo_total_min": b_info['tiempo_total_min'] if b_info else 0,
+    })
+
+
 REVISION_DECISIONS = {
-    # decisión -> (nuevo estado, título de la notificación)
     'aprobada_continuar': ('en_proceso', 'Aprobada: puedes continuar'),
     'aprobada_cerrada': ('completada', 'Aprobada y cerrada'),
     'devuelta': ('en_proceso', 'Devuelta con observaciones'),
@@ -2482,11 +1949,12 @@ def revisar_actividad(act_id):
         "closed_lineage_ids": closed_lineage_ids,
     })
 
-@app.route('/api/actividades/<int:act_id>', methods=['GET', 'PUT', 'OPTIONS'])
+
+@app.route('/api/actividades/<int:act_id>', methods=['GET', 'PUT', 'PATCH', 'OPTIONS'])
 def update_actividad_detalle(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     if request.method == 'GET':
         conn = get_db()
         cursor = conn.cursor()
@@ -2514,23 +1982,15 @@ def update_actividad_detalle(act_id):
         return jsonify(d), 200
 
     data = request.get_json() or {}
-    
-    evidencias_json = None
-    if 'evidencias' in data:
-        target_desc = data.get('descripcion')
-        if target_desc is None:
-            conn_temp = get_db()
-            c_desc = conn_temp.execute("SELECT descripcion FROM actividades WHERE id = ?", (act_id,)).fetchone()
-            target_desc = c_desc['descripcion'] if (c_desc and 'descripcion' in c_desc.keys()) else ''
-            conn_temp.close()
-        ev_clean = sanitize_evidencias(data['evidencias'], target_desc)
-        evidencias_json = json.dumps(ev_clean)
-        
+    acting_uid = (getattr(g, 'current_user', None) or {}).get('id') or data.get('requesting_user_id')
+
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
     act = cursor.execute('''
-        SELECT a.id, a.bitacora_id, a.shared_uuid, a.hora_inicio, a.hora_fin, a.duracion_min, b.fecha AS bitacora_fecha
+        SELECT a.id, a.bitacora_id, a.shared_uuid, a.hora_inicio, a.hora_fin, a.duracion_min,
+               a.descripcion, a.tipo_trabajo, a.para_cliente, a.estado, a.evidencias,
+               b.fecha AS bitacora_fecha, b.user_id AS owner_id, b.colaborador
         FROM actividades a
         LEFT JOIN bitacoras b ON a.bitacora_id = b.id
         WHERE a.id = ?
@@ -2538,9 +1998,18 @@ def update_actividad_detalle(act_id):
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
-    
+
+    evidencias_json = None
+    if 'evidencias' in data:
+        target_desc = data.get('descripcion') if data.get('descripcion') is not None else (act['descripcion'] or '')
+        ev_clean = sanitize_evidencias(data['evidencias'], target_desc)
+        evidencias_json = json.dumps(ev_clean)
+
     shared_with_val = data.get('shared_with')
     shared_with_json = json.dumps(shared_with_val) if isinstance(shared_with_val, list) else None
+    eff_shared_uuid = act['shared_uuid']
+    if isinstance(shared_with_val, list) and len(shared_with_val) > 0 and not eff_shared_uuid:
+        eff_shared_uuid = f"sync-{int(time.time()*1000)}-{act_id}-{act['owner_id'] or 0}"
 
     has_parent_key = 1 if 'parent_task_id' in data else 0
     parent_task_id_param = (
@@ -2579,8 +2048,13 @@ def update_actividad_detalle(act_id):
         has_hora_fin_update = 1
         resolved_hora_fin = calculate_hora_fin(eff_hora_inicio, eff_dur, act['bitacora_fecha'])
 
-    # Propagar SOLO el contenido compartido a las copias del mismo día (no a jornadas históricas)
-    siblings = _same_day_shared_siblings(cursor, act_id, act['shared_uuid'])
+    norm_cliente_param = (
+        normalize_client_name(data.get('para_cliente'))
+        if 'para_cliente' in data and data.get('para_cliente') is not None
+        else None
+    )
+
+    siblings = _same_day_shared_siblings(cursor, act_id, eff_shared_uuid)
     affected_bitacoras = set()
     sib_ids = []
     for sib in siblings:
@@ -2604,7 +2078,7 @@ def update_actividad_detalle(act_id):
             data.get('duracion_min'),
             data.get('tipo_trabajo'),
             data.get('descripcion'),
-            normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
+            norm_cliente_param,
             data.get('estado'),
             evidencias_json,
             now_peru,
@@ -2624,9 +2098,11 @@ def update_actividad_detalle(act_id):
             estado = COALESCE(?, estado),
             evidencias = COALESCE(?, evidencias),
             shared_with = COALESCE(?, shared_with),
+            shared_uuid = COALESCE(?, shared_uuid),
             comentarios = COALESCE(?, comentarios),
             parent_task_id = CASE WHEN ? = 1 THEN ? ELSE parent_task_id END,
             tipo_vinculo = COALESCE(?, tipo_vinculo),
+            updated_by_user_id = COALESCE(?, updated_by_user_id),
             updated_at = ?,
             last_stagnant_notified_at = NULL
         WHERE id = ?
@@ -2637,19 +2113,44 @@ def update_actividad_detalle(act_id):
         data.get('duracion_min'),
         data.get('tipo_trabajo'),
         data.get('descripcion'),
-        normalize_client_name(data.get('para_cliente')) if 'para_cliente' in data and data.get('para_cliente') is not None else None,
+        norm_cliente_param,
         data.get('estado'),
         evidencias_json,
         shared_with_json,
+        eff_shared_uuid,
         comentarios_param,
         has_parent_key,
         parent_task_id_param,
         tipo_vinculo_param,
+        acting_uid,
         now_peru,
         act_id
     ))
 
-    # Recalcular duraciones netas recursivas y tiempo_total_min de la bitácora asociada (y copias compartidas)
+    # Si se acaban de añadir colaboradores compartidos a una tarea existente, sincronizar sus copias del día
+    if isinstance(shared_with_val, list) and len(shared_with_val) > 0 and eff_shared_uuid and act['bitacora_fecha']:
+        cur_full = cursor.execute("SELECT * FROM actividades WHERE id = ?", (act_id,)).fetchone()
+        if cur_full:
+            newly_touched = _sync_shared_copies_same_day(
+                cursor,
+                act['owner_id'],
+                act['bitacora_fecha'],
+                shared_with_val,
+                eff_shared_uuid,
+                {
+                    'hora_inicio': cur_full['hora_inicio'] or '',
+                    'hora_fin': cur_full['hora_fin'] or '',
+                    'duracion_min': cur_full['duracion_min'] or 0,
+                    'tipo_trabajo': cur_full['tipo_trabajo'] or '',
+                    'descripcion': cur_full['descripcion'] or '',
+                    'para_cliente': cur_full['para_cliente'] or '',
+                    'estado': cur_full['estado'] or 'en_proceso',
+                    'evidencias_json': cur_full['evidencias'] or '[]',
+                },
+                now_peru,
+            )
+            affected_bitacoras.update(newly_touched)
+
     primary_b_id = act['bitacora_id']
     if primary_b_id:
         affected_bitacoras.add(primary_b_id)
@@ -2657,9 +2158,12 @@ def update_actividad_detalle(act_id):
         recalculate_bitacora_durations(cursor, b_id, now_peru=now_peru)
 
     closed_lineage_ids = []
-    cur_estado_row = cursor.execute("SELECT estado FROM actividades WHERE id = ?", (act_id,)).fetchone()
-    if cur_estado_row and cur_estado_row['estado'] == 'completada':
-        closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
+    cur_estado_row = cursor.execute("SELECT estado, descripcion FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    if cur_estado_row:
+        if cur_estado_row['estado'] == 'completada':
+            closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id] + sib_ids, now_peru)
+        elif cur_estado_row['estado'] == 'en_revision' and act['estado'] != 'en_revision':
+            _notify_reviewers(cursor, act['owner_id'], act['colaborador'], cur_estado_row['descripcion'])
 
     conn.commit()
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
@@ -2671,34 +2175,8 @@ def update_actividad_detalle(act_id):
         b_info = cursor.execute("SELECT fecha, tiempo_total_min FROM bitacoras WHERE id = ?", (primary_b_id,)).fetchone()
         b_fecha = b_info['fecha'] if b_info else act['bitacora_fecha']
         tiempo_total = b_info['tiempo_total_min'] if b_info else 0
-        all_b_acts = cursor.execute('''
-            SELECT a.*,
-              p.descripcion as parent_task_desc,
-              p.estado as parent_task_estado,
-              CASE WHEN a.parent_task_id IS NULL THEN a.duracion_min ELSE COALESCE((
-                WITH RECURSIVE lineage(id, parent_task_id, duracion_min, depth) AS (
-                  SELECT id, parent_task_id, duracion_min, 1 FROM actividades WHERE id = a.id
-                  UNION ALL
-                  SELECT prev.id, prev.parent_task_id, prev.duracion_min, l.depth + 1
-                  FROM actividades prev
-                  JOIN lineage l ON prev.id = l.parent_task_id
-                  WHERE l.depth < 15 AND prev.id != l.id AND prev.parent_task_id != prev.id
-                )
-                SELECT SUM(duracion_min) FROM lineage
-              ), a.duracion_min) END AS tiempo_acumulado_min
-            FROM actividades a
-            LEFT JOIN actividades p ON a.parent_task_id = p.id
-            WHERE a.bitacora_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-            ORDER BY a.orden ASC, a.id ASC
-        ''', (primary_b_id,)).fetchall()
-        formatted_bitacora_acts = enrich_activities_with_net_info(
-            [format_actividad_dict(r, users_map, b_fecha) for r in all_b_acts],
-            fecha=b_fecha,
-        )
-        for fa in formatted_bitacora_acts:
-            if fa.get('id') == act_id:
-                formatted_updated = fa
-                break
+        formatted_bitacora_acts = fetch_enriched_bitacora_activities(cursor, primary_b_id, fecha=b_fecha, users_map=users_map)
+        formatted_updated = next((fa for fa in formatted_bitacora_acts if fa.get('id') == act_id), None)
 
     if formatted_updated is None:
         updated_act = cursor.execute('''
@@ -2724,10 +2202,10 @@ def get_actividades_pendientes():
     colaborador = request.args.get('colaborador')
     user_id = request.args.get('user_id')
     current_u = getattr(g, 'current_user', None) or {}
-    
+
     conn = get_db()
     cursor = conn.cursor()
-    
+
     query = '''
         SELECT a.*, b.fecha, b.colaborador
         FROM actividades a
@@ -2744,8 +2222,7 @@ def get_actividades_pendientes():
           )
     '''
     params = []
-    
-    # Scoping de privacidad por rol
+
     if current_u.get('role') in ('analista', 'operador'):
         query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
         params.extend([current_u['id'], current_u.get('full_name', ''), current_u['id']])
@@ -2762,7 +2239,7 @@ def get_actividades_pendientes():
     if user_id:
         query += " AND b.user_id = ?"
         params.append(user_id)
-        
+
     query += " ORDER BY a.id DESC LIMIT 50"
     acts = cursor.execute(query, params).fetchall()
     conn.close()
@@ -2787,6 +2264,7 @@ def get_stagnant_actividades():
         "items": res['stagnant_activities']
     })
 
+
 @app.route('/api/bitacoras/<int:bitacora_id>', methods=['DELETE', 'OPTIONS'])
 def delete_bitacora(bitacora_id):
     if request.method == 'OPTIONS':
@@ -2803,19 +2281,20 @@ def delete_bitacora(bitacora_id):
     conn.close()
     return jsonify({"success": True, "message": "Bitácora eliminada"})
 
+
 # ==================== PAPELERA DE RECICLAJE (RETENCIÓN 15 DÍAS) ====================
 
 @app.route('/api/papelera', methods=['GET', 'OPTIONS'])
 def get_papelera():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-    
+
     conn = get_db()
     try:
         cursor = conn.cursor()
         user_id = request.args.get('user_id')
         requesting_user_id = request.args.get('requesting_user_id')
-        
+
         query = '''
             SELECT a.*, b.fecha as bitacora_fecha, b.colaborador as bitacora_colaborador, b.user_id as bitacora_user_id,
                    u.team_id, t.nombre as team_name
@@ -2826,7 +2305,7 @@ def get_papelera():
             WHERE a.is_deleted = 1
         '''
         params = []
-        
+
         if requesting_user_id:
             req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
             if req_u:
@@ -2845,19 +2324,18 @@ def get_papelera():
         elif user_id:
             query += " AND (b.user_id = ? OR u.id = ?)"
             params.extend([user_id, user_id])
-            
+
         query += " ORDER BY a.deleted_at DESC, a.id DESC"
         deleted_rows = cursor.execute(query, params).fetchall()
         users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-        
-        items = []
 
+        items = []
         for row in deleted_rows:
             item = format_actividad_dict(row, users_map)
             deleted_at_str = item.get('deleted_at')
             dias_restantes = 15
             expira_en = None
-            
+
             if deleted_at_str:
                 try:
                     del_dt = datetime.strptime(deleted_at_str.split('.')[0], '%Y-%m-%d %H:%M:%S')
@@ -2869,11 +2347,11 @@ def get_papelera():
                     expira_en = expira_dt.strftime('%Y-%m-%d')
                 except Exception:
                     dias_restantes = 15
-                    
+
             item['dias_restantes'] = dias_restantes
             item['expira_en'] = expira_en
             items.append(item)
-            
+
         return jsonify({
             "success": True,
             "items": items,
@@ -2882,51 +2360,48 @@ def get_papelera():
     finally:
         conn.close()
 
+
 @app.route('/api/papelera/restaurar/<int:act_id>', methods=['POST', 'OPTIONS'])
 def restaurar_actividad(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     data = request.get_json(silent=True) or {}
     target_bitacora_id = data.get('target_bitacora_id')
     target_fecha = data.get('target_fecha')
     target_user_id = data.get('target_user_id')
-        
+
     conn = get_db()
     cursor = conn.cursor()
     now_peru = get_peru_now_str()
-    
+
     act = cursor.execute("SELECT * FROM actividades WHERE id = ?", (act_id,)).fetchone()
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
-        
+
     old_bitacora_id = act['bitacora_id']
     new_bitacora_id = old_bitacora_id
 
-    # Si se especificó una bitácora destino puntual
     if target_bitacora_id and target_bitacora_id != old_bitacora_id:
         target_b = cursor.execute("SELECT id FROM bitacoras WHERE id = ?", (target_bitacora_id,)).fetchone()
         if target_b:
             new_bitacora_id = target_bitacora_id
-    # O si se especificó una fecha destino (ej. hoy) para un usuario
     elif target_fecha and target_user_id:
         existing_b = cursor.execute("SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ?", (target_user_id, target_fecha)).fetchone()
         if existing_b:
             new_bitacora_id = existing_b['id']
 
-    # Restaurar actividad
     cursor.execute('''
         UPDATE actividades 
         SET is_deleted = 0, deleted_at = NULL, rollover_dismissed = 0, bitacora_id = ?, updated_at = ? 
         WHERE id = ?
     ''', (new_bitacora_id, now_peru, act_id))
-    
-    # Recalcular duraciones netas y tiempo total de la bitácora antigua (y de la nueva si cambió)
+
     recalculate_bitacora_durations(cursor, old_bitacora_id, now_peru=now_peru)
     if new_bitacora_id != old_bitacora_id:
         recalculate_bitacora_durations(cursor, new_bitacora_id, now_peru=now_peru)
-    
+
     conn.commit()
 
     restored_row = cursor.execute('''
@@ -2935,26 +2410,27 @@ def restaurar_actividad(act_id):
         JOIN bitacoras b ON a.bitacora_id = b.id
         WHERE a.id = ?
     ''', (act_id,)).fetchone()
-    
+
     users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
     formatted_act = format_actividad_dict(restored_row, users_map) if restored_row else dict(act)
 
     conn.close()
-    
+
     return jsonify({
-        "success": True, 
-        "message": "Actividad restaurada exitosamente", 
+        "success": True,
+        "message": "Actividad restaurada exitosamente",
         "id": act_id,
         "actividad": formatted_act,
         "bitacora_id": new_bitacora_id,
         "bitacora_fecha": restored_row['bitacora_fecha'] if restored_row else None
     })
 
+
 @app.route('/api/papelera/eliminar/<int:act_id>', methods=['DELETE', 'OPTIONS'])
 def eliminar_definitivo_actividad(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     conn = get_db()
     cursor = conn.cursor()
     mark_lineage_rollover_dismissed(cursor, [act_id])
@@ -2962,23 +2438,23 @@ def eliminar_definitivo_actividad(act_id):
     cursor.execute("DELETE FROM actividades WHERE id = ?", (act_id,))
     conn.commit()
     conn.close()
-    
+
     return jsonify({"success": True, "message": "Actividad eliminada definitivamente"})
+
 
 @app.route('/api/papelera/vaciar', methods=['POST', 'OPTIONS'])
 def vaciar_papelera():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     data = request.get_json() or {}
     current_u = getattr(g, 'current_user', None) or {}
     user_role = current_u.get('role', 'analista')
     current_uid = current_u.get('id')
-    
+
     conn = get_db()
     cursor = conn.cursor()
-    
-    # Solo un administrador con intención explícita puede vaciar la papelera de todos los usuarios
+
     if user_role == 'admin' and (data.get('all') or data.get('role') == 'admin') and not data.get('target_user_id'):
         del_ids = [r[0] for r in cursor.execute("SELECT id FROM actividades WHERE is_deleted = 1").fetchall()]
         if del_ids:
@@ -2986,7 +2462,6 @@ def vaciar_papelera():
             relink_children_before_delete(cursor, del_ids)
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1")
     else:
-        # Administrador vaciando la de un usuario específico, o un usuario vaciando su propia papelera
         target_uid = data.get('target_user_id') if (user_role == 'admin' and data.get('target_user_id')) else current_uid
         if target_uid:
             del_ids = [
@@ -3007,314 +2482,48 @@ def vaciar_papelera():
                     SELECT id FROM bitacoras WHERE user_id = ? OR colaborador = (SELECT full_name FROM users WHERE id = ?)
                 )
             ''', (target_uid, target_uid))
-        
+
     conn.commit()
     conn.close()
     return jsonify({"success": True, "message": "Papelera vaciada correctamente"})
+
 
 @app.route('/api/actividades/<int:act_id>/eliminar', methods=['POST', 'DELETE', 'OPTIONS'])
 def soft_delete_actividad(act_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
-        
+
     conn = get_db()
     cursor = conn.cursor()
-    act = cursor.execute("SELECT bitacora_id FROM actividades WHERE id = ?", (act_id,)).fetchone()
+    act = cursor.execute('''
+        SELECT a.bitacora_id, b.fecha AS bitacora_fecha
+        FROM actividades a
+        LEFT JOIN bitacoras b ON a.bitacora_id = b.id
+        WHERE a.id = ?
+    ''', (act_id,)).fetchone()
     if not act:
         conn.close()
         return jsonify({"error": "Actividad no encontrada"}), 404
-        
+
     now_peru = get_peru_now_str()
     mark_lineage_rollover_dismissed(cursor, [act_id])
     cursor.execute("UPDATE actividades SET is_deleted = 1, deleted_at = ? WHERE id = ?", (now_peru, act_id))
-    
-    # Recalcular duraciones netas recursivas y tiempo_total_min (devolviendo el tiempo descontado a tareas contenedoras)
-    recalculate_bitacora_durations(cursor, act['bitacora_id'], now_peru=now_peru)
+
+    primary_b_id = act['bitacora_id']
+    if primary_b_id:
+        recalculate_bitacora_durations(cursor, primary_b_id, now_peru=now_peru)
 
     conn.commit()
+    b_info = cursor.execute("SELECT tiempo_total_min FROM bitacoras WHERE id = ?", (primary_b_id,)).fetchone() if primary_b_id else None
+    enriched_acts = fetch_enriched_bitacora_activities(cursor, primary_b_id, fecha=act['bitacora_fecha']) if primary_b_id else []
     conn.close()
-    return jsonify({"success": True, "message": "Actividad movida a la papelera (retención 15 días)"})
-
-# ==================== SUPERVISIÓN EN VIVO: FEED DE EQUIPO ====================
-
-@app.route('/api/equipo/actividades-en-vivo', methods=['GET', 'OPTIONS'])
-def get_equipo_actividades_en_vivo():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-        
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    fecha = request.args.get('fecha') or get_peru_today_str()
-    requesting_user_id = request.args.get('requesting_user_id')
-    team_id = request.args.get('team_id')
-    
-    query = '''
-        SELECT a.*, b.fecha as bitacora_fecha, b.colaborador, b.user_id, b.area,
-               b.necesita_apoyo, b.apoyo_detalle,
-               u.team_id, t.nombre as team_name, u.full_name as user_full_name, u.phone as colaborador_phone
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON b.user_id = u.id
-        LEFT JOIN teams t ON u.team_id = t.id
-        WHERE b.fecha = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-    '''
-    params = [fecha]
-    
-    if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id, full_name, username FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
-        if req_u:
-            if req_u['role'] in ('analista', 'operador'):
-                query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR LOWER(b.colaborador) = LOWER(?))"
-                params.extend([req_u['id'], req_u['full_name'], req_u['username']])
-            elif req_u['role'] == 'lider':
-                leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
-                if not team_id or team_id == 'all':
-                    if leader_teams:
-                        placeholders = ','.join(['?'] * len(leader_teams))
-                        query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
-                        params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
-                    else:
-                        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
-                        params.extend([req_u['id'], req_u['full_name']])
-                    
-    if team_id and team_id != 'all':
-        query += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
-        params.extend([team_id, team_id])
-        
-    query += " ORDER BY a.updated_at DESC, a.id DESC"
-    rows = cursor.execute(query, params).fetchall()
-    users_map = {u['id']: u['full_name'] for u in cursor.execute("SELECT id, full_name FROM users").fetchall()}
-    
-    feed = [format_actividad_dict(r, users_map) for r in rows]
-    conn.close()
-    
     return jsonify({
         "success": True,
-        "fecha": fecha,
-        "total": len(feed),
-        "actividades": feed
+        "message": "Actividad movida a la papelera (retención 15 días)",
+        "bitacora_actividades": enriched_acts,
+        "tiempo_total_min": b_info['tiempo_total_min'] if b_info else 0,
     })
 
-# ==================== DASHBOARD & ANALYTICS ====================
-
-@app.route('/api/dashboard/stats', methods=['GET'])
-def get_dashboard_stats():
-    team_id = request.args.get('team_id')
-    user_id = request.args.get('user_id')
-    fecha = request.args.get('fecha')
-    fecha_desde = request.args.get('fecha_desde')
-    fecha_hasta = request.args.get('fecha_hasta')
-    requesting_user_id = request.args.get('requesting_user_id')
-    
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Validación de privacidad por rol
-    if requesting_user_id:
-        req_u = cursor.execute("SELECT id, role, team_id FROM users WHERE id = ?", (requesting_user_id,)).fetchone()
-        if req_u:
-            if req_u['role'] in ('analista', 'operador'):
-                user_id = req_u['id']
-                team_id = None
-            elif req_u['role'] == 'lider':
-                if not team_id:
-                    leader_t = cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ? LIMIT 1", (req_u['id'], req_u['team_id'])).fetchone()
-                    if leader_t:
-                        team_id = leader_t['id']
-                    elif req_u['team_id']:
-                        team_id = req_u['team_id']
-    
-    base_filter = "WHERE 1=1"
-    params = []
-    
-    if team_id:
-        base_filter += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
-        params.extend([team_id, team_id])
-    if user_id:
-        base_filter += " AND (b.user_id = ? OR u.id = ?)"
-        params.extend([user_id, user_id])
-    if fecha:
-        base_filter += " AND b.fecha = ?"
-        params.append(fecha)
-    if fecha_desde:
-        base_filter += " AND b.fecha >= ?"
-        params.append(fecha_desde)
-    if fecha_hasta:
-        base_filter += " AND b.fecha <= ?"
-        params.append(fecha_hasta)
-        
-    # 1. Totales generales
-    total_query = f'''
-        SELECT COUNT(DISTINCT b.id) as total_bitacoras,
-               COALESCE(SUM(b.tiempo_total_min), 0) as total_minutos,
-               COUNT(DISTINCT b.colaborador) as total_colaboradores
-        FROM bitacoras b
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter}
-    '''
-    totales = cursor.execute(total_query, params).fetchone()
-    
-    # 2. Desglose de actividades por estado
-    act_filter_query = f'''
-        SELECT a.estado, COUNT(a.id) as cantidad, COALESCE(SUM(a.duracion_min), 0) as minutos
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        GROUP BY a.estado
-    '''
-    act_stats = cursor.execute(act_filter_query, params).fetchall()
-    
-    # 3. Desglose por tipo de trabajo
-    tipo_query = f'''
-        SELECT COALESCE(NULLIF(a.tipo_trabajo, ''), 'No clasificado') as tipo,
-               COUNT(a.id) as cantidad,
-               COALESCE(SUM(a.duracion_min), 0) as minutos
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        GROUP BY tipo
-        ORDER BY minutos DESC
-    '''
-    tipo_stats = cursor.execute(tipo_query, params).fetchall()
-
-    # 3.1 Desglose por cliente / proyecto
-    cliente_query = f'''
-        SELECT COALESCE(NULLIF(a.para_cliente, ''), 'General / Interno') as cliente,
-               COUNT(a.id) as cantidad,
-               COALESCE(SUM(a.duracion_min), 0) as minutos
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        GROUP BY cliente
-        ORDER BY minutos DESC
-        LIMIT 10
-    '''
-    cliente_stats = cursor.execute(cliente_query, params).fetchall()
-    
-    # 4. Desglose por colaborador (calcula duración real desde actividades y evita inflación cartesiana)
-    colab_query = f'''
-        SELECT b.colaborador,
-               u.id as user_id,
-               u.team_id,
-               t.nombre as team_name,
-               COUNT(DISTINCT b.id) as bitacoras_count,
-               COALESCE(SUM(a.duracion_min), 0) as total_minutos,
-               COUNT(a.id) as total_actividades,
-               SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
-        FROM bitacoras b
-        LEFT JOIN users u ON b.user_id = u.id
-        LEFT JOIN teams t ON u.team_id = t.id
-        LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        {base_filter}
-        GROUP BY b.colaborador
-        ORDER BY total_minutos DESC
-    '''
-    colab_stats = cursor.execute(colab_query, params).fetchall()
-    
-    # 5. Colaboradores que requieren apoyo / bloqueos activos (últimos 7 días en hora Perú)
-    seven_days_ago_peru = (get_peru_now() - timedelta(days=7)).strftime('%Y-%m-%d')
-    apoyo_query = f'''
-        SELECT b.id, b.fecha, b.colaborador, b.apoyo_detalle, b.pendientes, t.nombre as team_name
-        FROM bitacoras b
-        LEFT JOIN users u ON b.user_id = u.id
-        LEFT JOIN teams t ON u.team_id = t.id
-        {base_filter} AND b.necesita_apoyo = 'Si' AND b.fecha >= ?
-        ORDER BY b.fecha DESC, b.id DESC
-        LIMIT 10
-    '''
-    alertas_apoyo = cursor.execute(apoyo_query, [*params, seven_days_ago_peru]).fetchall()
-
-    # 6. Tendencia cronológica diaria (últimas fechas para gráfico Spline/Líneas)
-    tendencia_query = f'''
-        SELECT b.fecha,
-               COUNT(a.id) as actividades,
-               COALESCE(SUM(a.duracion_min), 0) as minutos,
-               SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as completadas
-        FROM bitacoras b
-        LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter}
-        GROUP BY b.fecha
-        ORDER BY b.fecha ASC
-        LIMIT 30
-    '''
-    tendencia_diaria = cursor.execute(tendencia_query, params).fetchall()
-
-    # 7. Distribución por franja horaria del día
-    horaria_query = f'''
-        SELECT 
-            CASE 
-                WHEN a.hora_inicio < '10:00' THEN '08:00 - 10:00'
-                WHEN a.hora_inicio < '12:00' THEN '10:00 - 12:00'
-                WHEN a.hora_inicio < '14:00' THEN '12:00 - 14:00'
-                WHEN a.hora_inicio < '16:00' THEN '14:00 - 16:00'
-                WHEN a.hora_inicio < '18:00' THEN '16:00 - 18:00'
-                ELSE '18:00+'
-            END as franja,
-            COUNT(a.id) as cantidad,
-            COALESCE(SUM(a.duracion_min), 0) as minutos
-        FROM actividades a
-        JOIN bitacoras b ON a.bitacora_id = b.id
-        LEFT JOIN users u ON b.user_id = u.id
-        {base_filter} AND (a.is_deleted IS NULL OR a.is_deleted = 0) AND a.hora_inicio IS NOT NULL AND a.hora_inicio != ''
-        GROUP BY franja
-        ORDER BY MIN(a.hora_inicio) ASC
-    '''
-    distribucion_horaria = cursor.execute(horaria_query, params).fetchall()
-
-    # 8. Métricas y KPIs de telemetría operativa
-    tot_min = totales['total_minutos'] if totales else 0
-    tot_bit = totales['total_bitacoras'] if totales else 0
-    promedio_jornada = round(tot_min / tot_bit) if tot_bit > 0 else 0
-
-    total_acts = sum(r['cantidad'] for r in act_stats) if act_stats else 0
-    completed_acts = sum(r['cantidad'] for r in act_stats if r['estado'] == 'completada') if act_stats else 0
-    eficiencia = round((completed_acts / total_acts) * 100) if total_acts > 0 else 0
-
-    planificadas_min = sum(r['minutos'] for r in tipo_stats if 'planificad' in (r['tipo'] or '').lower()) if tipo_stats else 0
-    ratio_planificado = round((planificadas_min / tot_min) * 100) if tot_min > 0 else 0
-
-    # 9. Historial reciente de bitácoras del usuario (para tabla individual de operador)
-    jornadas_usuario = []
-    if user_id:
-        jornadas_query = f'''
-            SELECT b.id, b.fecha, b.tiempo_total_min, b.necesita_apoyo, b.apoyo_detalle,
-                   COUNT(a.id) as total_actividades,
-                   SUM(CASE WHEN a.estado = 'completada' THEN 1 ELSE 0 END) as actividades_completadas
-            FROM bitacoras b
-            LEFT JOIN actividades a ON a.bitacora_id = b.id AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-            LEFT JOIN users u ON b.user_id = u.id
-            {base_filter}
-            GROUP BY b.id
-            ORDER BY b.fecha DESC
-            LIMIT 15
-        '''
-        jornadas_usuario = cursor.execute(jornadas_query, params).fetchall()
-    
-    conn.close()
-    
-    return jsonify({
-        "resumen": dict(totales) if totales else {},
-        "por_estado": [dict(r) for r in act_stats],
-        "por_tipo": [dict(r) for r in tipo_stats],
-        "por_cliente": [dict(r) for r in cliente_stats],
-        "por_colaborador": [dict(r) for r in colab_stats],
-        "alertas_apoyo": [dict(r) for r in alertas_apoyo],
-        "tendencia_diaria": [dict(r) for r in tendencia_diaria],
-        "distribucion_horaria": [dict(r) for r in distribucion_horaria],
-        "jornadas_recientes": [dict(r) for r in jornadas_usuario],
-        "kpis_adicionales": {
-            "promedio_minutos_jornada": promedio_jornada,
-            "eficiencia": eficiencia,
-            "ratio_planificado": ratio_planificado,
-            "total_actividades": total_acts,
-            "actividades_completadas": completed_acts
-        }
-    })
 
 # ==================== CRON ROLLOVER & TASK LIFECYCLE ====================
 
@@ -3328,15 +2537,14 @@ def execute_daily_rollover(today_str=None):
     """
     if not today_str:
         today_str = get_peru_today_str()
-        
+
     conn = get_db()
     cursor = conn.cursor()
     closed_count = 0
     rolled_count = 0
     now_peru = get_peru_now_str()
-    
+
     try:
-        # 0. Auto-purga permanente de actividades eliminadas con más de 15 días de antigüedad según horario de Perú
         purge_threshold = (get_peru_now() - timedelta(days=15)).strftime('%Y-%m-%d %H:%M:%S')
         expired_ids = [
             r[0]
@@ -3350,20 +2558,19 @@ def execute_daily_rollover(today_str=None):
             relink_children_before_delete(cursor, expired_ids)
         cursor.execute("DELETE FROM actividades WHERE is_deleted = 1 AND deleted_at < ?", (purge_threshold,))
 
-        # 1. Auto-cerrar bitácoras de días pasados (< today_str) que no estén formalmente cerradas
         past_open = cursor.execute('''
             SELECT id, user_id, colaborador, fecha, pendientes
             FROM bitacoras
             WHERE fecha < ? AND estado NOT IN ('cerrada', 'cerrada_sistema')
         ''', (today_str,)).fetchall()
-        
+
         for b in past_open:
             dur = cursor.execute(
-                "SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR is_deleted = 0)", 
+                "SELECT COALESCE(SUM(duracion_min), 0) FROM actividades WHERE bitacora_id = ? AND (is_deleted IS NULL OR a_del = 0)".replace('a_del', 'is_deleted'),
                 (b['id'],)
             ).fetchone()[0]
             incomp = cursor.execute(
-                "SELECT descripcion FROM actividades WHERE bitacora_id = ? AND estado != 'completada' AND (is_deleted IS NULL OR is_deleted = 0)", 
+                "SELECT descripcion FROM actividades WHERE bitacora_id = ? AND estado != 'completada' AND (is_deleted IS NULL OR is_deleted = 0)",
                 (b['id'],)
             ).fetchall()
             auto_pend = b['pendientes']
@@ -3372,7 +2579,7 @@ def execute_daily_rollover(today_str=None):
                     auto_pend = "Pendientes al cierre: " + "; ".join(r['descripcion'] for r in incomp[:3])
                 else:
                     auto_pend = "Todas las actividades fueron concluidas en esta fecha."
-                    
+
             cursor.execute('''
                 UPDATE bitacoras SET
                     estado = 'cerrada_sistema',
@@ -3383,26 +2590,25 @@ def execute_daily_rollover(today_str=None):
             ''', (dur, auto_pend, now_peru, b['id']))
             closed_count += 1
 
-        # 2. Arrastre de actividades abiertas hacia el día de hoy (solo días laborables: el lunes
-        #    recoge automáticamente lo pendiente del viernes, sin crear bitácoras vacías en fin de semana)
         if is_dia_laborable(today_str):
             active_users = cursor.execute("SELECT id, full_name FROM users WHERE is_active = 1").fetchall()
             for u in active_users:
                 rolled_count += rollover_user_open_tasks(cursor, u['id'], u['full_name'], today_str, now_peru)
-                    
+
         conn.commit()
     except Exception as e:
         conn.rollback()
         logger.exception("[Rollover] Error en execute_daily_rollover: %s", e)
     finally:
         conn.close()
-        
+
     return {
         "success": True,
         "date": today_str,
         "closed_bitacoras": closed_count,
         "rolled_activities": rolled_count
     }
+
 
 @app.route('/api/cron/rollover', methods=['GET', 'POST', 'OPTIONS'])
 def trigger_rollover():
@@ -3420,6 +2626,7 @@ def trigger_rollover():
     res = execute_daily_rollover(today_str=date_arg or today)
     return jsonify(res)
 
+
 @app.route('/api/actividades/importar-pendientes', methods=['POST', 'OPTIONS'])
 def importar_actividades_pendientes():
     if request.method == 'OPTIONS':
@@ -3428,13 +2635,13 @@ def importar_actividades_pendientes():
     colaborador = data.get('colaborador')
     user_id = data.get('user_id')
     target_fecha = data.get('target_fecha') or get_peru_today_str()
-    
+
     if not colaborador:
         return jsonify({"error": "Colaborador es requerido"}), 400
-        
+
     conn = get_db()
     cursor = conn.cursor()
-    
+
     query = '''
         SELECT a.*, b.fecha as fecha_origen,
           COALESCE((
@@ -3466,12 +2673,13 @@ def importar_actividades_pendientes():
     '''
     tasks = cursor.execute(query, (user_id, colaborador, target_fecha)).fetchall()
     conn.close()
-    
+
     return jsonify({
         "success": True,
         "pendientes": [format_actividad_dict(t) for t in tasks],
         "count": len(tasks)
     })
+
 
 # ==================== ACTIVIDADES REFERENCIAS / VÍNCULOS ====================
 
@@ -3484,10 +2692,10 @@ def get_actividades_referencias():
     colaborador = request.args.get('colaborador')
     q = request.args.get('q', '').strip()
     current_u = getattr(g, 'current_user', None) or {}
-    
+
     conn = get_db()
     cursor = conn.cursor()
-    
+
     query = '''
         SELECT a.id, a.orden, a.hora_inicio, a.duracion_min, a.tipo_trabajo, a.descripcion,
                a.para_cliente, a.estado, b.fecha as bitacora_fecha, b.colaborador
@@ -3497,7 +2705,6 @@ def get_actividades_referencias():
     '''
     params = []
 
-    # Scoping de privacidad por rol
     if current_u.get('role') in ('analista', 'operador'):
         query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?) OR b.user_id IN (SELECT target_user_id FROM user_delegations WHERE delegate_user_id = ? AND is_active = 1))"
         params.extend([current_u['id'], current_u.get('full_name', ''), current_u['id']])
@@ -3518,2165 +2725,17 @@ def get_actividades_referencias():
     if q:
         query += " AND (a.descripcion LIKE ? OR a.para_cliente LIKE ? OR a.tipo_trabajo LIKE ?)"
         params.extend([f"%{q}%", f"%{q}%", f"%{q}%"])
-        
+
     query += " ORDER BY b.fecha DESC, a.orden ASC, a.id DESC LIMIT 80"
     rows = cursor.execute(query, params).fetchall()
     conn.close()
-    
+
     return jsonify([dict(r) for r in rows]), 200
 
-# ==================== BUZÓN DE SUGERENCIAS & MEJORA CONTINUA ====================
-
-def serialize_sugerencia_dict(row_dict):
-    d = dict(row_dict)
-    if d.get('es_anonimo'):
-        d['colaborador'] = 'Colaborador Anónimo'
-        d['user_id'] = None
-    ev_val = d.get('evidencias')
-    if ev_val:
-        try:
-            d['evidencias'] = json.loads(ev_val) if isinstance(ev_val, str) else ev_val
-        except Exception:
-            d['evidencias'] = []
-    else:
-        d['evidencias'] = []
-    return d
-
-@app.route('/api/sugerencias', methods=['GET', 'POST', 'OPTIONS'])
-def handle_sugerencias():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    now_peru = get_peru_now_str()
-
-    if request.method == 'POST':
-        data = request.get_json() or {}
-        user_id = data.get('user_id')
-        colaborador = (data.get('colaborador') or '').strip()
-        es_anonimo = 1 if data.get('es_anonimo') else 0
-        categoria = data.get('categoria') or 'sistema'
-        titulo = (data.get('titulo') or '').strip()
-        descripcion = (data.get('descripcion') or '').strip()
-        impacto = data.get('impacto') or 'medio'
-        evidencias_raw = data.get('evidencias', [])
-        evidencias_json = json.dumps(evidencias_raw) if isinstance(evidencias_raw, (list, dict)) else (evidencias_raw or '[]')
-
-        if not titulo or not descripcion:
-            conn.close()
-            return jsonify({"error": "Título y descripción son requeridos"}), 400
-
-        cursor.execute('''
-            INSERT INTO buzon_sugerencias (
-                user_id, colaborador, es_anonimo, categoria,
-                titulo, descripcion, impacto, estado, votos, evidencias, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pendiente', 0, ?, ?, ?)
-        ''', (user_id, colaborador, es_anonimo, categoria, titulo, descripcion, impacto, evidencias_json, now_peru, now_peru))
-        sug_id = cursor.lastrowid
-        conn.commit()
-
-        # Notificar a administradores y líderes
-        try:
-            author_label = "Un colaborador (Anónimo)" if es_anonimo else (colaborador or "Un colaborador")
-            cursor.execute('''
-                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                SELECT id, 'Nueva sugerencia en el buzón', ?, 'info', 0, ?
-                FROM users WHERE role IN ('admin', 'lider')
-            ''', (f'{author_label} propuso: "{titulo}"', now_peru))
-            conn.commit()
-        except Exception as e:
-            logger.warning("[Buzón] Error creando notificación: %s", e)
-
-        sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
-        conn.close()
-        return jsonify({"message": "Sugerencia enviada exitosamente", "sugerencia": serialize_sugerencia_dict(sug)}), 201
-
-    # GET sugerencias
-    categoria = request.args.get('categoria')
-    estado = request.args.get('estado')
-    user_id = request.args.get('user_id')
-    current_uid = request.args.get('requesting_user_id') or user_id
-
-    query = '''
-        SELECT s.*,
-               CASE WHEN bv.id IS NOT NULL THEN 1 ELSE 0 END as user_has_voted
-        FROM buzon_sugerencias s
-        LEFT JOIN buzon_votos bv ON s.id = bv.sugerencia_id AND bv.user_id = ?
-        WHERE 1=1
-    '''
-    params = [current_uid]
-
-    if categoria and categoria != 'todas':
-        query += " AND s.categoria = ?"
-        params.append(categoria)
-    if estado and estado != 'todas':
-        query += " AND s.estado = ?"
-        params.append(estado)
-    if request.args.get('mine') == 'true' and user_id:
-        query += " AND s.user_id = ?"
-        params.append(user_id)
-
-    order_by = request.args.get('sort', 'reciente')
-    if order_by == 'popular':
-        query += " ORDER BY s.votos DESC, s.created_at DESC"
-    else:
-        query += " ORDER BY s.created_at DESC, s.id DESC"
-
-    rows = cursor.execute(query, params).fetchall()
-    results = [serialize_sugerencia_dict(r) for r in rows]
-
-    conn.close()
-    return jsonify(results), 200
-
-@app.route('/api/sugerencias/<int:sug_id>/votar', methods=['POST', 'OPTIONS'])
-def votar_sugerencia(sug_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json() or {}
-    user_id = data.get('user_id')
-    if not user_id:
-        return jsonify({"error": "user_id es requerido para votar"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    existing_vote = cursor.execute(
-        "SELECT id FROM buzon_votos WHERE sugerencia_id = ? AND user_id = ?",
-        (sug_id, user_id)
-    ).fetchone()
-
-    if existing_vote:
-        cursor.execute("DELETE FROM buzon_votos WHERE id = ?", (existing_vote['id'],))
-        cursor.execute("UPDATE buzon_sugerencias SET votos = MAX(0, votos - 1) WHERE id = ?", (sug_id,))
-        voted = False
-    else:
-        cursor.execute("INSERT INTO buzon_votos (sugerencia_id, user_id) VALUES (?, ?)", (sug_id, user_id))
-        cursor.execute("UPDATE buzon_sugerencias SET votos = votos + 1 WHERE id = ?", (sug_id,))
-        voted = True
-
-    conn.commit()
-    sug = cursor.execute("SELECT votos FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
-    conn.close()
-
-    return jsonify({
-        "success": True,
-        "voted": voted,
-        "votos": sug['votos'] if sug else 0
-    }), 200
-
-@app.route('/api/sugerencias/<int:sug_id>/status', methods=['PUT', 'OPTIONS'])
-def update_sugerencia_status(sug_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json() or {}
-    nuevo_estado = data.get('estado')
-    respuesta_admin = data.get('respuesta_admin')
-    respondido_por = data.get('respondido_por') or 'Dirección'
-    now_peru = get_peru_now_str()
-
-    if not nuevo_estado:
-        return jsonify({"error": "estado es requerido"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
-    if not sug:
-        conn.close()
-        return jsonify({"error": "Sugerencia no encontrada"}), 404
-
-    cursor.execute('''
-        UPDATE buzon_sugerencias SET
-            estado = ?,
-            respuesta_admin = COALESCE(?, respuesta_admin),
-            respondido_por = ?,
-            respondido_at = ?,
-            updated_at = ?
-        WHERE id = ?
-    ''', (nuevo_estado, respuesta_admin, respondido_por, now_peru, now_peru, sug_id))
-    conn.commit()
-
-    if sug['user_id'] and not sug['es_anonimo']:
-        try:
-            cursor.execute('''
-                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (?, 'Actualización de tu sugerencia', ?, 'success', 0, ?)
-            ''', (sug['user_id'], f'Tu propuesta "{sug["titulo"]}" ahora está: {nuevo_estado.upper()}', now_peru))
-            conn.commit()
-        except Exception:
-            pass
-
-    updated = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
-    conn.close()
-    return jsonify({"success": True, "sugerencia": serialize_sugerencia_dict(updated)}), 200
-
-@app.route('/api/sugerencias/<int:sug_id>', methods=['DELETE', 'OPTIONS'])
-def delete_sugerencia(sug_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-    user_role = data.get('role')
-
-    conn = get_db()
-    cursor = conn.cursor()
-    sug = cursor.execute("SELECT * FROM buzon_sugerencias WHERE id = ?", (sug_id,)).fetchone()
-    if not sug:
-        conn.close()
-        return jsonify({"error": "Sugerencia no encontrada"}), 404
-
-    if user_role != 'admin' and (not user_id or sug['user_id'] != user_id):
-        conn.close()
-        return jsonify({"error": "No tienes permiso para eliminar esta sugerencia"}), 403
-
-    cursor.execute("DELETE FROM buzon_votos WHERE sugerencia_id = ?", (sug_id,))
-    cursor.execute("DELETE FROM buzon_sugerencias WHERE id = ?", (sug_id,))
-    conn.commit()
-    return jsonify({"success": True, "message": "Sugerencia eliminada correctamente"}), 200
-
-# ==================== CENTRO DE NOTIFICACIONES ====================
-
-@app.route('/api/notifications', methods=['GET', 'DELETE', 'OPTIONS'])
-def handle_notifications():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    user_id = request.args.get('user_id')
-
-    if request.method == 'GET':
-        if not user_id:
-            conn.close()
-            return jsonify([]), 200
-        try:
-            uid_num = int(user_id) if str(user_id).isdigit() else None
-            check_and_notify_stagnant_activities(user_id=uid_num, cursor=cursor, conn=conn)
-        except Exception as se:
-            logger.warning("[Estancadas] Error verificando tareas: %s", se)
-
-        rows = cursor.execute('''
-            SELECT id, user_id, title, message, type, is_read, created_at as timestamp
-            FROM notifications
-            WHERE user_id = ?
-            ORDER BY id DESC
-            LIMIT 50
-        ''', (user_id,)).fetchall()
-        result = []
-        for r in rows:
-            d = dict(r)
-            d['id'] = str(d['id'])
-            d['read'] = bool(d.pop('is_read', 0))
-            result.append(d)
-        conn.close()
-        return jsonify(result), 200
-
-    elif request.method == 'DELETE':
-        if user_id:
-            cursor.execute("DELETE FROM notifications WHERE user_id = ?", (user_id,))
-            conn.commit()
-        conn.close()
-        return jsonify({"success": True, "message": "Notificaciones eliminadas"}), 200
-
-@app.route('/api/notifications/<int:notif_id>/read', methods=['PATCH', 'OPTIONS'])
-def mark_notification_read(notif_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
-
-@app.route('/api/notifications/read-all', methods=['POST', 'OPTIONS'])
-def mark_all_notifications_read():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-    if user_id:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-@app.route('/api/support/report-error', methods=['POST', 'OPTIONS'])
-def report_support_error():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-    data = request.get_json(silent=True) or {}
-    user_name = data.get('user_name', 'Usuario anónimo')
-    error_message = data.get('error_message', 'Error no especificado')
-    context = data.get('context', 'General')
-    screenshot_url = data.get('screenshot_url', '')
-    
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        admins = cursor.execute("SELECT id FROM users WHERE role = 'admin' AND is_active = 1").fetchall()
-        now_peru = get_peru_now_str()
-        title = f"🚨 Incidencia Reportada: {user_name}"
-        msg = f"[{context}] {error_message}"
-        if screenshot_url:
-            msg += f" | Captura: {screenshot_url}"
-            
-        for adm in admins:
-            cursor.execute('''
-                INSERT INTO notifications (user_id, title, message, type, is_read, created_at)
-                VALUES (?, ?, ?, 'error', 0, ?)
-            ''', (adm['id'], title, msg, now_peru))
-            
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True, "message": "Incidencia reportada con éxito a soporte técnico"}), 200
-    except Exception as e:
-        conn.rollback()
-        conn.close()
-        return jsonify({"error": str(e)}), 500
-
-
-# =========================================================================
-# RUTAS REST: ACCESOS DIRECTOS (QUICK LINKS)
-# =========================================================================
-
-@app.route('/api/quick-links', methods=['GET', 'POST', 'OPTIONS'])
-def api_quick_links():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        user_id = request.args.get('user_id', type=int)
-        categoria = request.args.get('categoria', '').strip()
-        search = request.args.get('search', '').strip().lower()
-
-        user_team_id = None
-        user_role = 'analista'
-        if user_id:
-            cursor.execute("SELECT team_id, role FROM users WHERE id = ?", (user_id,))
-            u_row = cursor.fetchone()
-            if u_row:
-                user_team_id = u_row['team_id']
-                user_role = u_row['role'] or 'analista'
-
-        query = '''
-            SELECT q.*, u.full_name as author_name, t.nombre as team_name
-            FROM quick_links q
-            LEFT JOIN users u ON q.user_id = u.id
-            LEFT JOIN teams t ON q.team_id = t.id
-            WHERE 1=1
-        '''
-        params = []
-
-        if user_role not in ('admin', 'lider'):
-            if user_id:
-                if user_team_id:
-                    query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'equipo' AND q.team_id = ?) OR (q.visibilidad = 'personal' AND q.user_id = ?))"
-                    params.extend([user_team_id, user_id])
-                else:
-                    query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'personal' AND q.user_id = ?))"
-                    params.append(user_id)
-            else:
-                query += " AND q.visibilidad = 'global'"
-
-        if categoria and categoria != 'todas':
-            query += " AND q.categoria = ?"
-            params.append(categoria)
-
-        if search:
-            query += " AND (LOWER(q.titulo) LIKE ? OR LOWER(q.url) LIKE ? OR LOWER(COALESCE(q.descripcion, '')) LIKE ?)"
-            s_param = f"%{search}%"
-            params.extend([s_param, s_param, s_param])
-
-        query += " ORDER BY q.updated_at DESC, q.titulo ASC"
-        cursor.execute(query, params)
-        raw_links = cursor.fetchall()
-        links = []
-        unlocked = vault_unlocked()
-        for row in raw_links:
-            item = dict(row)
-            _mask_vault_secrets(item, ('password',), unlocked)
-            links.append(item)
-        conn.close()
-        return jsonify(links), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        user_id = data.get('user_id')
-        titulo = (data.get('titulo') or '').strip()
-        url = (data.get('url') or '').strip()
-
-        if not user_id or not titulo or not url:
-            conn.close()
-            return jsonify({"error": "user_id, titulo y url son obligatorios"}), 400
-
-        cursor.execute("SELECT team_id FROM users WHERE id = ?", (user_id,))
-        u_row = cursor.fetchone()
-        team_id = u_row['team_id'] if u_row else None
-
-        categoria = (data.get('categoria') or 'General').strip()
-        descripcion = (data.get('descripcion') or '').strip()
-        icono = (data.get('icono') or 'Link').strip()
-        color = (data.get('color') or '#00F0FF').strip()
-        usuario = (data.get('usuario') or '').strip()
-        raw_password = (data.get('password') or '').strip()
-        password = encrypt_vault_secret(raw_password) if raw_password else ''
-        visibilidad = data.get('visibilidad', 'personal')
-        if visibilidad not in ('personal', 'equipo', 'global'):
-            visibilidad = 'personal'
-
-        now_peru = get_peru_now()
-        cursor.execute('''
-            INSERT INTO quick_links (
-                user_id, titulo, url, categoria, descripcion, icono, color,
-                usuario, password, visibilidad, team_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, titulo, url, categoria, descripcion, icono, color,
-              usuario, password, visibilidad, team_id, now_peru, now_peru))
-        new_id = cursor.lastrowid
-        conn.commit()
-
-        cursor.execute('''
-            SELECT q.*, u.full_name as author_name, t.nombre as team_name
-            FROM quick_links q
-            LEFT JOIN users u ON q.user_id = u.id
-            LEFT JOIN teams t ON q.team_id = t.id
-            WHERE q.id = ?
-        ''', (new_id,))
-        created_item = dict(cursor.fetchone())
-        if created_item.get('password'):
-            created_item['password'] = decrypt_vault_secret(created_item['password'])
-        conn.close()
-        return jsonify(created_item), 201
-
-
-@app.route('/api/quick-links/<int:link_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def api_quick_link_detail(link_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM quick_links WHERE id = ?", (link_id,))
-    link = cursor.fetchone()
-    if not link:
-        conn.close()
-        return jsonify({"error": "Acceso directo no encontrado"}), 404
-
-    if request.method == 'DELETE':
-        user_id = request.args.get('user_id', type=int)
-        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
-        u = cursor.fetchone()
-        is_admin = u and u['role'] == 'admin'
-
-        if not is_admin and link['user_id'] != user_id:
-            conn.close()
-            return jsonify({"error": "No tienes permiso para eliminar este enlace"}), 403
-
-        cursor.execute("DELETE FROM quick_links WHERE id = ?", (link_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True}), 200
-
-    if request.method == 'PUT':
-        data = request.get_json(silent=True) or {}
-        user_id = data.get('user_id')
-        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
-        u = cursor.fetchone()
-        is_admin = u and u['role'] == 'admin'
-
-        if not is_admin and link['user_id'] != user_id:
-            conn.close()
-            return jsonify({"error": "No tienes permiso para modificar este enlace"}), 403
-
-        titulo = (data.get('titulo') or link['titulo']).strip()
-        url = (data.get('url') or link['url']).strip()
-        categoria = (data.get('categoria') or link['categoria']).strip()
-        descripcion = (data.get('descripcion') if 'descripcion' in data else link['descripcion']) or ''
-        icono = data.get('icono') or link['icono']
-        color = data.get('color') or link['color']
-        usuario = data.get('usuario') if 'usuario' in data else link['usuario']
-        if 'password' in data:
-            raw_pass = (data.get('password') or '').strip()
-            if raw_pass:
-                password = encrypt_vault_secret(raw_pass)
-            elif data.get('clear_password'):
-                password = ''
-            else:
-                # Campo vacío = conservar (el formulario pudo abrirse con la bóveda bloqueada)
-                password = link['password']
-        else:
-            password = link['password']
-        visibilidad = data.get('visibilidad') or link['visibilidad']
-
-        now_peru = get_peru_now()
-        cursor.execute('''
-            UPDATE quick_links SET
-                titulo = ?, url = ?, categoria = ?, descripcion = ?,
-                icono = ?, color = ?, usuario = ?, password = ?,
-                visibilidad = ?, updated_at = ?
-            WHERE id = ?
-        ''', (titulo, url, categoria, descripcion, icono, color, usuario, password, visibilidad, now_peru, link_id))
-        conn.commit()
-
-        cursor.execute('''
-            SELECT q.*, u.full_name as author_name, t.nombre as team_name
-            FROM quick_links q
-            LEFT JOIN users u ON q.user_id = u.id
-            LEFT JOIN teams t ON q.team_id = t.id
-            WHERE q.id = ?
-        ''', (link_id,))
-        updated_item = dict(cursor.fetchone())
-        _mask_vault_secrets(updated_item, ('password',), vault_unlocked())
-        conn.close()
-        return jsonify(updated_item), 200
-
-
-# =========================================================================
-# RUTAS REST: BÓVEDA IT CORPORATIVA (MULTI-EMPRESA / MARCAS / CREDENCIALES)
-# =========================================================================
-
-@app.route('/api/it-vault/empresas', methods=['GET', 'POST', 'OPTIONS'])
-def api_it_empresas():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        cursor.execute("SELECT * FROM it_empresas ORDER BY nombre ASC")
-        empresas = [dict(row) for row in cursor.fetchall()]
-        for emp in empresas:
-            cursor.execute("SELECT * FROM it_marcas WHERE empresa_id = ? ORDER BY nombre ASC", (emp['id'],))
-            emp['marcas'] = [dict(m) for m in cursor.fetchall()]
-        conn.close()
-        return jsonify(empresas), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        nombre = (data.get('nombre') or '').strip()
-        color = data.get('color', '#00F0FF')
-        if not nombre:
-            conn.close()
-            return jsonify({"error": "El nombre de la empresa es obligatorio"}), 400
-
-        try:
-            cursor.execute("INSERT INTO it_empresas (nombre, color) VALUES (?, ?)", (nombre, color))
-            new_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            return jsonify({"id": new_id, "nombre": nombre, "color": color, "marcas": []}), 201
-        except sqlite3.IntegrityError:
-            conn.close()
-            return jsonify({"error": "Ya existe una empresa con ese nombre"}), 400
-
-
-@app.route('/api/it-vault/marcas', methods=['POST', 'OPTIONS'])
-def api_it_marcas():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json(silent=True) or {}
-    empresa_id = data.get('empresa_id')
-    nombre = (data.get('nombre') or '').strip()
-    if not empresa_id or not nombre:
-        return jsonify({"error": "empresa_id y nombre son obligatorios"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO it_marcas (empresa_id, nombre) VALUES (?, ?)", (empresa_id, nombre))
-        new_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
-        return jsonify({"id": new_id, "empresa_id": empresa_id, "nombre": nombre}), 201
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "Esta marca ya existe para la empresa seleccionada"}), 400
-
-
-@app.route('/api/it-vault/credentials', methods=['GET', 'POST', 'OPTIONS'])
-def api_it_credentials():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        user_id = request.args.get('user_id', type=int)
-        empresa_id = request.args.get('empresa_id', type=int)
-        marca_id = request.args.get('marca_id', type=int)
-        tipo_servicio = request.args.get('tipo_servicio', '').strip()
-        search = request.args.get('search', '').strip().lower()
-
-        # Determinar rol del usuario
-        user_role = 'analista'
-        if user_id:
-            cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
-            ur = cursor.fetchone()
-            if ur:
-                user_role = ur['role'] or 'analista'
-
-        is_admin_or_leader = user_role in ('admin', 'lider')
-
-        query = '''
-            SELECT c.*, 
-                   e.nombre as empresa_nombre, e.color as empresa_color,
-                   m.nombre as marca_nombre,
-                   u.full_name as author_name,
-                   COALESCE(p.can_view, 0) as user_can_view,
-                   COALESCE(p.can_edit, 0) as user_can_edit
-            FROM it_credentials c
-            JOIN it_empresas e ON c.empresa_id = e.id
-            LEFT JOIN it_marcas m ON c.marca_id = m.id
-            LEFT JOIN users u ON c.created_by = u.id
-            LEFT JOIN it_credential_permissions p ON p.credential_id = c.id AND p.user_id = ?
-            WHERE c.is_active = 1
-        '''
-        params = [user_id or 0]
-
-        if not is_admin_or_leader:
-            query += " AND (c.created_by = ? OR p.can_view = 1)"
-            params.append(user_id or 0)
-
-        if empresa_id:
-            query += " AND c.empresa_id = ?"
-            params.append(empresa_id)
-
-        if marca_id:
-            query += " AND c.marca_id = ?"
-            params.append(marca_id)
-
-        if tipo_servicio and tipo_servicio != 'todas':
-            query += " AND c.tipo_servicio = ?"
-            params.append(tipo_servicio)
-
-        if search:
-            query += " AND (LOWER(c.plataforma) LIKE ? OR LOWER(c.usuario_login) LIKE ? OR LOWER(COALESCE(c.notas, '')) LIKE ? OR LOWER(e.nombre) LIKE ?)"
-            s_param = f"%{search}%"
-            params.extend([s_param, s_param, s_param, s_param])
-
-        query += " ORDER BY e.nombre ASC, m.nombre ASC, c.plataforma ASC"
-        cursor.execute(query, params)
-        rows = cursor.fetchall()
-        
-        results = []
-        unlocked = vault_unlocked()
-        for r in rows:
-            item = dict(r)
-            _mask_vault_secrets(item, ('password_secret',), unlocked)
-            # Si es admin o líder, tiene permisos completos
-            if is_admin_or_leader or item['created_by'] == user_id:
-                item['can_view'] = True
-                item['can_edit'] = True
-            else:
-                item['can_view'] = bool(item.get('user_can_view'))
-                item['can_edit'] = bool(item.get('user_can_edit'))
-            results.append(item)
-
-        conn.close()
-        return jsonify(results), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        user_id = data.get('created_by') or data.get('user_id')
-        empresa_id = data.get('empresa_id')
-        marca_id = data.get('marca_id')
-        plataforma = (data.get('plataforma') or '').strip()
-        tipo_servicio = (data.get('tipo_servicio') or 'General').strip()
-        url_acceso = (data.get('url_acceso') or '').strip()
-        usuario_login = (data.get('usuario_login') or '').strip()
-        raw_secret = (data.get('password_secret') or '').strip()
-        password_secret = encrypt_vault_secret(raw_secret) if raw_secret else ''
-        notas = (data.get('notas') or '').strip()
-        tipo_cuenta = data.get('tipo_cuenta', 'operativa')
-        permissions = data.get('permissions', [])  # list of { user_id, can_view, can_edit }
-
-        if not user_id or not empresa_id or not plataforma or not usuario_login or not raw_secret:
-            conn.close()
-            return jsonify({"error": "empresa_id, plataforma, usuario_login y password_secret son requeridos"}), 400
-
-        now_peru = get_peru_now_str()
-        cursor.execute('''
-            INSERT INTO it_credentials (
-                empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
-                usuario_login, password_secret, notas, tipo_cuenta, created_by,
-                created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
-              usuario_login, password_secret, notas, tipo_cuenta, user_id, now_peru, now_peru))
-        cred_id = cursor.lastrowid
-
-        # Permiso completo para el creador
-        cursor.execute('''
-            INSERT OR REPLACE INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
-            VALUES (?, ?, 1, 1, ?)
-        ''', (cred_id, user_id, user_id))
-
-        # Asignar permisos específicos opcionales enviados por el admin
-        for p in permissions:
-            u_p_id = p.get('user_id')
-            if u_p_id and u_p_id != user_id:
-                c_view = 1 if p.get('can_view') else 0
-                c_edit = 1 if p.get('can_edit') else 0
-                cursor.execute('''
-                    INSERT OR REPLACE INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (cred_id, u_p_id, c_view, c_edit, user_id))
-
-        # Auditoría de creación
-        cursor.execute('''
-            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-            VALUES (?, ?, 'create', ?)
-        ''', (cred_id, user_id, request.remote_addr))
-
-        conn.commit()
-        conn.close()
-        return jsonify({"id": cred_id, "success": True}), 201
-
-
-@app.route('/api/it-vault/credentials/<int:cred_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def api_it_credential_detail(cred_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM it_credentials WHERE id = ? AND is_active = 1", (cred_id,))
-    cred = cursor.fetchone()
-    if not cred:
-        conn.close()
-        return jsonify({"error": "Credencial no encontrada"}), 404
-
-    if request.method == 'DELETE':
-        user_id = request.args.get('user_id', type=int)
-        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
-        u = cursor.fetchone()
-        is_admin = u and u['role'] in ('admin', 'lider')
-
-        if not is_admin and cred['created_by'] != user_id:
-            conn.close()
-            return jsonify({"error": "No tienes permiso para eliminar esta credencial"}), 403
-
-        cursor.execute("UPDATE it_credentials SET is_active = 0 WHERE id = ?", (cred_id,))
-        cursor.execute('''
-            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-            VALUES (?, ?, 'delete', ?)
-        ''', (cred_id, user_id, request.remote_addr))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True}), 200
-
-    if request.method == 'PUT':
-        data = request.get_json(silent=True) or {}
-        user_id = data.get('updated_by') or data.get('user_id')
-        cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
-        u = cursor.fetchone()
-        is_admin = u and u['role'] in ('admin', 'lider')
-
-        # Verificar permiso can_edit
-        cursor.execute("SELECT can_edit FROM it_credential_permissions WHERE credential_id = ? AND user_id = ?", (cred_id, user_id))
-        perm = cursor.fetchone()
-        can_edit = (perm and perm['can_edit'] == 1) or is_admin or (cred['created_by'] == user_id)
-
-        if not can_edit:
-            conn.close()
-            return jsonify({"error": "No tienes permiso de edición sobre esta credencial"}), 403
-
-        empresa_id = data.get('empresa_id') or cred['empresa_id']
-        marca_id = data.get('marca_id') if 'marca_id' in data else cred['marca_id']
-        plataforma = (data.get('plataforma') or cred['plataforma']).strip()
-        tipo_servicio = (data.get('tipo_servicio') or cred['tipo_servicio']).strip()
-        url_acceso = data.get('url_acceso') if 'url_acceso' in data else cred['url_acceso']
-        usuario_login = (data.get('usuario_login') or cred['usuario_login']).strip()
-        if 'password_secret' in data:
-            raw_secret = (data.get('password_secret') or '').strip()
-            if raw_secret:
-                password_secret = encrypt_vault_secret(raw_secret)
-            elif data.get('clear_password'):
-                password_secret = ''
-            else:
-                password_secret = cred['password_secret']
-        else:
-            password_secret = cred['password_secret']
-        notas = data.get('notas') if 'notas' in data else cred['notas']
-        tipo_cuenta = data.get('tipo_cuenta') or cred['tipo_cuenta']
-
-        now_peru = get_peru_now_str()
-        cursor.execute('''
-            UPDATE it_credentials SET
-                empresa_id = ?, marca_id = ?, plataforma = ?, tipo_servicio = ?,
-                url_acceso = ?, usuario_login = ?, password_secret = ?,
-                notas = ?, tipo_cuenta = ?, updated_by = ?, updated_at = ?
-            WHERE id = ?
-        ''', (empresa_id, marca_id, plataforma, tipo_servicio, url_acceso,
-              usuario_login, password_secret, notas, tipo_cuenta, user_id, now_peru, cred_id))
-
-        cursor.execute('''
-            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-            VALUES (?, ?, 'update', ?)
-        ''', (cred_id, user_id, request.remote_addr))
-
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True}), 200
-
-
-@app.route('/api/it-vault/credentials/<int:cred_id>/audit', methods=['POST', 'OPTIONS'])
-def api_it_credential_audit(cred_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-    action = data.get('action') or 'view_password'
-    if not user_id:
-        return jsonify({"error": "user_id es requerido"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-        VALUES (?, ?, ?, ?)
-    ''', (cred_id, user_id, action, request.remote_addr))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 201
-
-
-@app.route('/api/it-vault/credentials/<int:cred_id>/permissions', methods=['GET', 'PUT', 'OPTIONS'])
-def api_it_credential_permissions(cred_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        cursor.execute('''
-            SELECT u.id as user_id, u.full_name, u.username, u.role,
-                   COALESCE(p.can_view, 0) as can_view,
-                   COALESCE(p.can_edit, 0) as can_edit
-            FROM users u
-            LEFT JOIN it_credential_permissions p ON p.user_id = u.id AND p.credential_id = ?
-            WHERE u.is_active = 1
-            ORDER BY u.full_name ASC
-        ''', (cred_id,))
-        permissions = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        return jsonify(permissions), 200
-
-    if request.method == 'PUT':
-        data = request.get_json(silent=True) or {}
-        assigned_by = data.get('assigned_by')
-        permissions_list = data.get('permissions', [])
-
-        cursor.execute("SELECT role FROM users WHERE id = ?", (assigned_by,))
-        u = cursor.fetchone()
-        if not u or u['role'] not in ('admin', 'lider'):
-            conn.close()
-            return jsonify({"error": "Solo administradores o líderes pueden configurar permisos"}), 403
-
-        for perm in permissions_list:
-            target_user_id = perm.get('user_id')
-            can_view = 1 if perm.get('can_view') else 0
-            can_edit = 1 if perm.get('can_edit') else 0
-            cursor.execute('''
-                INSERT INTO it_credential_permissions (credential_id, user_id, can_view, can_edit, assigned_by)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(credential_id, user_id) DO UPDATE SET
-                    can_view = excluded.can_view,
-                    can_edit = excluded.can_edit,
-                    assigned_by = excluded.assigned_by
-            ''', (cred_id, target_user_id, can_view, can_edit, assigned_by))
-
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True}), 200
-
-
-# =========================================================================
-# RUTAS REST: DIRECTORIO DE USUARIOS POR PLATAFORMA (SOPORTE Y RESETEO)
-# =========================================================================
-
-@app.route('/api/it-vault/platform-users', methods=['GET', 'POST', 'OPTIONS'])
-def api_it_platform_users():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        empresa_id = request.args.get('empresa_id', type=int)
-        marca_id = request.args.get('marca_id', type=int)
-        plataforma = request.args.get('plataforma', '').strip()
-        search = request.args.get('search', '').strip().lower()
-        estado = request.args.get('estado', '').strip()
-
-        query = '''
-            SELECT pu.*, 
-                   e.nombre as empresa_nombre, e.color as empresa_color,
-                   m.nombre as marca_nombre,
-                   u.full_name as created_by_name
-            FROM it_platform_users pu
-            JOIN it_empresas e ON pu.empresa_id = e.id
-            LEFT JOIN it_marcas m ON pu.marca_id = m.id
-            LEFT JOIN users u ON pu.created_by = u.id
-            WHERE 1=1
-        '''
-        params = []
-
-        if empresa_id:
-            query += " AND pu.empresa_id = ?"
-            params.append(empresa_id)
-
-        if marca_id:
-            query += " AND pu.marca_id = ?"
-            params.append(marca_id)
-
-        if plataforma and plataforma != 'todas':
-            query += " AND pu.plataforma = ?"
-            params.append(plataforma)
-
-        if estado and estado != 'todos':
-            query += " AND pu.estado = ?"
-            params.append(estado)
-
-        if search:
-            query += " AND (LOWER(pu.colaborador_nombre) LIKE ? OR LOWER(pu.usuario_login) LIKE ? OR LOWER(COALESCE(pu.colaborador_email, '')) LIKE ? OR LOWER(COALESCE(pu.colaborador_cargo, '')) LIKE ?)"
-            s_param = f"%{search}%"
-            params.extend([s_param, s_param, s_param, s_param])
-
-        query += " ORDER BY pu.colaborador_nombre ASC, pu.plataforma ASC"
-        cursor.execute(query, params)
-        raw_users = cursor.fetchall()
-        users_list = []
-        unlocked = vault_unlocked()
-        for row in raw_users:
-            item = dict(row)
-            _mask_vault_secrets(item, ('password_actual', 'password_anterior'), unlocked)
-            users_list.append(item)
-        conn.close()
-        return jsonify(users_list), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        empresa_id = data.get('empresa_id')
-        marca_id = data.get('marca_id') or None
-        plataforma = (data.get('plataforma') or '').strip()
-        colaborador_nombre = (data.get('colaborador_nombre') or '').strip()
-        colaborador_cargo = (data.get('colaborador_cargo') or '').strip()
-        colaborador_email = (data.get('colaborador_email') or '').strip()
-        colaborador_telefono = (data.get('colaborador_telefono') or '').strip()
-        usuario_login = (data.get('usuario_login') or '').strip()
-        raw_password = (data.get('password_actual') or '').strip()
-        password_actual = encrypt_vault_secret(raw_password) if raw_password else ''
-        estado = data.get('estado') or 'activo'
-        notas = (data.get('notas') or '').strip()
-        created_by = data.get('created_by') or 1
-
-        if not empresa_id or not plataforma or not colaborador_nombre or not usuario_login or not raw_password:
-            conn.close()
-            return jsonify({"error": "Empresa, Plataforma, Colaborador, Usuario y Contraseña son obligatorios"}), 400
-
-        now_peru = get_peru_now_str()
-        cursor.execute('''
-            INSERT INTO it_platform_users (
-                empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
-                colaborador_email, colaborador_telefono, usuario_login, password_actual,
-                estado, ultimo_reseteo, notas, created_by, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
-              colaborador_email, colaborador_telefono, usuario_login, password_actual,
-              estado, now_peru, notas, created_by, now_peru, now_peru))
-        new_id = cursor.lastrowid
-        conn.commit()
-
-        cursor.execute('''
-            SELECT pu.*, e.nombre as empresa_nombre, e.color as empresa_color, m.nombre as marca_nombre
-            FROM it_platform_users pu
-            JOIN it_empresas e ON pu.empresa_id = e.id
-            LEFT JOIN it_marcas m ON pu.marca_id = m.id
-            WHERE pu.id = ?
-        ''', (new_id,))
-        created_row = dict(cursor.fetchone())
-        if created_row.get('password_actual'):
-            created_row['password_actual'] = decrypt_vault_secret(created_row['password_actual'])
-        conn.close()
-        return jsonify(created_row), 201
-
-
-@app.route('/api/it-vault/platform-users/<int:user_id>', methods=['PUT', 'DELETE', 'OPTIONS'])
-def api_it_platform_user_detail(user_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM it_platform_users WHERE id = ?", (user_id,))
-    existing = cursor.fetchone()
-    if not existing:
-        conn.close()
-        return jsonify({"error": "Cuenta de usuario no encontrada"}), 404
-
-    if request.method == 'DELETE':
-        cursor.execute("DELETE FROM it_platform_users WHERE id = ?", (user_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True}), 200
-
-    if request.method == 'PUT':
-        data = request.get_json(silent=True) or {}
-        empresa_id = data.get('empresa_id') or existing['empresa_id']
-        marca_id = data.get('marca_id') if 'marca_id' in data else existing['marca_id']
-        plataforma = (data.get('plataforma') or existing['plataforma']).strip()
-        colaborador_nombre = (data.get('colaborador_nombre') or existing['colaborador_nombre']).strip()
-        colaborador_cargo = (data.get('colaborador_cargo') if 'colaborador_cargo' in data else existing['colaborador_cargo']) or ''
-        colaborador_email = (data.get('colaborador_email') if 'colaborador_email' in data else existing['colaborador_email']) or ''
-        colaborador_telefono = (data.get('colaborador_telefono') if 'colaborador_telefono' in data else existing['colaborador_telefono']) or ''
-        usuario_login = (data.get('usuario_login') or existing['usuario_login']).strip()
-        if 'password_actual' in data:
-            raw_password = (data.get('password_actual') or '').strip()
-            if raw_password:
-                password_actual = encrypt_vault_secret(raw_password)
-            else:
-                # password_actual es obligatorio: un valor vacío nunca borra la contraseña guardada
-                password_actual = existing['password_actual']
-        else:
-            password_actual = existing['password_actual']
-        estado = data.get('estado') or existing['estado']
-        notas = (data.get('notas') if 'notas' in data else existing['notas']) or ''
-        updated_by = data.get('updated_by')
-
-        now_peru = get_peru_now_str()
-        cursor.execute('''
-            UPDATE it_platform_users SET
-                empresa_id = ?, marca_id = ?, plataforma = ?, colaborador_nombre = ?,
-                colaborador_cargo = ?, colaborador_email = ?, colaborador_telefono = ?,
-                usuario_login = ?, password_actual = ?, estado = ?, notas = ?,
-                updated_by = ?, updated_at = ?
-            WHERE id = ?
-        ''', (empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
-              colaborador_email, colaborador_telefono, usuario_login, password_actual,
-              estado, notas, updated_by, now_peru, user_id))
-        conn.commit()
-
-        cursor.execute('''
-            SELECT pu.*, e.nombre as empresa_nombre, e.color as empresa_color, m.nombre as marca_nombre
-            FROM it_platform_users pu
-            JOIN it_empresas e ON pu.empresa_id = e.id
-            LEFT JOIN it_marcas m ON pu.marca_id = m.id
-            WHERE pu.id = ?
-        ''', (user_id,))
-        updated_row = dict(cursor.fetchone())
-        _mask_vault_secrets(updated_row, ('password_actual', 'password_anterior'), vault_unlocked())
-        conn.close()
-        return jsonify(updated_row), 200
-
-
-@app.route('/api/it-vault/platform-users/<int:user_id>/reset-password', methods=['POST', 'OPTIONS'])
-def api_it_platform_user_reset_password(user_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT pu.*, e.nombre as empresa_nombre FROM it_platform_users pu JOIN it_empresas e ON pu.empresa_id = e.id WHERE pu.id = ?", (user_id,))
-    row = cursor.fetchone()
-    if not row:
-        conn.close()
-        return jsonify({"error": "Cuenta de usuario no encontrada"}), 404
-
-    data = request.get_json(silent=True) or {}
-    new_password = (data.get('new_password') or '').strip()
-    reset_by = data.get('reset_by')
-
-    # Si no se envió clave, generamos una clave segura automáticamente
-    if not new_password:
-        import secrets
-        import string
-        alphabet = string.ascii_letters + string.digits + "!@#$%&*"
-        new_password = ''.join(secrets.choice(alphabet) for _ in range(14))
-
-    now_peru = get_peru_now_str()
-    encrypted_new = encrypt_vault_secret(new_password)
-    cursor.execute('''
-        UPDATE it_platform_users SET
-            password_anterior = password_actual,
-            password_actual = ?,
-            ultimo_reseteo = ?,
-            updated_by = ?,
-            updated_at = ?
-        WHERE id = ?
-    ''', (encrypted_new, now_peru, reset_by, now_peru, user_id))
-    conn.commit()
-
-    # Preparar plantilla de mensaje de soporte para compartir al colaborador por WhatsApp o correo
-    colab = row['colaborador_nombre']
-    plat = row['plataforma']
-    login = row['usuario_login']
-    emp = row['empresa_nombre']
-
-    share_message = (
-        f"Hola {colab}, el área de Sistemas de {emp} te comparte tus credenciales actualizadas:\n\n"
-        f"Plataforma: {plat}\n"
-        f"Usuario: {login}\n"
-        f"Contraseña temporal: {new_password}\n\n"
-        f"Por seguridad, te sugerimos cambiar tu contraseña al iniciar sesión o mantenerla en un lugar seguro."
-    )
-
-    conn.close()
-    return jsonify({
-        "success": True,
-        "new_password": new_password,
-        "ultimo_reseteo": now_peru,
-        "share_message": share_message
-    }), 200
-
-
-# =========================================================================
-# EXCEL & IMPORTACIÓN MASIVA: CUENTAS DE USUARIOS POR PLATAFORMA
-# =========================================================================
-
-def normalize_excel_header(h):
-    if not h:
-        return ""
-    h = str(h).strip().lower()
-    for char, rep in [("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"), ("ñ", "n"), ("*", ""), (" ", "_"), ("-", "_"), (".", "")]:
-        h = h.replace(char, rep)
-    return h.strip('_')
-
-
-def map_row_to_account_dict(raw_dict):
-    res = {
-        'empresa': '',
-        'marca': '',
-        'plataforma': '',
-        'colaborador_nombre': '',
-        'colaborador_cargo': '',
-        'colaborador_email': '',
-        'colaborador_telefono': '',
-        'usuario_login': '',
-        'password_actual': '',
-        'estado': 'activo',
-        'notas': '',
-    }
-    
-    for key, val in raw_dict.items():
-        k = normalize_excel_header(key)
-        v = str(val).strip() if val is not None else ""
-        if not v or v.lower() == 'none':
-            v = ""
-            
-        if k in ['empresa', 'empresa_nombre', 'company']:
-            res['empresa'] = v
-        elif k in ['marca', 'marca_nombre', 'brand']:
-            res['marca'] = v
-        elif k in ['plataforma', 'platform', 'servicio', 'sistema']:
-            res['plataforma'] = v
-        elif k in ['colaborador', 'colaborador_nombre', 'nombre', 'nombre_colaborador', 'empleado', 'usuario_nombre']:
-            res['colaborador_nombre'] = v
-        elif k in ['cargo', 'colaborador_cargo', 'puesto', 'rol', 'posicion']:
-            res['colaborador_cargo'] = v
-        elif k in ['email', 'email_colaborador', 'correo', 'correo_colaborador', 'colaborador_email', 'mail']:
-            res['colaborador_email'] = v
-        elif k in ['telefono', 'colaborador_telefono', 'celular', 'whatsapp', 'phone']:
-            res['colaborador_telefono'] = v
-        elif k in ['usuario_login', 'usuario', 'login', 'user', 'cuenta', 'username']:
-            res['usuario_login'] = v
-        elif k in ['password', 'password_actual', 'contrasena', 'clave', 'pass', 'clave_acceso']:
-            res['password_actual'] = v
-        elif k in ['estado', 'status']:
-            st = v.lower()
-            if any(x in st for x in ['crear', 'alta', 'pendiente', 'nueva']):
-                res['estado'] = 'por_crear'
-            elif any(x in st for x in ['susp', 'paus', 'inact']):
-                res['estado'] = 'suspendido'
-            elif any(x in st for x in ['baja', 'elim', 'cesad']):
-                res['estado'] = 'baja'
-            else:
-                res['estado'] = 'activo'
-        elif k in ['notas', 'nota', 'observaciones', 'observacion', 'comentarios']:
-            res['notas'] = v
-
-    return res
-
-
-def parse_accounts_from_filestorage(file_storage):
-    filename = file_storage.filename or ''
-    lower_fn = filename.lower()
-    raw_dicts = []
-    
-    if lower_fn.endswith('.csv'):
-        raw_bytes = file_storage.read()
-        decoded = None
-        for enc in ['utf-8-sig', 'utf-8', 'latin-1', 'cp1252']:
-            try:
-                decoded = raw_bytes.decode(enc)
-                break
-            except Exception:
-                pass
-        if decoded is None:
-            raise ValueError("No se pudo decodificar el archivo CSV.")
-        
-        sample = decoded[:2048]
-        delimiter = ';' if sample.count(';') > sample.count(',') else ','
-        reader = csv.reader(io.StringIO(decoded), delimiter=delimiter)
-        rows = list(reader)
-        if not rows:
-            return []
-            
-        header_idx = -1
-        for i, r in enumerate(rows[:20]):
-            non_empty = [c for c in r if c is not None and str(c).strip()]
-            if len(non_empty) >= 3:
-                r_str = " ".join([str(c).lower() for c in non_empty])
-                if 'empresa' in r_str and ('colaborador' in r_str or 'usuario' in r_str or 'plataforma' in r_str):
-                    header_idx = i
-                    break
-        if header_idx == -1:
-            for i, r in enumerate(rows[:20]):
-                if len([c for c in r if c is not None and str(c).strip()]) >= 3:
-                    header_idx = i
-                    break
-        if header_idx == -1:
-            header_idx = 0
-                
-        headers = [normalize_excel_header(c) for c in rows[header_idx]]
-        for r in rows[header_idx + 1:]:
-            if not any(str(c).strip() for c in r):
-                continue
-            item = {}
-            for idx, h in enumerate(headers):
-                if h and idx < len(r):
-                    item[h] = str(r[idx]).strip()
-            if item:
-                raw_dicts.append(item)
-    else:
-        if not _HAS_OPENPYXL:
-            raise ValueError("El servidor requiere 'openpyxl' para procesar archivos .xlsx. Por favor suba su archivo en formato .csv delimitado por comas o punto y coma, o ejecute 'pip install openpyxl' en el servidor.")
-        wb = openpyxl.load_workbook(file_storage, data_only=True)
-        ws = None
-        for name in ['Cuentas_Plataforma', 'Cuentas', 'Usuarios', 'Hoja1', 'Sheet1']:
-            if name in wb.sheetnames:
-                ws = wb[name]
-                break
-        if ws is None:
-            ws = wb.active
-            
-        rows = list(ws.iter_rows(values_only=True))
-        if not rows:
-            return []
-            
-        header_idx = -1
-        for i, r in enumerate(rows[:20]):
-            non_empty = [c for c in r if c is not None and str(c).strip()]
-            if len(non_empty) >= 3:
-                r_str = " ".join([str(c or '').lower() for c in non_empty])
-                if 'empresa' in r_str and ('colaborador' in r_str or 'usuario' in r_str or 'plataforma' in r_str):
-                    header_idx = i
-                    break
-        if header_idx == -1:
-            for i, r in enumerate(rows[:20]):
-                if len([c for c in r if c is not None and str(c).strip()]) >= 3:
-                    header_idx = i
-                    break
-        if header_idx == -1:
-            header_idx = 0
-                
-        headers = [normalize_excel_header(c) for c in rows[header_idx]]
-        for r in rows[header_idx + 1:]:
-            if not any(c is not None and str(c).strip() for c in r):
-                continue
-            item = {}
-            for idx, h in enumerate(headers):
-                if h and idx < len(r):
-                    val = r[idx]
-                    item[h] = str(val).strip() if val is not None else ""
-            if item:
-                raw_dicts.append(item)
-                
-    mapped = []
-    for r in raw_dicts:
-        acc = map_row_to_account_dict(r)
-        if not acc['empresa'] and not acc['plataforma'] and not acc['colaborador_nombre'] and not acc['usuario_login']:
-            continue
-        mapped.append(acc)
-    return mapped
-
-
-@app.route('/api/it-vault/platform-users/template', methods=['GET'])
-def api_it_platform_users_template():
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT nombre FROM it_empresas ORDER BY nombre ASC")
-    db_empresas = [r[0] for r in cursor.fetchall()]
-    cursor.execute("SELECT nombre, tipo_servicio FROM it_plataformas ORDER BY nombre ASC")
-    db_plataformas = cursor.fetchall()
-    conn.close()
-
-    if not _HAS_OPENPYXL:
-        output = io.StringIO()
-        output.write('\ufeff')
-        writer = csv.writer(output, delimiter=';')
-        writer.writerow(["Empresa *", "Marca", "Plataforma *", "Colaborador *", "Cargo", "Email_Colaborador", "Telefono", "Usuario_Login *", "Password *", "Estado", "Notas"])
-        def_emp = db_empresas[0] if db_empresas else "Marketing Alterno"
-        writer.writerow([def_emp, def_emp, "Zimbra Mail", "Juan Carlos Pérez Flores", "Diseñador Gráfico", "juan.perez@alterno.pe", "+51 987654321", "jperez@alterno.pe", "Temp#Pass2026!", "activo", "Buzón de correo"])
-        writer.writerow([def_emp, def_emp, "Odoo ERP", "María Elena Gómez Silva", "Analista Contable", "mgomez@alterno.pe", "+51 912345678", "mgomez", "Odoo#Mkt2026!", "activo", "Módulos de compras"])
-        buf = io.BytesIO(output.getvalue().encode('utf-8-sig'))
-        return send_file(buf, mimetype='text/csv', as_attachment=True, download_name='Plantilla_Cuentas_Plataforma.csv')
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Cuentas_Plataforma"
-    ws.views.sheetView[0].showGridLines = True
-
-    # 1. Título y Banner
-    ws.merge_cells('A1:K1')
-    ws['A1'] = "SISTEMAS TI - PLANTILLA DE IMPORTACIÓN MASIVA DE CUENTAS POR PLATAFORMA"
-    ws['A1'].font = Font(name='Calibri', size=13, bold=True, color='FFFFFF')
-    ws['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
-    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-    ws.row_dimensions[1].height = 32
-
-    ws.merge_cells('A2:K2')
-    ws['A2'] = "Instrucciones: Complete los datos a partir de la fila 4. Las columnas con (*) son obligatorias. Las contraseñas se guardarán cifradas (Fernet). Borre este archivo después de importarlo."
-    ws['A2'].font = Font(name='Calibri', size=10, italic=True, color='475569')
-    ws['A2'].fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
-    ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
-    ws.row_dimensions[2].height = 24
-
-    headers = [
-        ("Empresa *", 20),
-        ("Marca", 18),
-        ("Plataforma *", 24),
-        ("Colaborador *", 28),
-        ("Cargo", 24),
-        ("Email_Colaborador", 26),
-        ("Telefono", 18),
-        ("Usuario_Login *", 26),
-        ("Password *", 20),
-        ("Estado", 16),
-        ("Notas", 32)
-    ]
-
-    header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
-    header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
-    thin_border = Border(
-        left=Side(style='thin', color='CBD5E1'),
-        right=Side(style='thin', color='CBD5E1'),
-        top=Side(style='thin', color='CBD5E1'),
-        bottom=Side(style='thin', color='CBD5E1')
-    )
-
-    ws.row_dimensions[3].height = 28
-    for col_idx, (h_title, col_width) in enumerate(headers, start=1):
-        cell = ws.cell(row=3, column=col_idx, value=h_title)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border = thin_border
-        col_letter = get_column_letter(col_idx)
-        ws.column_dimensions[col_letter].width = col_width
-
-    # Filas de Ejemplo
-    def_emp = db_empresas[0] if db_empresas else "Marketing Alterno"
-    examples = [
-        (def_emp, def_emp, "Zimbra Mail", "Juan Carlos Pérez Flores", "Diseñador Gráfico Senior", "juan.perez@alterno.pe", "+51 987654321", "jperez@alterno.pe", "Temp#Pass2026!", "activo", "Buzón de correo corporativo"),
-        (def_emp, def_emp, "Odoo ERP", "María Elena Gómez Silva", "Analista Contable", "mgomez@alterno.pe", "+51 912345678", "mgomez", "Odoo#Mkt2026!", "activo", "Acceso a módulos de compras y facturación"),
-        (def_emp, "", "Office 365", "Carlos Alberto Mendoza", "Asistente de Operaciones", "cmendoza@alterno.pe", "", "cmendoza@alterno.pe", "Init#2026M365", "por_crear", "Cuenta en proceso de alta técnica"),
-    ]
-
-    example_fill = PatternFill(start_color='F8FAFC', end_color='F8FAFC', fill_type='solid')
-    for row_idx, row_data in enumerate(examples, start=4):
-        ws.row_dimensions[row_idx].height = 22
-        for col_idx, val in enumerate(row_data, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=val)
-            cell.font = Font(name='Calibri', size=10, color='1E293B')
-            cell.fill = example_fill
-            cell.border = thin_border
-            cell.alignment = Alignment(
-                horizontal='center' if col_idx in [1, 2, 7, 10] else 'left',
-                vertical='center'
-            )
-
-    # Hoja 2: Catálogos y Guía
-    ws2 = wb.create_sheet(title="Catalogos_Y_Guia")
-    ws2.views.sheetView[0].showGridLines = True
-    ws2.column_dimensions['A'].width = 28
-    ws2.column_dimensions['B'].width = 36
-    ws2.column_dimensions['C'].width = 36
-
-    ws2['A1'] = "CATÁLOGOS ACTUALES & GUÍA DE CARGA"
-    ws2['A1'].font = Font(name='Calibri', size=12, bold=True, color='FFFFFF')
-    ws2['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
-    ws2.row_dimensions[1].height = 28
-
-    ws2['A3'] = "EMPRESAS EN BASE DE DATOS"
-    ws2['A3'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
-    for idx, emp_name in enumerate(db_empresas, start=4):
-        ws2[f'A{idx}'] = emp_name
-
-    plat_start = len(db_empresas) + 5
-    ws2[f'A{plat_start}'] = "PLATAFORMAS REGISTRADAS"
-    ws2[f'B{plat_start}'] = "TIPO DE SERVICIO"
-    ws2[f'A{plat_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
-    ws2[f'B{plat_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
-
-    for idx, p_row in enumerate(db_plataformas, start=plat_start + 1):
-        ws2[f'A{idx}'] = p_row[0]
-        ws2[f'B{idx}'] = p_row[1]
-
-    est_start = plat_start + len(db_plataformas) + 3
-    ws2[f'A{est_start}'] = "ESTADOS VÁLIDOS"
-    ws2[f'B{est_start}'] = "DESCRIPCIÓN"
-    ws2[f'A{est_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
-    ws2[f'B{est_start}'].font = Font(name='Calibri', size=11, bold=True, color='1E293B')
-
-    valid_estados = [
-        ("activo", "Cuenta operativa y en uso activo por el colaborador."),
-        ("por_crear", "Cuenta planificada o pendiente de aprovisionamiento en la plataforma."),
-        ("suspendido", "Cuenta bloqueada o pausada por vacaciones o licencia temporal."),
-        ("baja", "Cuenta deshabilitada por cese o desvinculación definitiva.")
-    ]
-    for idx, (st_name, st_desc) in enumerate(valid_estados, start=est_start + 1):
-        ws2[f'A{idx}'] = st_name
-        ws2[f'B{idx}'] = st_desc
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return send_file(
-        buf,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name='Plantilla_Cuentas_Plataforma.xlsx'
-    )
-
-
-@app.route('/api/it-vault/platform-users/export', methods=['GET'])
-def api_it_platform_users_export():
-    empresa_id = request.args.get('empresa_id', type=int)
-    marca_id = request.args.get('marca_id', type=int)
-    plataforma = request.args.get('plataforma', '').strip()
-    search = request.args.get('search', '').strip().lower()
-    estado = request.args.get('estado', '').strip()
-    include_passwords = request.args.get('include_passwords', '0') == '1'
-    if include_passwords and not vault_unlocked():
-        return jsonify({
-            "error": "Desbloquea la bóveda con tu PIN o contraseña para exportar contraseñas.",
-            "code": "vault_locked",
-        }), 403
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    query = '''
-        SELECT pu.*, 
-               e.nombre as empresa_nombre,
-               m.nombre as marca_nombre,
-               u.full_name as created_by_name
-        FROM it_platform_users pu
-        JOIN it_empresas e ON pu.empresa_id = e.id
-        LEFT JOIN it_marcas m ON pu.marca_id = m.id
-        LEFT JOIN users u ON pu.created_by = u.id
-        WHERE 1=1
-    '''
-    params = []
-
-    if empresa_id:
-        query += " AND pu.empresa_id = ?"
-        params.append(empresa_id)
-
-    if marca_id:
-        query += " AND pu.marca_id = ?"
-        params.append(marca_id)
-
-    if plataforma and plataforma != 'todas':
-        query += " AND pu.plataforma = ?"
-        params.append(plataforma)
-
-    if estado and estado != 'todos':
-        query += " AND pu.estado = ?"
-        params.append(estado)
-
-    if search:
-        query += " AND (LOWER(pu.colaborador_nombre) LIKE ? OR LOWER(pu.usuario_login) LIKE ? OR LOWER(COALESCE(pu.colaborador_email, '')) LIKE ? OR LOWER(COALESCE(pu.colaborador_cargo, '')) LIKE ?)"
-        s_param = f"%{search}%"
-        params.extend([s_param, s_param, s_param, s_param])
-
-    query += " ORDER BY e.nombre ASC, pu.plataforma ASC, pu.colaborador_nombre ASC"
-    cursor.execute(query, params)
-    raw_users = cursor.fetchall()
-    conn.close()
-
-    if not _HAS_OPENPYXL:
-        output = io.StringIO()
-        output.write('\ufeff')
-        writer = csv.writer(output, delimiter=';')
-        writer.writerow(["ID", "Empresa", "Marca", "Plataforma", "Colaborador", "Cargo", "Email", "Teléfono", "Usuario Login", "Contraseña", "Estado", "Notas"])
-        for r in raw_users:
-            pw_val = "••••••••"
-            if include_passwords and r['password_actual']:
-                try:
-                    pw_val = decrypt_vault_secret(r['password_actual'])
-                except Exception:
-                    pw_val = "••••••••"
-            writer.writerow([r['id'], r['empresa_nombre'] or '', r['marca_nombre'] or '', r['plataforma'] or '', r['colaborador_nombre'] or '', r['colaborador_cargo'] or '', r['colaborador_email'] or '', r['colaborador_telefono'] or '', r['usuario_login'] or '', pw_val, r['estado'] or 'activo', r['notas'] or ''])
-        buf = io.BytesIO(output.getvalue().encode('utf-8-sig'))
-        return send_file(buf, mimetype='text/csv', as_attachment=True, download_name='Cuentas_Plataformas_Export.csv')
-
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Cuentas_Export"
-    ws.views.sheetView[0].showGridLines = True
-
-    # Banner
-    ws.merge_cells('A1:L1')
-    ws['A1'] = "DIRECTORIO DE CUENTAS POR PLATAFORMA - SISTEMAS / TI"
-    ws['A1'].font = Font(name='Calibri', size=13, bold=True, color='FFFFFF')
-    ws['A1'].fill = PatternFill(start_color='0F172A', end_color='0F172A', fill_type='solid')
-    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-    ws.row_dimensions[1].height = 32
-
-    now_str = get_peru_now_str()
-    ws.merge_cells('A2:L2')
-    ws['A2'] = f"Reporte generado el {now_str} | Total de registros exportados: {len(raw_users)}"
-    ws['A2'].font = Font(name='Calibri', size=10, italic=True, color='475569')
-    ws['A2'].fill = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
-    ws['A2'].alignment = Alignment(horizontal='left', vertical='center', indent=1)
-    ws.row_dimensions[2].height = 24
-
-    cols = [
-        ("ID", 8),
-        ("Empresa", 20),
-        ("Marca", 16),
-        ("Plataforma", 22),
-        ("Colaborador", 28),
-        ("Cargo", 22),
-        ("Email", 26),
-        ("Teléfono", 16),
-        ("Usuario Login", 24),
-        ("Contraseña", 18),
-        ("Estado", 14),
-        ("Notas", 30)
-    ]
-
-    header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
-    header_fill = PatternFill(start_color='1E293B', end_color='1E293B', fill_type='solid')
-    thin_border = Border(
-        left=Side(style='thin', color='CBD5E1'),
-        right=Side(style='thin', color='CBD5E1'),
-        top=Side(style='thin', color='CBD5E1'),
-        bottom=Side(style='thin', color='CBD5E1')
-    )
-
-    ws.row_dimensions[3].height = 26
-    for col_idx, (col_name, col_width) in enumerate(cols, start=1):
-        cell = ws.cell(row=3, column=col_idx, value=col_name)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = thin_border
-        col_letter = get_column_letter(col_idx)
-        ws.column_dimensions[col_letter].width = col_width
-
-    for row_idx, r in enumerate(raw_users, start=4):
-        ws.row_dimensions[row_idx].height = 20
-        pw_val = "••••••••"
-        if include_passwords and r['password_actual']:
-            try:
-                pw_val = decrypt_vault_secret(r['password_actual'])
-            except Exception:
-                pw_val = "••••••••"
-
-        row_vals = [
-            r['id'],
-            r['empresa_nombre'] or '',
-            r['marca_nombre'] or '',
-            r['plataforma'] or '',
-            r['colaborador_nombre'] or '',
-            r['colaborador_cargo'] or '',
-            r['colaborador_email'] or '',
-            r['colaborador_telefono'] or '',
-            r['usuario_login'] or '',
-            pw_val,
-            r['estado'] or 'activo',
-            r['notas'] or ''
-        ]
-        for col_idx, val in enumerate(row_vals, start=1):
-            cell = ws.cell(row=row_idx, column=col_idx, value=val)
-            cell.font = Font(name='Calibri', size=10, color='1E293B')
-            cell.border = thin_border
-            cell.alignment = Alignment(
-                horizontal='center' if col_idx in [1, 8, 10, 11] else 'left',
-                vertical='center'
-            )
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return send_file(
-        buf,
-        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        as_attachment=True,
-        download_name='Cuentas_Plataformas_Export.xlsx'
-    )
-
-
-@app.route('/api/it-vault/platform-users/import/preview', methods=['POST', 'OPTIONS'])
-def api_it_platform_users_import_preview():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    if 'file' not in request.files:
-        return jsonify({"error": "No se envió ningún archivo para previsualización"}), 400
-
-    uploaded_file = request.files['file']
-    if not uploaded_file.filename:
-        return jsonify({"error": "Archivo no seleccionado"}), 400
-
-    try:
-        parsed_rows = parse_accounts_from_filestorage(uploaded_file)
-    except Exception as e:
-        return jsonify({"error": f"Error al procesar el archivo: {str(e)}"}), 400
-
-    if not parsed_rows:
-        return jsonify({"error": "No se encontraron filas con datos en el archivo subido"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Pre-cargar empresas y cuentas para verificación rápida
-    cursor.execute("SELECT id, LOWER(nombre) FROM it_empresas")
-    existing_empresas = {r[1]: r[0] for r in cursor.fetchall()}
-
-    cursor.execute("SELECT empresa_id, LOWER(plataforma), LOWER(usuario_login), id, colaborador_nombre FROM it_platform_users")
-    existing_accounts = {}
-    for r in cursor.fetchall():
-        key = (r[0], r[1].strip(), r[2].strip())
-        existing_accounts[key] = {"id": r[3], "colaborador_nombre": r[4]}
-
-    conn.close()
-
-    preview_rows = []
-    ready_count = 0
-    update_count = 0
-    invalid_count = 0
-
-    for idx, r in enumerate(parsed_rows, start=1):
-        errs = []
-        if not r.get('empresa'):
-            errs.append("Empresa es obligatoria")
-        if not r.get('plataforma'):
-            errs.append("Plataforma es obligatoria")
-        if not r.get('colaborador_nombre'):
-            errs.append("Colaborador es obligatorio")
-        if not r.get('usuario_login'):
-            errs.append("Usuario Login es obligatorio")
-
-        emp_lower = (r.get('empresa') or '').strip().lower()
-        emp_id = existing_empresas.get(emp_lower)
-
-        status = 'ready'
-        status_message = 'Listo para registrar'
-
-        if errs:
-            status = 'invalid'
-            status_message = "; ".join(errs)
-            invalid_count += 1
-        elif emp_id:
-            plat_lower = (r.get('plataforma') or '').strip().lower()
-            usr_lower = (r.get('usuario_login') or '').strip().lower()
-            acc_key = (emp_id, plat_lower, usr_lower)
-            if acc_key in existing_accounts:
-                status = 'update'
-                prev_name = existing_accounts[acc_key]['colaborador_nombre']
-                status_message = f'Cuenta existente ({prev_name}). Se actualizarán sus datos.'
-                update_count += 1
-            else:
-                ready_count += 1
-        else:
-            ready_count += 1
-            status_message = f"Empresa '{r.get('empresa')}' será creada automáticamente."
-
-        preview_rows.append({
-            'index': idx,
-            'empresa': r.get('empresa', ''),
-            'marca': r.get('marca', ''),
-            'plataforma': r.get('plataforma', ''),
-            'colaborador_nombre': r.get('colaborador_nombre', ''),
-            'colaborador_cargo': r.get('colaborador_cargo', ''),
-            'colaborador_email': r.get('colaborador_email', ''),
-            'colaborador_telefono': r.get('colaborador_telefono', ''),
-            'usuario_login': r.get('usuario_login', ''),
-            'password_actual': r.get('password_actual', ''),
-            'estado': r.get('estado', 'activo'),
-            'notas': r.get('notas', ''),
-            'status': status,
-            'status_message': status_message,
-        })
-
-    return jsonify({
-        "success": True,
-        "filename": uploaded_file.filename,
-        "total_filas": len(preview_rows),
-        "ready_count": ready_count,
-        "update_count": update_count,
-        "invalid_count": invalid_count,
-        "rows": preview_rows
-    }), 200
-
-
-@app.route('/api/it-vault/platform-users/import', methods=['POST', 'OPTIONS'])
-def api_it_platform_users_import():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    modo = request.form.get('modo', 'crear_o_actualizar')
-    created_by = request.form.get('created_by', type=int) or 1
-
-    # También soporta recibir JSON directamente si el frontend confirmó el preview
-    payload_rows = []
-    if request.is_json:
-        data = request.get_json(silent=True) or {}
-        payload_rows = data.get('rows', [])
-        modo = data.get('modo', modo)
-        created_by = data.get('created_by', created_by)
-    elif 'file' in request.files:
-        uploaded_file = request.files['file']
-        if not uploaded_file.filename:
-            return jsonify({"error": "Archivo no seleccionado"}), 400
-        try:
-            payload_rows = parse_accounts_from_filestorage(uploaded_file)
-        except Exception as e:
-            return jsonify({"error": f"Error al leer el archivo: {str(e)}"}), 400
-
-    if not payload_rows:
-        return jsonify({"error": "No se proporcionaron filas para importar"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    now_peru = get_peru_now_str()
-
-    created_count = 0
-    updated_count = 0
-    skipped_count = 0
-    errors = []
-
-    # Cache de empresas, marcas y plataformas
-    cursor.execute("SELECT id, LOWER(nombre) FROM it_empresas")
-    empresas_map = {r[1]: r[0] for r in cursor.fetchall()}
-
-    cursor.execute("SELECT id, empresa_id, LOWER(nombre) FROM it_marcas")
-    marcas_map = {(r[1], r[2]): r[0] for r in cursor.fetchall()}
-
-    cursor.execute("SELECT id, LOWER(nombre) FROM it_plataformas")
-    plataformas_map = {r[1]: r[0] for r in cursor.fetchall()}
-
-    for idx, r in enumerate(payload_rows, start=1):
-        try:
-            emp_name = (r.get('empresa') or '').strip()
-            plat_name = (r.get('plataforma') or '').strip()
-            colab_name = (r.get('colaborador_nombre') or '').strip()
-            usr_login = (r.get('usuario_login') or '').strip()
-
-            if not emp_name or not plat_name or not colab_name or not usr_login:
-                errors.append(f"Fila #{idx}: Faltan campos obligatorios (Empresa, Plataforma, Colaborador o Usuario).")
-                continue
-
-            # 1. Resolver o Crear Empresa
-            emp_lower = emp_name.lower()
-            if emp_lower in empresas_map:
-                empresa_id = empresas_map[emp_lower]
-            else:
-                cursor.execute("INSERT INTO it_empresas (nombre, color, created_at) VALUES (?, '#00F0FF', ?)", (emp_name, now_peru))
-                empresa_id = cursor.lastrowid
-                empresas_map[emp_lower] = empresa_id
-
-            # 2. Resolver o Crear Marca si viene
-            marca_name = (r.get('marca') or '').strip()
-            marca_id = None
-            if marca_name:
-                m_key = (empresa_id, marca_name.lower())
-                if m_key in marcas_map:
-                    marca_id = marcas_map[m_key]
-                else:
-                    cursor.execute("INSERT INTO it_marcas (empresa_id, nombre, created_at) VALUES (?, ?, ?)", (empresa_id, marca_name, now_peru))
-                    marca_id = cursor.lastrowid
-                    marcas_map[m_key] = marca_id
-
-            # 3. Registrar plataforma en catálogo si no existe
-            plat_lower = plat_name.lower()
-            if plat_lower not in plataformas_map:
-                cursor.execute("INSERT INTO it_plataformas (nombre, tipo_servicio, color, created_at) VALUES (?, 'General', '#3B82F6', ?)", (plat_name, now_peru))
-                plataformas_map[plat_lower] = cursor.lastrowid
-
-            # 4. Resolver contraseña
-            raw_password = (r.get('password_actual') or '').strip()
-            if not raw_password:
-                # Generar contraseña temporal segura si no vino en el Excel
-                import secrets
-                import string
-                chars = string.ascii_letters + string.digits + "!@#$"
-                raw_password = "Temp#" + "".join(secrets.choice(chars) for _ in range(8))
-
-            encrypted_pass = encrypt_vault_secret(raw_password)
-
-            cargo = (r.get('colaborador_cargo') or '').strip()
-            email = (r.get('colaborador_email') or '').strip()
-            telefono = (r.get('colaborador_telefono') or '').strip()
-            estado = r.get('estado') or 'activo'
-            if estado not in ['activo', 'por_crear', 'suspendido', 'baja']:
-                estado = 'activo'
-            notas = (r.get('notas') or '').strip()
-
-            # 5. Verificar existencia por (empresa_id, plataforma, usuario_login)
-            cursor.execute('''
-                SELECT id, password_actual FROM it_platform_users 
-                WHERE empresa_id = ? AND LOWER(plataforma) = LOWER(?) AND LOWER(usuario_login) = LOWER(?)
-            ''', (empresa_id, plat_name, usr_login))
-            existing = cursor.fetchone()
-
-            if existing:
-                existing_id = existing[0]
-                if modo == 'crear_o_actualizar':
-                    cursor.execute('''
-                        UPDATE it_platform_users SET
-                            marca_id = COALESCE(?, marca_id),
-                            colaborador_nombre = ?,
-                            colaborador_cargo = ?,
-                            colaborador_email = ?,
-                            colaborador_telefono = ?,
-                            password_anterior = CASE WHEN ? != '' THEN password_actual ELSE password_anterior END,
-                            password_actual = CASE WHEN ? != '' THEN ? ELSE password_actual END,
-                            estado = ?,
-                            notas = ?,
-                            updated_by = ?,
-                            updated_at = ?
-                        WHERE id = ?
-                    ''', (marca_id, colab_name, cargo, email, telefono,
-                          raw_password, raw_password, encrypted_pass,
-                          estado, notas, created_by, now_peru, existing_id))
-                    updated_count += 1
-                else:
-                    skipped_count += 1
-            else:
-                cursor.execute('''
-                    INSERT INTO it_platform_users (
-                        empresa_id, marca_id, plataforma, colaborador_nombre, colaborador_cargo,
-                        colaborador_email, colaborador_telefono, usuario_login, password_actual,
-                        estado, ultimo_reseteo, notas, created_by, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (empresa_id, marca_id, plat_name, colab_name, cargo,
-                      email, telefono, usr_login, encrypted_pass,
-                      estado, now_peru, notas, created_by, now_peru, now_peru))
-                created_count += 1
-
-        except Exception as ex:
-            errors.append(f"Fila #{idx}: {str(ex)}")
-
-    conn.commit()
-    conn.close()
-
-    total_procesados = created_count + updated_count + skipped_count
-
-    return jsonify({
-        "success": True,
-        "total_procesados": total_procesados,
-        "creados": created_count,
-        "actualizados": updated_count,
-        "omitidos": skipped_count,
-        "errores": errors,
-        "mensaje": f"Proceso finalizado: {created_count} creados, {updated_count} actualizados, {skipped_count} omitidos."
-    }), 200
-
-
-# =========================================================================
-# RUTAS REST: GESTIÓN DE CATÁLOGOS MAESTROS (PLATAFORMAS, CARGOS, EMPRESAS)
-# =========================================================================
-
-@app.route('/api/it-vault/plataformas', methods=['GET', 'POST', 'OPTIONS'])
-def api_it_plataformas():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        cursor.execute("SELECT * FROM it_plataformas ORDER BY nombre ASC")
-        rows = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-        return jsonify(rows), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        nombre = (data.get('nombre') or '').strip()
-        tipo_servicio = (data.get('tipo_servicio') or 'General').strip()
-        color = data.get('color', '#00F0FF')
-        if not nombre:
-            conn.close()
-            return jsonify({"error": "El nombre de la plataforma es obligatorio"}), 400
-
-        try:
-            cursor.execute("INSERT INTO it_plataformas (nombre, tipo_servicio, color) VALUES (?, ?, ?)", (nombre, tipo_servicio, color))
-            new_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            return jsonify({"id": new_id, "nombre": nombre, "tipo_servicio": tipo_servicio, "color": color}), 201
-        except sqlite3.IntegrityError:
-            conn.close()
-            return jsonify({"error": "Esta plataforma ya existe en el catálogo"}), 400
-
-
-@app.route('/api/it-vault/plataformas/<int:plat_id>', methods=['DELETE', 'OPTIONS'])
-def api_it_plataforma_detail(plat_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM it_plataformas WHERE id = ?", (plat_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
-
-
-@app.route('/api/it-vault/cargos', methods=['GET', 'POST', 'OPTIONS'])
-def api_it_cargos():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    if request.method == 'GET':
-        cursor.execute("SELECT * FROM it_cargos ORDER BY nombre ASC")
-        rows = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-        return jsonify(rows), 200
-
-    if request.method == 'POST':
-        data = request.get_json(silent=True) or {}
-        nombre = (data.get('nombre') or '').strip()
-        area = (data.get('area') or 'General').strip()
-        if not nombre:
-            conn.close()
-            return jsonify({"error": "El nombre del cargo/área es obligatorio"}), 400
-
-        try:
-            cursor.execute("INSERT INTO it_cargos (nombre, area) VALUES (?, ?)", (nombre, area))
-            new_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            return jsonify({"id": new_id, "nombre": nombre, "area": area}), 201
-        except sqlite3.IntegrityError:
-            conn.close()
-            return jsonify({"error": "Este cargo ya existe en el catálogo"}), 400
-
-
-@app.route('/api/it-vault/cargos/<int:cargo_id>', methods=['DELETE', 'OPTIONS'])
-def api_it_cargo_detail(cargo_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM it_cargos WHERE id = ?", (cargo_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
-
-
-@app.route('/api/it-vault/empresas/<int:empresa_id>', methods=['DELETE', 'OPTIONS'])
-def api_it_empresa_delete(empresa_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    # Validar si tiene credenciales o usuarios de plataforma asociados
-    cursor.execute("SELECT COUNT(*) FROM it_credentials WHERE empresa_id = ? AND is_active = 1", (empresa_id,))
-    if cursor.fetchone()[0] > 0:
-        conn.close()
-        return jsonify({"error": "No se puede eliminar esta empresa porque contiene credenciales maestras registradas"}), 400
-
-    cursor.execute("SELECT COUNT(*) FROM it_platform_users WHERE empresa_id = ?", (empresa_id,))
-    if cursor.fetchone()[0] > 0:
-        conn.close()
-        return jsonify({"error": "No se puede eliminar esta empresa porque contiene usuarios/colaboradores registrados"}), 400
-
-    cursor.execute("DELETE FROM it_marcas WHERE empresa_id = ?", (empresa_id,))
-    cursor.execute("DELETE FROM it_empresas WHERE id = ?", (empresa_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
-
-
-@app.route('/api/it-vault/marcas/<int:marca_id>', methods=['DELETE', 'OPTIONS'])
-def api_it_marca_delete(marca_id):
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM it_marcas WHERE id = ?", (marca_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
-
-
-# =========================================================================
-# RUTAS REST: MODO BÓVEDA SEGURA (DESBLOQUEO POR PIN / RE-AUTENTICACIÓN)
-# =========================================================================
-
-@app.route('/api/it-vault/pin-status', methods=['GET', 'OPTIONS'])
-def api_it_vault_pin_status():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    user_id = request.args.get('user_id', type=int)
-    if not user_id:
-        return jsonify({"error": "user_id es requerido"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT security_pin_hash FROM users WHERE id = ?", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    has_pin = bool(row and row['security_pin_hash'])
-    return jsonify({"has_pin": has_pin}), 200
-
-
-@app.route('/api/it-vault/set-pin', methods=['POST', 'OPTIONS'])
-def api_it_vault_set_pin():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-    current_password = (data.get('current_password') or '').strip()
-    new_pin = (data.get('new_pin') or '').strip()
-
-    if not user_id or not current_password or not new_pin:
-        return jsonify({"error": "Contraseña actual y nuevo PIN son obligatorios"}), 400
-
-    if len(new_pin) < 4 or len(new_pin) > 8:
-        return jsonify({"error": "El PIN debe tener entre 4 y 8 dígitos o caracteres"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT password_hash FROM users WHERE id = ? AND is_active = 1", (user_id,))
-    user = cursor.fetchone()
-    if not user or not check_password_hash(user['password_hash'], current_password):
-        conn.close()
-        return jsonify({"error": "La contraseña de inicio de sesión actual es incorrecta"}), 400
-
-    pin_hash = generate_password_hash(new_pin)
-    cursor.execute("UPDATE users SET security_pin_hash = ? WHERE id = ?", (pin_hash, user_id))
-    
-    # Auditoría
-    cursor.execute('''
-        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-        VALUES (NULL, ?, 'config_security_pin', ?)
-    ''', (user_id, request.remote_addr))
-
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True, "message": "PIN de seguridad configurado exitosamente"}), 200
-
-
-@app.route('/api/it-vault/verify-unlock', methods=['POST', 'OPTIONS'])
-def api_it_vault_verify_unlock():
-    if request.method == 'OPTIONS':
-        return jsonify({}), 200
-
-    data = request.get_json(silent=True) or {}
-    user_id = data.get('user_id')
-    password = (data.get('password') or '').strip()
-    pin = (data.get('pin') or '').strip()
-
-    if not user_id or (not password and not pin):
-        return jsonify({"error": "Debes ingresar tu contraseña o tu PIN de seguridad"}), 400
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, username, password_hash, security_pin_hash, role FROM users WHERE id = ? AND is_active = 1", (user_id,))
-    user = cursor.fetchone()
-    if not user:
-        conn.close()
-        return jsonify({"error": "Usuario no encontrado o inactivo"}), 404
-
-    # Anti fuerza bruta: el PIN es corto, así que se limita el número de intentos fallidos
-    recent_failures = cursor.execute('''
-        SELECT COUNT(*) FROM it_credential_audit
-        WHERE user_id = ? AND action = 'failed_vault_unlock' AND created_at >= datetime('now', '-15 minutes')
-    ''', (user_id,)).fetchone()[0]
-    if recent_failures >= VAULT_MAX_FAILED_UNLOCKS:
-        conn.close()
-        return jsonify({
-            "error": "Demasiados intentos fallidos. Espera 15 minutos o desbloquea con tu contraseña más tarde.",
-            "success": False,
-        }), 429
-
-    is_valid = False
-    validation_method = None
-
-    if pin:
-        if not user['security_pin_hash']:
-            conn.close()
-            return jsonify({"error": "Aún no has configurado un PIN. Ingresa con tu contraseña de sesión o configúralo."}), 400
-        if check_password_hash(user['security_pin_hash'], pin):
-            is_valid = True
-            validation_method = 'pin'
-    elif password:
-        if check_password_hash(user['password_hash'], password):
-            is_valid = True
-            validation_method = 'password'
-
-    if not is_valid:
-        # Registrar intento fallido
-        cursor.execute('''
-            INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-            VALUES (NULL, ?, 'failed_vault_unlock', ?)
-        ''', (user_id, request.remote_addr))
-        conn.commit()
-        conn.close()
-        remaining = max(0, VAULT_MAX_FAILED_UNLOCKS - recent_failures - 1)
-        return jsonify({
-            "error": f"Credencial de desbloqueo incorrecta. Intentos restantes: {remaining}.",
-            "success": False,
-        }), 400
-
-    # Registrar desbloqueo exitoso
-    cursor.execute('''
-        INSERT INTO it_credential_audit (credential_id, user_id, action, ip_or_agent)
-        VALUES (NULL, ?, ?, ?)
-    ''', (user_id, f'unlock_vault_{validation_method}', request.remote_addr))
-    conn.commit()
-    conn.close()
-
-    # El servidor solo entrega contraseñas descifradas a peticiones que traigan este token (X-Vault-Token)
-    return jsonify({
-        "success": True,
-        "vault_token": issue_vault_token(user['id']),
-        "expires_in": VAULT_UNLOCK_SECONDS,
-        "message": "Bóveda desbloqueada con éxito"
-    }), 200
 
 LAST_ROLLOVER_DATE = None
 rollover_lock = threading.Lock()
+
 
 def ensure_daily_rollover(target_date=None, force=False):
     global LAST_ROLLOVER_DATE
@@ -5688,8 +2747,6 @@ def ensure_daily_rollover(target_date=None, force=False):
         if LAST_ROLLOVER_DATE == today_str and not force:
             return
 
-        # Reclamo atómico persistente en base de datos para coordinar entre múltiples workers de Gunicorn:
-        # solo el worker cuyo UPDATE afecta 1 fila ejecuta el rollover.
         try:
             conn = get_db()
             cursor = conn.cursor()
@@ -5712,10 +2769,10 @@ def ensure_daily_rollover(target_date=None, force=False):
         except Exception as e:
             logger.exception("[Scheduler] Error en ensure_daily_rollover: %s", e)
 
+
 def start_midnight_scheduler():
     """Inicia el hilo en background para ejecutar el rollover nocturno periódicamente."""
     def run_scheduler():
-        # Espera inicial para no competir con el arranque de workers
         time.sleep(10)
         while True:
             try:
@@ -5727,11 +2784,12 @@ def start_midnight_scheduler():
     t = threading.Thread(target=run_scheduler, daemon=True)
     t.start()
 
+
 def _init_db_serialized():
     """Ejecuta init_db con un candado de archivo para que los workers de Gunicorn no migren en paralelo."""
     lock_path = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), '.init.lock')
     try:
-        import fcntl  # Solo disponible en Linux/Unix (producción)
+        import fcntl
     except ImportError:
         init_db()
         return
@@ -5742,7 +2800,7 @@ def _init_db_serialized():
         finally:
             fcntl.flock(lock_file, fcntl.LOCK_UN)
 
-# Inicializar base de datos y scheduler tanto en modo directo como con Gunicorn
+
 try:
     _init_db_serialized()
     if os.environ.get('BITACORA_DISABLE_SCHEDULER') != '1':

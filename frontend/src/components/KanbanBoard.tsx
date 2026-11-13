@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Clock,
-  Timer,
   Plus,
   Trash2,
   ChevronLeft,
@@ -9,13 +7,8 @@ import {
   Search,
   Edit2,
   CheckCircle2,
-  X,
-  ArrowRight,
   RefreshCw,
-  Sparkles,
-  Info,
   AlertTriangle,
-  History,
   ShieldCheck,
   Check,
   Undo2,
@@ -27,24 +20,27 @@ import {
   Link2,
   MessageSquare,
 } from 'lucide-react';
-import { Actividad, EstadoActividad, Evidencia } from '../types';
-import { formatDuration, getEstadoBadgeInfo, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
-import { TIPOS_TRABAJO } from '../utils/initialData';
+import { Actividad, EstadoActividad, Evidencia, User } from '../types';
+import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
 import { EvidenceViewerModal } from './EvidenceViewerModal';
-import { EvidenceDropzone } from './EvidenceDropzone';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
-import { HtmlEditor } from './HtmlEditor';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
-import { useModalBehavior } from '../hooks/useModalBehavior';
+import { ActividadModal } from './ActividadModal';
+import { ActividadReferenciaModal } from './ActividadReferenciaModal';
 
 interface KanbanBoardProps {
   actividades: Actividad[];
   onUpdateEstado: (index: number, nuevoEstado: EstadoActividad) => void;
   onUpdateActividadDetalle?: (index: number, updatedData: Partial<Actividad>) => void;
   onAddActividadConEstado: (estado: EstadoActividad) => void;
+  onAddActividad?: (actividad?: Actividad) => void;
   onRemoveActividad: (index: number) => void;
   onSyncWithBitacora?: () => void;
   colaborador: string;
+  users?: User[];
+  currentUser?: User | null;
+  fecha?: string;
+  onDateChange?: (date: string) => void;
   isLeaderView?: boolean;
   showCollaboratorBadge?: boolean;
   onApproveActivity?: (index: number) => void;
@@ -63,28 +59,32 @@ const COLUMNS: ColumnConfig[] = [
   {
     id: 'pendiente',
     title: 'Por Iniciar',
-    badgeColor: 'bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10',
+    badgeColor:
+      'bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/10',
     icon: <ListTodo className="w-4 h-4 text-slate-400 dark:text-slate-500" />,
     borderColor: 'border-t-slate-400 dark:border-t-slate-500',
   },
   {
     id: 'en_proceso',
     title: 'En Proceso',
-    badgeColor: 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25',
+    badgeColor:
+      'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25',
     icon: <PlayCircle className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
     borderColor: 'border-t-sky-500',
   },
   {
     id: 'en_revision',
     title: 'En Revisión',
-    badgeColor: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25',
+    badgeColor:
+      'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25',
     icon: <Eye className="w-4 h-4 text-amber-500" />,
     borderColor: 'border-t-amber-500',
   },
   {
     id: 'completada',
     title: 'Completada',
-    badgeColor: 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25',
+    badgeColor:
+      'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25',
     icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" />,
     borderColor: 'border-t-emerald-500',
   },
@@ -95,9 +95,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   onUpdateEstado,
   onUpdateActividadDetalle,
   onAddActividadConEstado,
+  onAddActividad,
   onRemoveActividad,
   onSyncWithBitacora,
   colaborador,
+  users = [],
+  currentUser = null,
+  fecha,
+  onDateChange,
   isLeaderView = false,
   showCollaboratorBadge = false,
   onApproveActivity,
@@ -112,11 +117,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   const [selectedEvidencias, setSelectedEvidencias] = useState<Evidencia[]>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
 
-  // Detail & Edit card modal state
+  // Unified Detail, Create/Edit & Reference modals
   const [detailIndex, setDetailIndex] = useState<number | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Actividad>>({});
-  useModalBehavior(editingIndex !== null, () => setEditingIndex(null));
+  const [editingActividad, setEditingActividad] = useState<Actividad | null>(null);
+  const [modalDefaultEstado, setModalDefaultEstado] = useState<EstadoActividad>('completada');
+
+  const [refModalOpen, setRefModalOpen] = useState(false);
+  const [selectedRefId, setSelectedRefId] = useState<number | string | null>(null);
+  const [selectedRefVinculo, setSelectedRefVinculo] = useState<string | undefined>('continuacion');
 
   // Mobile active column selector ('todas' or specific status)
   const [mobileColumnFilter, setMobileColumnFilter] = useState<EstadoActividad | 'todas'>('todas');
@@ -151,38 +161,42 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     setDraggedIndex(null);
   };
 
-  const handleOpenEdit = (index: number) => {
-    setEditingIndex(index);
-    setEditForm({ ...actividades[index] });
+  const handleOpenCreateForColumn = (estado: EstadoActividad) => {
+    if (onAddActividad) {
+      setEditingIndex(null);
+      setEditingActividad(null);
+      setModalDefaultEstado(estado);
+      setModalOpen(true);
+    } else {
+      onAddActividadConEstado(estado);
+    }
   };
 
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (editingIndex !== null && onUpdateActividadDetalle) {
-      const desc = editForm.descripcion || '';
-      const cleanEvidencias = (editForm.evidencias || []).filter((ev, index, self) => {
-        if (!ev || !ev.url) return false;
-        const isFirst = self.findIndex((o) => (o.id && o.id === ev.id) || o.url === ev.url) === index;
-        if (!isFirst) return false;
+  const handleOpenEdit = (index: number) => {
+    const target = actividades[index];
+    if (!target) return;
+    setEditingIndex(index);
+    setEditingActividad(target);
+    setModalDefaultEstado(target.estado || 'completada');
+    setModalOpen(true);
+  };
 
-        const url = ev.url.trim();
-        const filename = url.split('/').pop()?.split('?')[0] || '';
-        if (url && desc.includes(url)) return false;
-        if (filename && desc.includes(filename)) return false;
-
-        // Descartar imagen/captura duplicada con el mismo prefijo de timestamp (YYYYMMDD_HHMMSS)
-        const tsMatch = filename.match(/^(\d{8}_\d{6})/);
-        if (tsMatch && desc.includes(tsMatch[1])) return false;
-
-        return true;
-      });
-
-      onUpdateActividadDetalle(editingIndex, {
-        ...editForm,
-        evidencias: cleanEvidencias,
-      });
+  const handleSaveModal = (actividadData: Actividad, editIdx: number | null) => {
+    if (editIdx !== null) {
+      if (onUpdateActividadDetalle) {
+        onUpdateActividadDetalle(editIdx, actividadData);
+      }
+    } else if (onAddActividad) {
+      onAddActividad(actividadData);
+    } else {
+      onAddActividadConEstado(actividadData.estado || 'pendiente');
     }
-    setEditingIndex(null);
+  };
+
+  const handleNavigateToRef = (refId: number | string, tipoVinculo?: string) => {
+    setSelectedRefId(refId);
+    setSelectedRefVinculo(tipoVinculo || 'continuacion');
+    setRefModalOpen(true);
   };
 
   const filteredActivitiesWithIndex = actividades
@@ -200,6 +214,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   const uniqueTipos = Array.from(new Set(actividades.map((a) => a.tipo_trabajo).filter(Boolean)));
   const pendingCount = actividades.filter((a) => a.estado !== 'completada').length;
+  const canEditItems = Boolean(onUpdateActividadDetalle);
+  const canAddItems = !isLeaderView || Boolean(onAddActividad);
 
   return (
     <div className="space-y-4">
@@ -223,7 +239,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               onChange={(e) => setFilterTipo(e.target.value)}
               className="px-2.5 py-1.5 bg-slate-50 dark:bg-[#1E222D] text-xs font-medium text-slate-700 dark:text-slate-200 rounded-lg border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 outline-hidden cursor-pointer"
             >
-              <option value="" className="bg-white dark:bg-[#1E222D]">Todos los tipos</option>
+              <option value="" className="bg-white dark:bg-[#1E222D]">
+                Todos los tipos
+              </option>
               {uniqueTipos.map((t) => (
                 <option key={t} value={t} className="bg-white dark:bg-[#1E222D]">
                   {t}
@@ -237,14 +255,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           <span>
             <strong className="font-semibold text-slate-700 dark:text-slate-200">{colaborador}</strong>
             <span className="mx-2 text-slate-300 dark:text-slate-600">·</span>
-            <span>{pendingCount} en curso, {actividades.length - pendingCount} completadas</span>
+            <span>
+              {pendingCount} en curso, {actividades.length - pendingCount} completadas
+            </span>
           </span>
 
           {onSyncWithBitacora && pendingCount > 0 && (
             <button
               type="button"
               onClick={onSyncWithBitacora}
-              className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer min-h-[36px]"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Sincronizar ({pendingCount})</span>
@@ -258,7 +278,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         <button
           type="button"
           onClick={() => setMobileColumnFilter('todas')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer min-h-[32px] ${
+          className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer min-h-[40px] ${
             mobileColumnFilter === 'todas'
               ? 'bg-sky-600 text-white'
               : 'bg-white dark:bg-[#161922] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/[0.08]'
@@ -273,7 +293,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               key={`m-col-${c.id}`}
               type="button"
               onClick={() => setMobileColumnFilter(c.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 min-h-[32px] ${
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer flex items-center gap-1.5 min-h-[40px] ${
                 mobileColumnFilter === c.id
                   ? 'bg-sky-600 text-white'
                   : 'bg-white dark:bg-[#161922] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/[0.08]'
@@ -314,7 +334,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-200/70 dark:border-white/[0.06]">
                 <div className="flex items-center gap-2">
                   <span>{col.icon}</span>
-                  <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200">{col.title}</span>
+                  <span className="text-xs sm:text-[13px] font-bold text-slate-800 dark:text-slate-200">
+                    {col.title}
+                  </span>
                   <span className="px-2 py-0.2 rounded-md text-[11px] font-semibold bg-white dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] tabular-nums">
                     {colActivities.length}
                   </span>
@@ -328,14 +350,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
               </div>
 
               {/* Column Add Card Button */}
-              <button
-                type="button"
-                onClick={() => onAddActividadConEstado(col.id)}
-                className="w-full mb-2.5 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-dashed border-slate-300/80 dark:border-white/10 hover:border-sky-500/60 bg-white/70 dark:bg-[#1A1E29]/70 hover:bg-white dark:hover:bg-[#1E222D] text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 text-xs font-medium transition-colors cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Nueva en {col.title}</span>
-              </button>
+              {canAddItems && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenCreateForColumn(col.id)}
+                  className="w-full mb-2.5 flex items-center justify-center gap-1.5 py-2 sm:py-1.5 px-3 rounded-lg border border-dashed border-slate-300/80 dark:border-white/10 hover:border-sky-500/60 bg-white/70 dark:bg-[#1A1E29]/70 hover:bg-white dark:hover:bg-[#1E222D] text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 text-xs font-medium transition-colors cursor-pointer min-h-[40px] sm:min-h-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Nueva en {col.title}</span>
+                </button>
+              )}
 
               {/* Cards Container */}
               <div className="space-y-2.5 flex-1 overflow-y-auto overflow-x-hidden max-h-[600px] pr-0.5">
@@ -394,11 +418,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       {/* Compact Time & Card Actions Row */}
                       <div className="flex items-center justify-between gap-1.5 mb-1.5">
                         <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
-                          {act.hora_inicio ? (
-                            <span>{act.hora_inicio}</span>
-                          ) : (
-                            <span>Sin horario</span>
-                          )}
+                          {act.hora_inicio ? <span>{act.hora_inicio}</span> : <span>Sin horario</span>}
                           {(act.duracion_min || 0) > 0 && (
                             <>
                               <span>·</span>
@@ -426,24 +446,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(index)}
-                            title="Editar actividad"
-                            className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
+                        {!isLeaderView && (
+                          <div
+                            className="flex items-center gap-1.5 sm:gap-0.5 shrink-0"
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onRemoveActividad(index)}
-                            title="Mover a papelera"
-                            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                            {canEditItems && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(index)}
+                                title="Editar actividad"
+                                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => onRemoveActividad(index)}
+                              title="Mover a papelera"
+                              className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center justify-center"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Description */}
@@ -468,7 +495,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       )}
 
                       {/* Quiet Metadata Row */}
-                      {(act.para_cliente || act.tipo_trabajo || act.parent_task_id || (act.evidencias && act.evidencias.length > 0)) && (
+                      {(act.para_cliente ||
+                        act.tipo_trabajo ||
+                        act.parent_task_id ||
+                        (act.evidencias && act.evidencias.length > 0)) && (
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                           {act.para_cliente && (
                             <span className="font-medium text-slate-600 dark:text-slate-300 truncate max-w-[130px]">
@@ -477,10 +507,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           )}
                           {act.tipo_trabajo && <span>{act.tipo_trabajo}</span>}
                           {act.parent_task_id && (
-                            <span className="inline-flex items-center gap-0.5" title={act.parent_task_desc || 'Continuación'}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo);
+                              }}
+                              className="inline-flex items-center gap-0.5 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"
+                              title={act.parent_task_desc || 'Ver tarea origen'}
+                            >
                               <Link2 className="w-3 h-3" />
                               <span>Continuación</span>
-                            </span>
+                            </button>
                           )}
                           {act.evidencias && act.evidencias.length > 0 && (
                             <button
@@ -503,7 +541,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
                       {/* Quick Column Move Footer */}
                       <div
-                        className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-1"
+                        className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <button
@@ -511,9 +549,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           disabled={isFirst}
                           onClick={() => moveActivity(index, 'prev')}
                           title="Mover a columna anterior"
-                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                          className="min-h-[40px] sm:min-h-0 flex items-center gap-1 px-2.5 sm:px-2 py-1 sm:py-0.5 rounded text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                         >
-                          <ChevronLeft className="w-3 h-3" />
+                          <ChevronLeft className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                           <span>Atrás</span>
                         </button>
 
@@ -522,10 +560,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                           disabled={isLast}
                           onClick={() => moveActivity(index, 'next')}
                           title="Avanzar a siguiente columna"
-                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-500/10 disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
+                          className="min-h-[40px] sm:min-h-0 flex items-center gap-1 px-2.5 sm:px-2 py-1 sm:py-0.5 rounded text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-500/10 disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                         >
                           <span>Avanzar</span>
-                          <ChevronRight className="w-3 h-3" />
+                          <ChevronRight className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                         </button>
                       </div>
 
@@ -536,7 +574,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                             <span>Revisión</span>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={(e) => {
@@ -544,7 +582,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                 if (onApproveActivity) onApproveActivity(index);
                                 else onUpdateEstado(index, 'completada');
                               }}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer"
+                              className="min-h-[36px] sm:min-h-0 flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition-colors cursor-pointer"
                               title="Aprobar y marcar como completada"
                             >
                               <Check className="w-3 h-3" />
@@ -557,7 +595,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                                 if (onRejectActivity) onRejectActivity(index);
                                 else onUpdateEstado(index, 'en_proceso');
                               }}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                              className="min-h-[36px] sm:min-h-0 flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors cursor-pointer"
                               title="Devolver a En Proceso"
                             >
                               <Undo2 className="w-3 h-3" />
@@ -581,152 +619,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         })}
       </div>
 
-      {/* MODAL EDICIÓN DE ACTIVIDAD DIRECTA DESDE KANBAN */}
-      {editingIndex !== null && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setEditingIndex(null)}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-2.5 sm:p-4 overflow-y-auto animate-in fade-in"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#161922] rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto overflow-y-auto overflow-x-hidden"
-          >
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-200/80 dark:border-white/[0.07]">
-              <h3 className="font-bold text-slate-900 dark:text-white text-sm flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                <span>Editar Actividad</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditingIndex(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Hora inicio</label>
-                  <input
-                    type="time"
-                    value={editForm.hora_inicio || ''}
-                    onChange={(e) => setEditForm({ ...editForm, hora_inicio: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Duración (min)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    value={editForm.duracion_min || ''}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, duracion_min: parseInt(e.target.value) || 0 })
-                    }
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tipo de trabajo</label>
-                <select
-                  value={editForm.tipo_trabajo || ''}
-                  onChange={(e) => setEditForm({ ...editForm, tipo_trabajo: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all"
-                >
-                  <option value="" className="dark:bg-[#1E222D]">Seleccionar...</option>
-                  {TIPOS_TRABAJO.map((t) => (
-                    <option key={t} value={t} className="dark:bg-[#1E222D]">
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Descripción</label>
-                <HtmlEditor
-                  value={editForm.descripcion || ''}
-                  onChange={(val) => setEditForm({ ...editForm, descripcion: val })}
-                  placeholder="Detalle de la tarea..."
-                  minHeight="130px"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Para / Cliente</label>
-                <input
-                  type="text"
-                  value={editForm.para_cliente || ''}
-                  onChange={(e) => setEditForm({ ...editForm, para_cliente: e.target.value })}
-                  placeholder="Ej: RR.HH., Gerencia..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Comentarios (opcional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={editForm.comentarios || ''}
-                  onChange={(e) => setEditForm({ ...editForm, comentarios: e.target.value })}
-                  placeholder="Notas internas..."
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all resize-none"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Estado</label>
-                <select
-                  value={editForm.estado || 'pendiente'}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, estado: e.target.value as EstadoActividad })
-                  }
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 rounded-lg border border-slate-200/80 dark:border-white/10 focus:outline-hidden focus:border-sky-500 transition-all"
-                >
-                  <option value="pendiente" className="dark:bg-[#1E222D]">Por Iniciar</option>
-                  <option value="en_proceso" className="dark:bg-[#1E222D]">En Proceso</option>
-                  <option value="en_revision" className="dark:bg-[#1E222D]">En Revisión</option>
-                  <option value="completada" className="dark:bg-[#1E222D]">Completada</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Evidencias adjuntas</label>
-                <EvidenceDropzone
-                  evidencias={editForm.evidencias || []}
-                  onChange={(evs) => setEditForm({ ...editForm, evidencias: evs })}
-                  compact={true}
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setEditingIndex(null)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg font-medium cursor-pointer transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="bg-sky-600 hover:bg-sky-700 text-white font-semibold px-5 py-2 rounded-lg cursor-pointer transition-colors"
-                >
-                  Guardar cambios
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* UNIFIED CREATION & EDITION MODAL (shared with Mi Bitácora) */}
+      <ActividadModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        actividadToEdit={editingActividad}
+        editIndex={editingIndex}
+        onSave={handleSaveModal}
+        users={users}
+        currentUser={currentUser}
+        fecha={fecha}
+        existingActividades={actividades}
+        defaultEstado={modalDefaultEstado}
+      />
 
       {/* MODAL DETALLE DE ACTIVIDAD DESDE KANBAN */}
       <ActividadDetalleModal
@@ -734,8 +639,27 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         onClose={() => setDetailIndex(null)}
         actividad={detailIndex !== null ? actividades[detailIndex] || null : null}
         index={detailIndex}
-        onEdit={(_act, idx) => handleOpenEdit(idx)}
+        fecha={fecha}
+        onEdit={(_act, idx) => {
+          setDetailIndex(null);
+          if (canEditItems) handleOpenEdit(idx);
+        }}
         onUpdateEstado={onUpdateEstado}
+        onNavigateToRef={(refId, tipo) => {
+          setDetailIndex(null);
+          handleNavigateToRef(refId, tipo);
+        }}
+      />
+
+      {/* MODAL INSPECCIÓN DE TAREA VINCULADA / ORIGEN */}
+      <ActividadReferenciaModal
+        isOpen={refModalOpen}
+        onClose={() => setRefModalOpen(false)}
+        refId={selectedRefId}
+        tipoVinculo={selectedRefVinculo}
+        onNavigateToDate={(targetFecha) => {
+          if (onDateChange) onDateChange(targetFecha);
+        }}
       />
 
       {/* Evidence Viewer Lightbox Modal */}

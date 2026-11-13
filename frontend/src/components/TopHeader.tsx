@@ -172,7 +172,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             type="button"
             onClick={onToggleMobileMenu}
             aria-label="Abrir menú de navegación"
-            className="md:hidden min-w-[38px] min-h-[38px] p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+            className="md:hidden min-w-[40px] min-h-[40px] p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -277,7 +277,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               ? `${unreadNotificationsCount} notificación(es) nueva(s) - Clic para ver historial`
               : 'Centro de Notificaciones'
           }
-          className="relative min-w-[36px] min-h-[36px] p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+          className="relative min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] p-2 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/[0.05] rounded-lg transition-colors cursor-pointer flex items-center justify-center"
         >
           <Bell className="w-4 h-4" />
           {unreadNotificationsCount > 0 && (

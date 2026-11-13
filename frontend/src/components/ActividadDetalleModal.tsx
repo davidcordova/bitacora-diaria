@@ -169,7 +169,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0"
+              className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0 flex items-center justify-center"
               title="Cerrar (Esc)"
             >
               <X className="w-5 h-5" />
@@ -177,7 +177,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overflow-x-hidden min-h-0 flex-1 text-slate-800 dark:text-slate-200">
+          <div className="p-4 sm:p-6 space-y-4 overflow-y-auto overflow-x-hidden min-h-0 min-w-0 w-full flex-1 text-slate-800 dark:text-slate-200">
             {/* Meta Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 p-3.5 bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07]">
               <div className="min-w-0">

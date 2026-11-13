@@ -73,6 +73,8 @@ export const EvidenceViewerModal: React.FC<EvidenceViewerModalProps> = ({
       id="evidence-modal-backdrop"
     >
       <div
+        role="dialog"
+        aria-modal="true"
         className="relative max-w-4xl w-full bg-[#161922] border border-white/10 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >

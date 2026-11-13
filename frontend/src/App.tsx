@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { X, CheckCircle2 } from 'lucide-react';
 
 import { Sidebar } from './components/Sidebar';
 import { ActividadesLista } from './components/ActividadesLista';
@@ -44,6 +45,7 @@ import {
   getInitialDateFromUrl,
   useUrlNavigation,
 } from './hooks/useUrlNavigation';
+import { useModalBehavior } from './hooks/useModalBehavior';
 
 export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>(() => getInitialViewFromUrl('lista'));
@@ -109,6 +111,9 @@ export function App() {
   const [activeProxyUser, setActiveProxyUser] = useState<User | null>(null);
   const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
   const [errorReportModalOpen, setErrorReportModalOpen] = useState(false);
+  const [quickCierreModalOpen, setQuickCierreModalOpen] = useState(false);
+  const headerSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  useModalBehavior(quickCierreModalOpen, () => setQuickCierreModalOpen(false));
   const [lastSyncErrorMessage, setLastSyncErrorMessage] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<SystemNotification[]>(() => {
     try {
@@ -423,14 +428,18 @@ export function App() {
 
       if (!activeUser || !activeUser.id) return;
 
-      const [uList, tList, hList, sysSettings, srvNotifs, myTargets] = await Promise.all([
+      const todayStr = getInitialDateFromUrl(getTodayLocalDateStr());
+
+      const [uList, tList, todayServerList, hPage, sysSettings, srvNotifs, myTargets] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
-        api.getBitacoras(undefined, undefined, undefined, activeUser.id),
+        api.getBitacoras(todayStr, undefined, undefined, activeUser.id, activeUser.id).catch(() => []),
+        api.getBitacorasPaginated({ requestingUserId: activeUser.id, limit: 100, offset: 0, summary: true }).catch(() => ({ items: [], total: 0, hasMore: false })),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
         api.getNotifications(activeUser.id).catch(() => []),
         api.getMyDelegatedTargets(activeUser.id).catch(() => []),
       ]);
+      const hList = hPage.items;
       setUsers(uList);
       setTeams(tList);
       setHistorial(hList);
@@ -452,7 +461,6 @@ export function App() {
       }
       refreshPapeleraCount();
 
-      const todayStr = getInitialDateFromUrl(getTodayLocalDateStr());
       const defaultStart = sysSettings?.hora_inicio_default || '08:30';
 
       if (activeUser) {
@@ -470,28 +478,10 @@ export function App() {
             if (!dStr || dStr === todayStr) continue;
             const pastDraft = getBestLocalDraft(activeUser.id, dStr, activeUser.full_name);
             if (!pastDraft || !Array.isArray(pastDraft.actividades) || pastDraft.actividades.length === 0) continue;
-            const pastServer = hList.find(
-              (b) =>
-                (b.user_id === activeUser.id ||
-                  (!b.user_id && (b.colaborador || '').toLowerCase() === activeUser.full_name.toLowerCase())) &&
-                b.fecha === dStr
-            );
-            let toPush: Bitacora | null = null;
-            let mode: 'replace' | 'merge' = 'replace';
-            if (pastServer) {
-              const r = reconcileDraftWithServer(pastServer, pastDraft);
-              if (r.hasLocalChanges) toPush = r.bitacora;
-            } else if (pastDraft.actividades.some((a) => !a.is_deleted && !isPersistedId(a.id))) {
-              // No tenemos la versión del servidor a mano: envío seguro (solo agrega, nunca pisa)
-              toPush = pastDraft;
-              mode = 'merge';
-            }
-            if (!toPush) {
-              if (pastServer) localStorage.setItem(k, JSON.stringify(pastServer));
-              continue;
-            }
-            const payload: Bitacora = { ...toPush, user_id: activeUser.id, colaborador: activeUser.full_name };
-            api.saveBitacora(payload, activeUser.id, { mode }).then((res) => {
+            if (!pastDraft.actividades.some((a) => !a.is_deleted && !isPersistedId(a.id))) continue;
+            // Envío seguro en modo merge (solo agrega actividades nuevas no sincronizadas, jamás pisa el servidor)
+            const payload: Bitacora = { ...pastDraft, user_id: activeUser.id, colaborador: activeUser.full_name };
+            api.saveBitacora(payload, activeUser.id, { mode: 'merge' }).then((res) => {
               if (res?.bitacora) localStorage.setItem(k, JSON.stringify(res.bitacora));
               showToast('info', `Se sincronizaron cambios pendientes de tu bitácora del ${dStr}.`);
             }).catch(console.warn);
@@ -500,7 +490,7 @@ export function App() {
           console.warn('[SmartSync] Error verificando borradores previos:', e);
         }
 
-        const todayMatch = hList.find(
+        const todayMatch = todayServerList.find(
           (b) =>
             (b.user_id === activeUser.id ||
               b.colaborador.toLowerCase() === activeUser.full_name.toLowerCase() ||
@@ -557,12 +547,12 @@ export function App() {
     }
   }, [currentUser?.id]);
 
-  // Refrescar historial completo desde el servidor al entrar a la vista 'historial'
+  // Refrescar historial ligero desde el servidor al entrar a la vista 'historial'
   useEffect(() => {
     if (viewMode === 'historial' && currentUser?.id) {
-      api.getBitacoras(undefined, undefined, undefined, currentUser.id).then((fresh) => {
-        if (Array.isArray(fresh) && fresh.length > 0) {
-          setHistorial(fresh);
+      api.getBitacorasPaginated({ requestingUserId: currentUser.id, limit: 100, offset: 0, summary: true }).then((page) => {
+        if (Array.isArray(page.items) && page.items.length > 0) {
+          setHistorial(page.items);
         }
       }).catch(console.warn);
     }
@@ -606,14 +596,58 @@ export function App() {
   }, [systemSettings]);
 
   const handleFieldChange = (field: keyof Bitacora, value: any) => {
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+
     setBitacora((prev) => {
-      const updated = { ...prev, [field]: value };
+      const updated: Bitacora = { ...prev, [field]: value };
       if (field === 'colaborador' && currentUser?.role === 'admin') {
         const matched = users.find((u) => u.full_name.toLowerCase() === String(value).toLowerCase());
         if (matched) {
           updated.user_id = matched.id;
         }
       }
+
+      const isHeaderOnlyField =
+        field === 'hora_inicio' ||
+        field === 'area' ||
+        field === 'pendientes' ||
+        field === 'necesita_apoyo' ||
+        field === 'apoyo_detalle' ||
+        field === 'prioridad_siguiente';
+
+      // Si la bitácora ya existe en servidor y el cambio es solo de cabecera,
+      // enviamos PATCH ligero /api/bitacoras/:id/header sin re-subir el arreglo de actividades.
+      if (isHeaderOnlyField && isPersistedId(updated.id) && uid) {
+        lastSavedSignature.current = getBitacoraSignature(updated, colab, uid);
+        if (headerSaveTimerRef.current) clearTimeout(headerSaveTimerRef.current);
+        const snap = updated;
+        headerSaveTimerRef.current = setTimeout(async () => {
+          try {
+            setAutoSaveStatus('saving');
+            await api.updateBitacoraHeader({
+              id: Number(snap.id),
+              fecha: snap.fecha,
+              user_id: uid,
+              colaborador: colab,
+              hora_inicio: snap.hora_inicio,
+              area: snap.area,
+              pendientes: snap.pendientes,
+              necesita_apoyo: snap.necesita_apoyo,
+              apoyo_detalle: snap.apoyo_detalle,
+              prioridad_siguiente: snap.prioridad_siguiente,
+            });
+            setAutoSaveStatus('saved');
+            setLastSavedTime(new Date());
+          } catch (err: any) {
+            lastSavedSignature.current = '';
+            setAutoSaveStatus('error');
+            setLastSyncErrorMessage(err?.message || 'Error al guardar cabecera de bitácora');
+          }
+        }, 500);
+      }
+
       return updated;
     });
   };
@@ -878,13 +912,80 @@ export function App() {
     }
   };
 
+  const persistNewActividadAtomically = async (newAct: Actividad, targetFecha: string) => {
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id || bitacora.user_id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    if (!uid || !targetFecha) return;
+
+    try {
+      setAutoSaveStatus('saving');
+      const res = await api.createActividadAtomica({
+        ...newAct,
+        bitacora_id: typeof bitacora.id === 'number' ? bitacora.id : undefined,
+        fecha: targetFecha,
+        user_id: uid,
+        colaborador: colab,
+        area: bitacora.area,
+        hora_inicio_jornada: bitacora.hora_inicio,
+        requesting_user_id: currentUser?.id,
+      });
+      if (res.closed_lineage_ids && res.closed_lineage_ids.length > 0) {
+        applyClosedLineageToHistorial(res.closed_lineage_ids);
+      }
+      setBitacora((prev) => {
+        if (prev.fecha !== targetFecha) return prev;
+        const serverActs = res.bitacora_actividades || [];
+        const serverUids = new Set(serverActs.map((a) => a.client_uid).filter(Boolean));
+        const serverIds = new Set(serverActs.map((a) => String(a.id)));
+        // Conservar cualquier actividad optimista adicional aún en vuelo
+        const inflightExtras = prev.actividades.filter(
+          (a) =>
+            !isPersistedId(a.id) &&
+            a.id !== newAct.id &&
+            !(a.client_uid && serverUids.has(a.client_uid)) &&
+            !serverIds.has(String(a.id))
+        );
+        const mergedActs =
+          inflightExtras.length > 0
+            ? recalculateActivitiesNetDurations([...serverActs, ...inflightExtras], prev.fecha)
+            : serverActs;
+        const synced: Bitacora = {
+          ...prev,
+          id: res.bitacora_id || prev.id,
+          tiempo_total_min: res.tiempo_total_min ?? prev.tiempo_total_min,
+          actividades: mergedActs,
+        };
+        if (inflightExtras.length === 0) {
+          lastSavedSignature.current = getBitacoraSignature(synced, colab, uid);
+        }
+        return synced;
+      });
+      setAutoSaveStatus('saved');
+      setLastSavedTime(new Date());
+    } catch (err: any) {
+      // Si falla por red, reactivar el auto-guardado completo con respaldo local
+      lastSavedSignature.current = '';
+      setAutoSaveStatus('error');
+      setLastSyncErrorMessage(err?.message || 'Error al registrar actividad en el servidor');
+      setSyncNudge((n) => n + 1);
+    }
+  };
+
   const handleAddActividad = (actData?: Actividad) => {
     const hIni = actData?.hora_inicio !== undefined ? actData.hora_inicio : (bitacora.hora_inicio || '08:30');
     const durMin = actData?.duracion_min !== undefined ? actData.duracion_min : 30;
     const hFin = actData?.hora_fin || (hIni ? calculateHoraFin(hIni, durMin, bitacora.fecha) : '');
+    const clientUid =
+      actData?.client_uid ||
+      (typeof actData?.id === 'string' && actData.id.startsWith('act-')
+        ? actData.id
+        : `act-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`);
+
     const newAct: Actividad = {
       ...(actData || {}),
-      id: actData?.id || `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: clientUid,
+      client_uid: clientUid,
       orden: bitacora.actividades.length,
       hora_inicio: hIni,
       hora_fin: hFin,
@@ -894,18 +995,29 @@ export function App() {
       para_cliente: actData?.para_cliente || '',
       estado: actData?.estado || 'completada',
     };
-    setBitacora((prev) => {
-      const nextActs = recalculateActivitiesNetDurations([...prev.actividades, newAct], prev.fecha);
-      return {
-        ...prev,
-        actividades: nextActs,
-      };
-    });
+
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    const targetFecha = bitacora.fecha;
+
+    const nextActs = recalculateActivitiesNetDurations([...bitacora.actividades, newAct], targetFecha);
+    const nextBitacora: Bitacora = {
+      ...bitacora,
+      actividades: nextActs,
+    };
+    if (uid) {
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, colab, uid);
+    }
+    setBitacora(nextBitacora);
+    void persistNewActividadAtomically(newAct, targetFecha);
   };
 
   const handleAddActividadConEstado = (estado: EstadoActividad) => {
+    const clientUid = `act-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     const newAct: Actividad = {
-      id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      id: clientUid,
+      client_uid: clientUid,
       orden: bitacora.actividades.length,
       hora_inicio: '',
       hora_fin: '',
@@ -915,10 +1027,20 @@ export function App() {
       para_cliente: '',
       estado: estado,
     };
-    setBitacora((prev) => ({
-      ...prev,
-      actividades: [...prev.actividades, newAct],
-    }));
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    const targetFecha = bitacora.fecha;
+
+    const nextBitacora: Bitacora = {
+      ...bitacora,
+      actividades: [...bitacora.actividades, newAct],
+    };
+    if (uid) {
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, colab, uid);
+    }
+    setBitacora(nextBitacora);
+    void persistNewActividadAtomically(newAct, targetFecha);
   };
 
   const handleUpdateActividad = (index: number, field: keyof Actividad, value: any) => {
@@ -1052,6 +1174,20 @@ export function App() {
         if (res.closed_lineage_ids && res.closed_lineage_ids.length > 0) {
           applyClosedLineageToHistorial(res.closed_lineage_ids);
         }
+        if (res.bitacora_actividades && res.bitacora_actividades.length > 0) {
+          setBitacora((prev) => {
+            if (prev.fecha !== previousBitacora.fecha) return prev;
+            const synced: Bitacora = {
+              ...prev,
+              tiempo_total_min: res.tiempo_total_min ?? prev.tiempo_total_min,
+              actividades: res.bitacora_actividades!,
+            };
+            if (uid) {
+              lastSavedSignature.current = getBitacoraSignature(synced, colab, uid);
+            }
+            return synced;
+          });
+        }
         setAutoSaveStatus('saved');
         setLastSavedTime(new Date());
         showToast('info', `Tarea marcada como "${label}"`);
@@ -1078,24 +1214,46 @@ export function App() {
   const handleRemoveActividad = async (index: number) => {
     const act = bitacora.actividades[index];
     const persisted = !!act && isPersistedId(act.id);
+    const effectiveUser = activeProxyUser || currentUser;
+    const uid = effectiveUser?.id;
+    const colab = effectiveUser?.full_name || bitacora.colaborador;
+    const targetFecha = bitacora.fecha;
+
     // Registrar la eliminación pendiente: viaja en el próximo guardado aunque falle la llamada directa
     if (persisted) pendingDeletedIds.current.add(String(act.id));
-    setBitacora((prev) => {
-      const filtered = act
-        ? prev.actividades.filter((a) => a !== act && !(act.id !== undefined && a.id === act.id))
-        : prev.actividades.filter((_, i) => i !== index);
-      return {
-        ...prev,
-        actividades: recalculateActivitiesNetDurations(filtered, prev.fecha),
-      };
-    });
+    const filtered = act
+      ? bitacora.actividades.filter((a) => a !== act && !(act.id !== undefined && a.id === act.id))
+      : bitacora.actividades.filter((_, i) => i !== index);
+    const nextBitacora: Bitacora = {
+      ...bitacora,
+      actividades: recalculateActivitiesNetDurations(filtered, targetFecha),
+    };
+    if (persisted && uid) {
+      lastSavedSignature.current = getBitacoraSignature(nextBitacora, colab, uid);
+    }
+    setBitacora(nextBitacora);
     showToast('info', 'Actividad movida a la papelera (retención 15 días)');
     if (persisted) {
       try {
-        await api.softDeleteActividad(Number(act.id));
+        const res = await api.softDeleteActividad(Number(act.id));
         pendingDeletedIds.current.delete(String(act.id));
+        if (res.bitacora_actividades) {
+          setBitacora((prev) => {
+            if (prev.fecha !== targetFecha) return prev;
+            const synced: Bitacora = {
+              ...prev,
+              tiempo_total_min: res.tiempo_total_min ?? prev.tiempo_total_min,
+              actividades: res.bitacora_actividades!,
+            };
+            if (uid) {
+              lastSavedSignature.current = getBitacoraSignature(synced, colab, uid);
+            }
+            return synced;
+          });
+        }
         refreshPapeleraCount();
       } catch (e) {
+        lastSavedSignature.current = '';
         console.warn('Error soft-deleting act (se reintentará en el próximo guardado):', e);
       }
     }
@@ -1173,9 +1331,15 @@ export function App() {
         .catch(() => {});
 
       showToast('success', '¡Bitácora guardada exitosamente en el servidor!', 'Jornada Registrada');
+      setQuickCierreModalOpen(false);
 
-      const updatedHistory = await api.getBitacoras(undefined, undefined, undefined, currentUser?.id);
-      setHistorial(updatedHistory);
+      const updatedPage = await api.getBitacorasPaginated({
+        requestingUserId: currentUser?.id,
+        limit: 100,
+        offset: 0,
+        summary: true,
+      });
+      setHistorial(updatedPage.items);
 
       // Desplegar panel lateral de resumen ejecutivo (desde ahí el usuario puede copiar o compartir por WhatsApp en 1 clic)
       setMobileDrawerOpen(true);
@@ -1462,6 +1626,8 @@ export function App() {
                 lastSavedTime={lastSavedTime}
                 onForceSyncCloud={handleForceSyncCloud}
                 onOpenErrorReport={() => setErrorReportModalOpen(true)}
+                onOpenQuickCierre={!activeProxyUser ? () => setQuickCierreModalOpen(true) : undefined}
+                isJornadaClosed={isGenerated}
               />
 
               <CierreJornada
@@ -1486,9 +1652,14 @@ export function App() {
               onUpdateEstado={handleUpdateEstado}
               onUpdateActividadDetalle={handleUpdateActividadDetalle}
               onAddActividadConEstado={handleAddActividadConEstado}
+              onAddActividad={handleAddActividad}
               onRemoveActividad={handleRemoveActividad}
               onSyncWithBitacora={handleSyncWithBitacora}
               colaborador={bitacora.colaborador}
+              users={users}
+              currentUser={currentUser}
+              fecha={bitacora.fecha}
+              onDateChange={handleDateChange}
             />
           )}
 
@@ -1584,6 +1755,59 @@ export function App() {
           }}
           onLogout={handleLogout}
         />
+      )}
+
+      {/* Modal Rápido de Cierre de Jornada (acceso en 1 clic sin hacer scroll) */}
+      {quickCierreModalOpen && (
+        <div
+          onClick={() => setQuickCierreModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto overflow-x-hidden"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-[#1A1E29] border-b border-slate-200/80 dark:border-white/[0.07] shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/70 dark:border-sky-500/20 shrink-0">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
+                    Cierre Rápido de Jornada
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Registra pendientes o genera el resumen diario al instante
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickCierreModalOpen(false)}
+                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                title="Cerrar (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 sm:p-4">
+              <CierreJornada
+                pendientes={bitacora.pendientes}
+                necesitaApoyo={bitacora.necesita_apoyo}
+                apoyoDetalle={bitacora.apoyo_detalle}
+                prioridadSiguiente={bitacora.prioridad_siguiente}
+                isSaving={isSaving}
+                onChange={handleFieldChange}
+                onSubmit={handleGenerateBitacora}
+                isProxyMode={Boolean(activeProxyUser)}
+                proxyUserName={activeProxyUser?.full_name}
+                actividades={bitacora.actividades}
+              />
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Panel Lateral Desplegable de Resumen (Slide-over para Desktop y Móvil) */}

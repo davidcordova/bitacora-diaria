@@ -47,6 +47,7 @@ interface ActividadModalProps {
   currentUser: User | null;
   fecha?: string;
   existingActividades?: Actividad[];
+  defaultEstado?: EstadoActividad;
 }
 
 export const ActividadModal: React.FC<ActividadModalProps> = ({
@@ -59,6 +60,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   currentUser,
   fecha,
   existingActividades = [],
+  defaultEstado = 'completada',
 }) => {
   const [horaInicio, setHoraInicio] = useState('08:00');
   const [duracionMin, setDuracionMin] = useState<number>(30);
@@ -148,7 +150,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setTipoTrabajo('Desarrollo');
         setDescripcion('');
         setParaCliente('');
-        setEstado('completada');
+        setEstado(defaultEstado || 'completada');
         setSharedWith([]);
         setEvidencias([]);
         setComentarios('');
@@ -160,7 +162,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       setRefSearch('');
       setErrorMsg(null);
     }
-  }, [isOpen, actividadToEdit, fecha]);
+  }, [isOpen, actividadToEdit, fecha, defaultEstado]);
 
   // Bloqueo de scroll del body y cierre por tecla Escape
   useModalBehavior(isOpen, onClose);
@@ -385,7 +387,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs animate-in fade-in duration-150 select-none overflow-y-auto overflow-x-hidden">
-      <div className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-2xl bg-white dark:bg-[#161922] rounded-2xl shadow-2xl border border-slate-200/90 dark:border-white/10 max-h-[calc(100dvh-1rem)] sm:max-h-[92dvh] my-auto flex flex-col overflow-hidden"
+      >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-50/70 dark:bg-[#1A1E29] border-b border-slate-200/80 dark:border-white/[0.07] shrink-0">
           <div className="flex items-center gap-2.5">
@@ -399,7 +405,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0"
+            className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer shrink-0 flex items-center justify-center"
             title="Cerrar (Esc)"
           >
             <X className="w-5 h-5" />

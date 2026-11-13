@@ -333,7 +333,7 @@ def user_can_review_owner(user, owner_id):
 
 _ACT_RE = re.compile(r'^/api/actividades/(\d+)(?:/estado|/eliminar)?$')
 _TRASH_RE = re.compile(r'^/api/papelera/(?:restaurar|eliminar)/(\d+)$')
-_BIT_RE = re.compile(r'^/api/bitacoras/(\d+)$')
+_BIT_RE = re.compile(r'^/api/bitacoras/(\d+)(?:/header)?$')
 
 
 def _ownership_denied(user):

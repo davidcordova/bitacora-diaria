@@ -53,9 +53,16 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   const [selectedBitacoraForModal, setSelectedBitacoraForModal] = useState<Bitacora | null>(null);
   const [displayMode, setDisplayMode] = useState<'list' | 'grid'>('list');
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hydratingId, setHydratingId] = useState<number | null>(null);
   const [liveHistorial, setLiveHistorial] = useState<Bitacora[]>(historial || []);
+  const [serverTotal, setServerTotal] = useState<number>(historial?.length || 0);
+  const [serverHasMore, setServerHasMore] = useState<boolean>(false);
+  const [serverOffset, setServerOffset] = useState<number>(0);
   const [filtroActividades, setFiltroActividades] = useState<'activas' | 'todas' | 'estancadas'>('activas');
   const [visibleCount, setVisibleCount] = useState<number>(15);
+
+  const PAGE_SIZE = 100;
 
   const isActividadInactiva = (act: Actividad, bitacoraFecha?: string): boolean => {
     if (act.estado === 'completada') return false;
@@ -77,33 +84,112 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   useEffect(() => {
     if (historial && historial.length > 0) {
       setLiveHistorial((prev) => {
-        // Combinar evitando duplicados
+        // Combinar evitando duplicados, priorizando versiones completas (!is_summary)
         const map = new Map<number, Bitacora>();
-        historial.forEach((b) => map.set(b.id, b));
-        prev.forEach((b) => map.set(b.id, b));
-        return Array.from(map.values()).sort((a, b) => (b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : b.id - a.id));
+        historial.forEach((b) => {
+          if (b.id !== undefined) map.set(b.id, b);
+        });
+        prev.forEach((b) => {
+          if (b.id !== undefined) {
+            const existing = map.get(b.id);
+            if (!existing || (existing.is_summary && !b.is_summary)) {
+              map.set(b.id, b);
+            }
+          }
+        });
+        return Array.from(map.values()).sort((a, b) =>
+          b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : (b.id || 0) - (a.id || 0)
+        );
       });
     }
   }, [historial]);
 
-  // Carga proactiva desde el servidor en montaje y al cambiar filtros
+  // Carga paginada ligera desde el servidor (summary=1) en montaje y al cambiar filtros
   const fetchFromServer = async (fecha?: string, colab?: string) => {
     setLoading(true);
     try {
-      const data = await api.getBitacoras(
-        fecha || undefined,
-        colab || undefined,
-        undefined,
-        currentUser?.id
-      );
-      if (Array.isArray(data)) {
-        setLiveHistorial(data);
-      }
+      const page = await api.getBitacorasPaginated({
+        fecha: fecha || undefined,
+        colaborador: colab || undefined,
+        requestingUserId: currentUser?.id,
+        limit: PAGE_SIZE,
+        offset: 0,
+        summary: true,
+      });
+      setLiveHistorial(page.items);
+      setServerTotal(page.total);
+      setServerHasMore(page.hasMore);
+      setServerOffset(page.items.length);
+      setVisibleCount(15);
     } catch (e) {
       console.warn('Error fetching bitacoras in HistorialView:', e);
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadMoreFromServer = async () => {
+    if (loadingMore || !serverHasMore) return;
+    setLoadingMore(true);
+    try {
+      const page = await api.getBitacorasPaginated({
+        fecha: dateFilter || undefined,
+        colaborador: colaboradorFilter || undefined,
+        requestingUserId: currentUser?.id,
+        limit: PAGE_SIZE,
+        offset: serverOffset,
+        summary: true,
+      });
+      setLiveHistorial((prev) => {
+        const map = new Map<number, Bitacora>();
+        prev.forEach((b) => {
+          if (b.id !== undefined) map.set(b.id, b);
+        });
+        page.items.forEach((b) => {
+          if (b.id !== undefined && !map.has(b.id)) map.set(b.id, b);
+        });
+        return Array.from(map.values()).sort((a, b) =>
+          b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : (b.id || 0) - (a.id || 0)
+        );
+      });
+      setServerTotal(page.total);
+      setServerHasMore(page.hasMore);
+      setServerOffset((prev) => prev + page.items.length);
+      setVisibleCount((prev) => prev + 25);
+    } catch (e) {
+      console.warn('Error loading more bitacoras:', e);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  // Hidrata bajo demanda una bitácora resumida con HTML rico y evidencias completas
+  const hydrateFullBitacora = async (item: Bitacora): Promise<Bitacora> => {
+    if (!item.is_summary || !item.id) return item;
+    try {
+      setHydratingId(item.id);
+      const full = await api.getBitacoraById(item.id);
+      setLiveHistorial((prev) => prev.map((b) => (b.id === full.id ? full : b)));
+      return full;
+    } catch (e) {
+      console.warn('Error hydrating full bitacora:', e);
+      return item;
+    } finally {
+      setHydratingId(null);
+    }
+  };
+
+  const handleInspectBitacora = async (item: Bitacora) => {
+    setSelectedBitacoraForModal(item);
+    if (item.is_summary && item.id) {
+      const full = await hydrateFullBitacora(item);
+      setSelectedBitacoraForModal((curr) => (curr && curr.id === full.id ? full : curr));
+    }
+  };
+
+  const handleLoadInEditor = async (item: Bitacora) => {
+    const full = await hydrateFullBitacora(item);
+    onLoadBitacora(full);
   };
 
   useEffect(() => {
@@ -370,7 +456,13 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/[0.06] text-xs text-slate-500 dark:text-slate-400 flex-wrap gap-2">
           <div className="flex items-center gap-2 flex-wrap">
             <span>
-              Mostrando <strong className="text-slate-800 dark:text-slate-200">{filtered.length}</strong> de <strong className="text-slate-800 dark:text-slate-200">{roleFilteredHistorial.length}</strong> bitácoras
+              Mostrando <strong className="text-slate-800 dark:text-slate-200">{Math.min(visibleCount, filtered.length)}</strong> de{' '}
+              <strong className="text-slate-800 dark:text-slate-200">
+                {!hasActiveFilters && serverTotal > roleFilteredHistorial.length
+                  ? serverTotal
+                  : filtered.length}
+              </strong>{' '}
+              bitácoras
             </span>
             {dateFilter && (
               <span className="inline-flex items-center gap-1.5 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/25 px-2.5 py-0.5 rounded-full text-[11px] font-semibold">
@@ -486,7 +578,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
               return (
                 <div
                   key={item.id || idx}
-                  onClick={() => setSelectedBitacoraForModal(item)}
+                  onClick={() => handleInspectBitacora(item)}
                   className="group px-5 py-4 hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer"
                 >
                   {/* Desktop Row Layout */}
@@ -596,7 +688,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedBitacoraForModal(item);
+                          handleInspectBitacora(item);
                         }}
                         title="Ver Resumen Completo"
                         className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
@@ -606,14 +698,15 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                       <button
                         type="button"
+                        disabled={hydratingId === item.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onLoadBitacora(item);
+                          handleLoadInEditor(item);
                         }}
                         title="Cargar y Continuar en esta Bitácora"
-                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
+                        className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        <RotateCcw className="w-4 h-4" />
+                        <RotateCcw className={`w-4 h-4 ${hydratingId === item.id ? 'animate-spin text-sky-500' : ''}`} />
                       </button>
 
                       {item.id && (isAdmin || item.user_id === currentUser?.id) && (
@@ -636,33 +729,33 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                   <div className="lg:hidden flex flex-col gap-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-[#00C9A7]" />
+                        <Calendar className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
                           {formatDateDisplay(item.fecha)}
                         </span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-mint-50 dark:bg-mint-950/40 text-[#00A88B] dark:text-[#00C9A7] border border-emerald-200 dark:border-emerald-800/60 uppercase">
+                      <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-500/20">
                         {item.estado || 'Generada'}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-[10px] flex items-center justify-center">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 font-bold text-[10px] flex items-center justify-center shrink-0">
                           {item.colaborador.charAt(0)}
                         </div>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{item.colaborador}</span>
-                        <span className="text-slate-400 dark:text-slate-500">• {item.area}</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">{item.colaborador}</span>
+                        <span className="text-slate-400 dark:text-slate-500 shrink-0">• {item.area}</span>
                       </div>
-                      <div className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-[11px]">
-                        <Clock className="w-3 h-3 text-[#00C9A7]" />
+                      <div className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-[#1E222D] px-2 py-0.5 rounded-full text-[11px] shrink-0">
+                        <Clock className="w-3 h-3 text-sky-600 dark:text-sky-400" />
                         <span>{formatDuration(totalMin)}</span>
                       </div>
                     </div>
 
                     {item.actividades.length > 0 && (
-                      <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate bg-slate-50 dark:bg-slate-800/60 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                        <span className="text-[#00C9A7] font-bold">• </span>
+                      <div className="text-[11px] text-slate-600 dark:text-slate-300 truncate bg-slate-50 dark:bg-[#1E222D]/60 p-2 rounded-xl border border-slate-100 dark:border-white/[0.06]">
+                        <span className="text-sky-600 dark:text-sky-400 font-bold">• </span>
                         {stripHtml(item.actividades[0].descripcion)}
                         {item.actividades.length > 1 && ` (+${item.actividades.length - 1} más)`}
                       </div>
@@ -673,9 +766,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedBitacoraForModal(item);
+                          handleInspectBitacora(item);
                         }}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
+                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3.5 py-2 min-h-[40px] rounded-xl cursor-pointer transition-colors"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>Ver Resumen</span>
@@ -684,13 +777,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
+                          disabled={hydratingId === item.id}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onLoadBitacora(item);
+                            handleLoadInEditor(item);
                           }}
-                          className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3.5 py-2 min-h-[38px] rounded-xl cursor-pointer transition-colors"
+                          className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3.5 py-2 min-h-[40px] rounded-xl cursor-pointer transition-colors disabled:opacity-50"
                         >
-                          <RotateCcw className="w-3.5 h-3.5" />
+                          <RotateCcw className={`w-3.5 h-3.5 ${hydratingId === item.id ? 'animate-spin' : ''}`} />
                           <span>Cargar</span>
                         </button>
                         {item.id && (isAdmin || item.user_id === currentUser?.id) && (
@@ -700,7 +794,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                               e.stopPropagation();
                               onDeleteBitacora(item.id as number);
                             }}
-                            className="p-2 min-w-[38px] min-h-[38px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer transition-colors"
+                            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -725,7 +819,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
             return (
               <div
                 key={item.id || idx}
-                onClick={() => setSelectedBitacoraForModal(item)}
+                onClick={() => handleInspectBitacora(item)}
                 className="group relative bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/80 dark:border-white/[0.07] p-5 hover:border-sky-300 dark:hover:border-sky-500/35 hover:shadow-sm transition-all flex flex-col justify-between cursor-pointer"
               >
                 <div>
@@ -816,9 +910,9 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setSelectedBitacoraForModal(item);
+                        handleInspectBitacora(item);
                       }}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] transition-colors cursor-pointer"
+                      className="min-h-[40px] sm:min-h-0 flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 bg-slate-100 dark:bg-[#1E222D] hover:bg-sky-50 dark:hover:bg-sky-500/10 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] transition-colors cursor-pointer"
                     >
                       <Eye className="w-3.5 h-3.5 text-slate-400" />
                       <span>Ver Resumen</span>
@@ -826,13 +920,14 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
 
                     <button
                       type="button"
+                      disabled={hydratingId === item.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onLoadBitacora(item);
+                        handleLoadInEditor(item);
                       }}
-                      className="flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3 py-1.5 rounded-lg border border-sky-200/80 dark:border-sky-500/25 transition-colors cursor-pointer"
+                      className="min-h-[40px] sm:min-h-0 flex items-center gap-1 text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-3 py-1.5 rounded-lg border border-sky-200/80 dark:border-sky-500/25 transition-colors cursor-pointer disabled:opacity-50"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
+                      <RotateCcw className={`w-3.5 h-3.5 ${hydratingId === item.id ? 'animate-spin' : ''}`} />
                       <span>Cargar</span>
                     </button>
                   </div>
@@ -846,7 +941,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
                         onDeleteBitacora(item.id as number);
                       }}
                       title="Eliminar registro"
-                      className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
+                      className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -858,18 +953,39 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         </div>
       )}
 
-      {/* Botón de Paginación Progresiva si hay más registros */}
-      {filtered.length > visibleCount && (
-        <div className="flex flex-col items-center justify-center pt-2 pb-4 gap-1.5">
-          <button
-            type="button"
-            onClick={() => setVisibleCount((prev) => prev + 15)}
-            className="px-5 py-2.5 rounded-xl bg-white dark:bg-[#161922] hover:bg-slate-50 dark:hover:bg-[#1E222D] text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] shadow-2xs transition-all cursor-pointer"
-          >
-            Mostrar más registros ({filtered.length - visibleCount} restantes)
-          </button>
+      {/* Botones de Paginación Progresiva Local y Paginación del Servidor */}
+      {(filtered.length > visibleCount || serverHasMore) && (
+        <div className="flex flex-col items-center justify-center pt-2 pb-4 gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            {filtered.length > visibleCount && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((prev) => prev + 20)}
+                className="px-5 py-2.5 rounded-xl bg-white dark:bg-[#161922] hover:bg-slate-50 dark:hover:bg-[#1E222D] text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] shadow-2xs transition-all cursor-pointer min-h-[40px]"
+              >
+                Mostrar más registros ({filtered.length - visibleCount} en pantalla)
+              </button>
+            )}
+
+            {serverHasMore && (
+              <button
+                type="button"
+                disabled={loadingMore}
+                onClick={loadMoreFromServer}
+                className="px-5 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-xs font-semibold text-white shadow-2xs transition-all cursor-pointer min-h-[40px] disabled:opacity-60 flex items-center gap-1.5"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${loadingMore ? 'animate-spin' : ''}`} />
+                <span>
+                  {loadingMore
+                    ? 'Cargando anteriores...'
+                    : `Cargar bitácoras anteriores (${Math.max(0, serverTotal - liveHistorial.length)} restantes)`}
+                </span>
+              </button>
+            )}
+          </div>
           <span className="text-[11px] text-slate-400">
-            Mostrando {Math.min(visibleCount, filtered.length)} de {filtered.length} bitácoras
+            Mostrando {Math.min(visibleCount, filtered.length)} de{' '}
+            {!hasActiveFilters && serverTotal > filtered.length ? serverTotal : filtered.length} bitácoras
           </span>
         </div>
       )}
@@ -879,7 +995,7 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
         isOpen={Boolean(selectedBitacoraForModal)}
         onClose={() => setSelectedBitacoraForModal(null)}
         bitacora={selectedBitacoraForModal}
-        onLoadInEditor={onLoadBitacora}
+        onLoadInEditor={handleLoadInEditor}
         currentUser={currentUser}
         users={users}
       />

@@ -25,6 +25,7 @@ export interface Actividad {
   para_cliente: string;
   estado: EstadoActividad;
   evidencias?: Evidencia[];
+  evidencias_count?: number;
   parent_task_id?: number | null;
   parent_task_desc?: string;
   parent_task_estado?: string;
@@ -119,6 +120,9 @@ export interface Bitacora {
   created_at?: string;
   team_id?: number;
   team_name?: string;
+  is_summary?: boolean;
+  updated_at?: string;
+  updated_by_user_id?: number | null;
   actividades: Actividad[];
 }
 

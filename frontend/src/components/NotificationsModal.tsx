@@ -117,11 +117,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 
       {/* Slide-in Notifications Panel */}
       <div
-        className="relative w-full sm:max-w-md h-full sm:h-[92vh] sm:rounded-3xl bg-white dark:bg-[#11121B] border-l sm:border border-slate-200 dark:border-white/[0.08] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-right duration-250"
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full sm:max-w-md h-full sm:h-[92vh] sm:rounded-3xl bg-white dark:bg-[#161922] border-l sm:border border-slate-200 dark:border-white/[0.08] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-right duration-250"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Panel Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-[#202230] bg-slate-50/80 dark:bg-[#1E222D]/80 backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
+        <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-white/[0.08] bg-slate-50/80 dark:bg-[#1A1E29] backdrop-blur-md flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-600 dark:text-sky-400 flex items-center justify-center shadow-xs">
               <Bell className="w-5 h-5" />
@@ -146,7 +148,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+            className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-2 text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/5 rounded-xl transition-colors cursor-pointer flex items-center justify-center"
             title="Cerrar panel"
           >
             <X className="w-4 h-4" />
@@ -154,7 +156,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
         </div>
 
         {/* Filter and Global Action Buttons */}
-        <div className="px-4 py-2.5 border-b border-slate-100 dark:border-[#202230] bg-white dark:bg-[#11121B] flex items-center justify-between gap-2 shrink-0">
+        <div className="px-4 py-2.5 border-b border-slate-100 dark:border-white/[0.08] bg-white dark:bg-[#161922] flex items-center justify-between gap-2 shrink-0">
           {/* Tabs: Todas / No leídas */}
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-[#232836] p-1 rounded-xl">
             <button

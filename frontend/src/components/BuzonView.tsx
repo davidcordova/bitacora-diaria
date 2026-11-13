@@ -36,6 +36,7 @@ import { Sugerencia, User, CategoriaSugerencia, ImpactoSugerencia, EstadoSugeren
 import { api } from '../services/api';
 import { EmptyState } from './EmptyState';
 import { confirmDialog } from './DialogHost';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 interface BuzonViewProps {
   currentUser?: User | null;
@@ -49,58 +50,58 @@ const CATEGORIAS_CONFIG: Record<
   mejora_proceso: {
     label: 'Mejora de Procesos',
     icon: '⚡',
-    color: 'text-amber-700 dark:text-amber-400',
+    color: 'text-amber-700 dark:text-amber-300',
     bg: 'bg-amber-50 dark:bg-amber-500/10',
-    border: 'border-amber-200 dark:border-amber-500/30',
+    border: 'border-amber-200 dark:border-amber-500/25',
   },
   herramienta_it: {
     label: 'Herramientas / IT',
     icon: '💻',
-    color: 'text-cyan-700 dark:text-cyan-400',
-    bg: 'bg-cyan-50 dark:bg-cyan-500/10',
-    border: 'border-cyan-200 dark:border-cyan-500/30',
+    color: 'text-sky-700 dark:text-sky-300',
+    bg: 'bg-sky-50 dark:bg-sky-500/10',
+    border: 'border-sky-200 dark:border-sky-500/25',
   },
   bienestar_equipo: {
     label: 'Bienestar y Cultura',
     icon: '🌱',
-    color: 'text-emerald-700 dark:text-emerald-400',
+    color: 'text-emerald-700 dark:text-emerald-300',
     bg: 'bg-emerald-50 dark:bg-emerald-500/10',
-    border: 'border-emerald-200 dark:border-emerald-500/30',
+    border: 'border-emerald-200 dark:border-emerald-500/25',
   },
   innovacion: {
     label: 'Innovación / Producto',
     icon: '🚀',
-    color: 'text-purple-700 dark:text-purple-400',
-    bg: 'bg-purple-50 dark:bg-purple-500/10',
-    border: 'border-purple-200 dark:border-purple-500/30',
+    color: 'text-sky-700 dark:text-sky-300',
+    bg: 'bg-sky-50 dark:bg-sky-500/10',
+    border: 'border-sky-200 dark:border-sky-500/25',
   },
   comunicacion: {
     label: 'Comunicación Interna',
     icon: '💬',
-    color: 'text-blue-700 dark:text-blue-400',
-    bg: 'bg-blue-50 dark:bg-blue-500/10',
-    border: 'border-blue-200 dark:border-blue-500/30',
+    color: 'text-slate-700 dark:text-slate-300',
+    bg: 'bg-slate-100 dark:bg-white/[0.06]',
+    border: 'border-slate-200 dark:border-white/10',
   },
   sistema: {
     label: 'Sistema / Bitácora',
     icon: '⚙️',
-    color: 'text-fuchsia-700 dark:text-fuchsia-400',
-    bg: 'bg-fuchsia-50 dark:bg-fuchsia-500/10',
-    border: 'border-fuchsia-200 dark:border-fuchsia-500/30',
+    color: 'text-slate-700 dark:text-slate-300',
+    bg: 'bg-slate-100 dark:bg-white/[0.06]',
+    border: 'border-slate-200 dark:border-white/10',
   },
   error_bug: {
     label: 'Reporte de Error / Bug',
     icon: '🐛',
-    color: 'text-rose-700 dark:text-rose-400',
+    color: 'text-rose-700 dark:text-rose-300',
     bg: 'bg-rose-50 dark:bg-rose-500/10',
-    border: 'border-rose-200 dark:border-rose-500/30',
+    border: 'border-rose-200 dark:border-rose-500/25',
   },
   otro: {
     label: 'Otra Idea',
     icon: '💡',
-    color: 'text-slate-700 dark:text-slate-400',
-    bg: 'bg-slate-100 dark:bg-slate-500/10',
-    border: 'border-slate-200 dark:border-slate-500/30',
+    color: 'text-slate-700 dark:text-slate-300',
+    bg: 'bg-slate-100 dark:bg-white/[0.06]',
+    border: 'border-slate-200 dark:border-white/10',
   },
 };
 
@@ -111,40 +112,40 @@ const ESTADOS_CONFIG: Record<
   pendiente: {
     label: 'Pendiente',
     color: 'text-slate-700 dark:text-slate-300',
-    bg: 'bg-slate-100 dark:bg-slate-800/80',
-    border: 'border-slate-200 dark:border-slate-600/40',
+    bg: 'bg-slate-100 dark:bg-white/[0.06]',
+    border: 'border-slate-200 dark:border-white/10',
   },
   en_revision: {
     label: 'En Evaluación',
     color: 'text-amber-800 dark:text-amber-300',
-    bg: 'bg-amber-50 dark:bg-amber-950/40',
-    border: 'border-amber-200 dark:border-amber-500/40',
+    bg: 'bg-amber-50 dark:bg-amber-500/10',
+    border: 'border-amber-200 dark:border-amber-500/25',
   },
   planificada: {
     label: 'Planificada',
-    color: 'text-cyan-800 dark:text-cyan-300',
-    bg: 'bg-cyan-50 dark:bg-cyan-950/40',
-    border: 'border-cyan-200 dark:border-cyan-500/40',
+    color: 'text-sky-800 dark:text-sky-300',
+    bg: 'bg-sky-50 dark:bg-sky-500/10',
+    border: 'border-sky-200 dark:border-sky-500/25',
   },
   implementada: {
     label: 'Implementada 🎉',
     color: 'text-emerald-800 dark:text-emerald-300',
-    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    border: 'border-emerald-200 dark:border-emerald-500/40',
+    bg: 'bg-emerald-50 dark:bg-emerald-500/10',
+    border: 'border-emerald-200 dark:border-emerald-500/25',
   },
   descartada: {
     label: 'No Viable',
-    color: 'text-rose-800 dark:text-rose-400',
-    bg: 'bg-rose-50 dark:bg-rose-950/40',
-    border: 'border-rose-200 dark:border-rose-500/30',
+    color: 'text-rose-800 dark:text-rose-300',
+    bg: 'bg-rose-50 dark:bg-rose-500/10',
+    border: 'border-rose-200 dark:border-rose-500/25',
   },
 };
 
 const IMPACTOS_CONFIG: Record<ImpactoSugerencia, { label: string; badge: string }> = {
-  bajo: { label: 'Bajo', badge: 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-transparent' },
-  medio: { label: 'Medio', badge: 'bg-blue-50 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30' },
-  alto: { label: 'Alto Impacto', badge: 'bg-purple-50 dark:bg-purple-900/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30' },
-  estrategico: { label: 'Estratégico ★', badge: 'bg-amber-50 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-500/40 font-semibold' },
+  bajo: { label: 'Bajo', badge: 'bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10' },
+  medio: { label: 'Medio', badge: 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/25' },
+  alto: { label: 'Alto Impacto', badge: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25' },
+  estrategico: { label: 'Estratégico ★', badge: 'bg-amber-50 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-500/35 font-semibold' },
 };
 
 const formatFileSize = (bytes?: number) => {
@@ -197,6 +198,16 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
   const [savingStatus, setSavingStatus] = useState<boolean>(false);
 
   const isAdminOrLeader = currentUser?.role === 'admin' || currentUser?.role === 'lider' || currentUser?.is_leader;
+
+  useModalBehavior(Boolean(isModalOpen || respondModalSug || previewEvidencia), () => {
+    if (previewEvidencia) {
+      setPreviewEvidencia(null);
+    } else if (respondModalSug) {
+      setRespondModalSug(null);
+    } else if (isModalOpen) {
+      setIsModalOpen(false);
+    }
+  });
 
   const fetchSugerencias = async () => {
     try {
@@ -410,26 +421,26 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
   return (
     <div className="space-y-6 pb-12 animate-fade-in text-slate-800 dark:text-slate-100">
       {/* HEADER PRINCIPAL */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-cyan-50/40 to-indigo-50/40 dark:from-[#111322] dark:via-[#16182c] dark:to-[#121324] border border-slate-200/90 dark:border-cyan-500/20 p-6 md:p-8 shadow-xs dark:shadow-2xl dark:shadow-cyan-950/20">
-        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-cyan-500/10 dark:bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 -mb-10 w-48 h-48 bg-indigo-500/10 dark:bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
-
+      <div className="relative overflow-hidden rounded-2xl bg-white dark:bg-[#161922] border border-slate-200/90 dark:border-white/[0.08] p-5 sm:p-6 shadow-xs">
         <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 border border-cyan-200 dark:border-cyan-500/30 text-cyan-600 dark:text-cyan-400 shadow-2xs">
-              <Lightbulb className="w-6 h-6" />
+            <span className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200/80 dark:border-sky-500/25 text-sky-600 dark:text-sky-400">
+              <Lightbulb className="w-5 h-5" />
             </span>
             <div>
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
                 Buzón de Ideas
               </h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Propuestas de mejora continua, herramientas y retroalimentación del equipo
+              </p>
             </div>
           </div>
 
           <button
             id="btn-nueva-sugerencia"
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full font-bold text-xs text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 shadow-sm shadow-cyan-500/20 active:scale-95 transition-all duration-200 cursor-pointer min-h-[38px] self-start sm:self-auto"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-xs text-white bg-sky-600 hover:bg-sky-700 active:scale-[0.99] transition-colors cursor-pointer min-h-[38px] self-start sm:self-auto"
           >
             <Plus className="w-4 h-4" />
             <span>Proponer Idea</span>
@@ -437,40 +448,40 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
         </div>
 
         {/* METRICS ROW */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mt-6 pt-6 border-t border-slate-200/80 dark:border-white/5">
-          <div className="bg-white/90 dark:bg-[#181a2e]/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-white/5 shadow-2xs dark:shadow-none">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5 pt-5 border-t border-slate-200/80 dark:border-white/[0.07]">
+          <div className="bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl p-3.5 border border-slate-200/80 dark:border-white/[0.06]">
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
-              <Lightbulb className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <Lightbulb className="w-4 h-4 text-sky-600 dark:text-sky-400" />
               Total Ideas
             </div>
-            <div className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mt-1">{stats.total}</div>
+            <div className="text-xl md:text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 tabular-nums">{stats.total}</div>
           </div>
-          <div className="bg-white/90 dark:bg-[#181a2e]/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-white/5 shadow-2xs dark:shadow-none">
+          <div className="bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl p-3.5 border border-slate-200/80 dark:border-white/[0.06]">
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-amber-500 dark:text-amber-400" />
               En Evaluación / Plan
             </div>
-            <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-300 mt-1">{stats.enRevision}</div>
+            <div className="text-xl md:text-2xl font-bold text-amber-600 dark:text-amber-300 mt-1 tabular-nums">{stats.enRevision}</div>
           </div>
-          <div className="bg-white/90 dark:bg-[#181a2e]/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-white/5 shadow-2xs dark:shadow-none">
+          <div className="bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl p-3.5 border border-slate-200/80 dark:border-white/[0.06]">
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
               Implementadas
             </div>
-            <div className="text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{stats.implementadas}</div>
+            <div className="text-xl md:text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 tabular-nums">{stats.implementadas}</div>
           </div>
-          <div className="bg-white/90 dark:bg-[#181a2e]/60 rounded-xl p-3.5 border border-slate-200/80 dark:border-white/5 shadow-2xs dark:shadow-none">
+          <div className="bg-slate-50/80 dark:bg-[#1A1E29] rounded-xl p-3.5 border border-slate-200/80 dark:border-white/[0.06]">
             <div className="text-xs text-slate-500 dark:text-slate-400 font-medium flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-fuchsia-500 dark:text-fuchsia-400" />
-              Votos de la Comunidad
+              <ThumbsUp className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+              Votos del Equipo
             </div>
-            <div className="text-xl md:text-2xl font-bold text-fuchsia-600 dark:text-fuchsia-400 mt-1">{stats.totalVotos}</div>
+            <div className="text-xl md:text-2xl font-bold text-sky-700 dark:text-sky-300 mt-1 tabular-nums">{stats.totalVotos}</div>
           </div>
         </div>
       </div>
 
       {/* BARRA DE FILTROS Y ORDENAMIENTO */}
-      <div className="bg-white dark:bg-[#161922] rounded-2xl p-4 border border-slate-200/90 dark:border-white/5 shadow-xs dark:shadow-lg space-y-3">
+      <div className="bg-white dark:bg-[#161922] rounded-2xl p-4 border border-slate-200/90 dark:border-white/[0.08] shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
           {/* Búsqueda rápida */}
           <div className="relative flex-1">
@@ -479,15 +490,17 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
               placeholder="Buscar propuesta por título, autor o contenido..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl pl-10 pr-4 py-2.5 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none transition-colors"
+              className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-800 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl pl-10 pr-10 py-2.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none transition-colors"
             />
-            <span className="absolute left-3.5 top-3 text-slate-400">
+            <span className="absolute left-3.5 top-3 text-slate-400 pointer-events-none">
               <Filter className="w-4 h-4" />
             </span>
             {searchTerm && (
               <button
+                type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-white"
+                className="absolute right-1.5 top-1 min-w-[36px] min-h-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                title="Limpiar búsqueda"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -495,12 +508,13 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
           </div>
 
           {/* Toggle Más Votadas / Más Recientes */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#181926] rounded-xl border border-slate-200/80 dark:border-white/5 self-start md:self-auto">
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#1A1E29] rounded-xl border border-slate-200/80 dark:border-white/[0.07] self-start md:self-auto">
             <button
+              type="button"
               onClick={() => setSortBy('popular')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all min-h-[36px] ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors min-h-[36px] cursor-pointer ${
                 sortBy === 'popular'
-                  ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-sm'
+                  ? 'bg-sky-600 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -508,10 +522,11 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
               Más Votadas
             </button>
             <button
+              type="button"
               onClick={() => setSortBy('reciente')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all min-h-[36px] ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors min-h-[36px] cursor-pointer ${
                 sortBy === 'reciente'
-                  ? 'bg-gradient-to-r from-cyan-600 to-indigo-600 text-white shadow-sm'
+                  ? 'bg-sky-600 text-white shadow-2xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -523,11 +538,12 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
           {/* Filtro Mis Propuestas */}
           {currentUser && (
             <button
+              type="button"
               onClick={() => setSoloMias(!soloMias)}
-              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border min-h-[38px] ${
+              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border min-h-[38px] cursor-pointer ${
                 soloMias
-                  ? 'bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-500/50 shadow-2xs'
-                  : 'bg-slate-100 dark:bg-[#181926] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border-slate-200/80 dark:border-white/5'
+                  ? 'bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-500/40'
+                  : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border-slate-200/80 dark:border-white/[0.07]'
               }`}
             >
               <UserIcon className="w-3.5 h-3.5" />
@@ -537,16 +553,17 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
         </div>
 
         {/* Categorías y Estados chips */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80 dark:border-white/5">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200/80 dark:border-white/[0.07]">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center gap-1">
             <Layers className="w-3.5 h-3.5" /> Categoría:
           </span>
           <button
+            type="button"
             onClick={() => setCategoriaFilter('todas')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer min-h-[32px] ${
               categoriaFilter === 'todas'
-                ? 'bg-cyan-600 text-white font-semibold shadow-xs'
-                : 'bg-slate-100 dark:bg-[#181926] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/5'
+                ? 'bg-sky-600 text-white font-semibold'
+                : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/[0.07]'
             }`}
           >
             Todas
@@ -557,11 +574,12 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
             return (
               <button
                 key={catKey}
+                type="button"
                 onClick={() => setCategoriaFilter(catKey)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer min-h-[32px] ${
                   active
-                    ? `${cat.bg} ${cat.color} ${cat.border} border font-semibold shadow-2xs`
-                    : 'bg-slate-100 dark:bg-[#181926] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/5'
+                    ? `${cat.bg} ${cat.color} ${cat.border} border font-semibold`
+                    : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/[0.07]'
                 }`}
               >
                 <span>{cat.icon}</span>
@@ -577,11 +595,12 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
             <CheckCircle2 className="w-3.5 h-3.5" /> Estado:
           </span>
           <button
+            type="button"
             onClick={() => setEstadoFilter('todas')}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer min-h-[32px] ${
               estadoFilter === 'todas'
-                ? 'bg-indigo-600 text-white font-semibold shadow-xs'
-                : 'bg-slate-100 dark:bg-[#181926] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/5'
+                ? 'bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 font-semibold'
+                : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/[0.07]'
             }`}
           >
             Todos
@@ -592,11 +611,12 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
             return (
               <button
                 key={estKey}
+                type="button"
                 onClick={() => setEstadoFilter(estKey)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer min-h-[32px] ${
                   active
-                    ? `${est.bg} ${est.color} ${est.border} border font-semibold shadow-2xs`
-                    : 'bg-slate-100 dark:bg-[#181926] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/5'
+                    ? `${est.bg} ${est.color} ${est.border} border font-semibold`
+                    : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-200/80 dark:border-white/[0.07]'
                 }`}
               >
                 {est.label}
@@ -609,7 +629,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       {/* LISTADO DE PROPUESTAS */}
       {loading ? (
         <div className="flex flex-col items-center justify-center p-16 space-y-4">
-          <div className="w-12 h-12 border-4 border-cyan-500/20 border-t-cyan-500 dark:border-t-cyan-400 rounded-full animate-spin" />
+          <div className="w-10 h-10 border-3 border-sky-500/20 border-t-sky-600 dark:border-t-sky-400 rounded-full animate-spin" />
           <p className="text-sm text-slate-500 dark:text-slate-400">Cargando buzón de sugerencias...</p>
         </div>
       ) : filteredList.length === 0 ? (
@@ -618,7 +638,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
           description={
             searchTerm
               ? 'No hay propuestas que coincidan con tus términos de búsqueda.'
-              : 'Aún no hay propuestas registradas con estos filtros. ¡Sé el primero en proponer una idea innovadora!'
+              : 'Aún no hay propuestas registradas con estos filtros. ¡Sé el primero en proponer una idea!'
           }
           icon={Lightbulb}
           actionText="Proponer la Primera Idea"
@@ -637,24 +657,25 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
             return (
               <div
                 key={sug.id}
-                className="group relative bg-white dark:bg-[#161922] hover:bg-slate-50/70 dark:hover:bg-[#161726] border border-slate-200/90 dark:border-white/10 hover:border-cyan-500/40 dark:hover:border-cyan-500/30 rounded-2xl p-5 md:p-6 transition-all duration-200 shadow-xs hover:shadow-md dark:shadow-md dark:hover:shadow-cyan-950/20 flex flex-col md:flex-row items-start gap-4 md:gap-6"
+                className="group relative bg-white dark:bg-[#161922] hover:bg-slate-50/60 dark:hover:bg-[#1A1E29] border border-slate-200/90 dark:border-white/[0.08] hover:border-slate-300 dark:hover:border-white/15 rounded-2xl p-4 sm:p-5 transition-colors shadow-2xs flex flex-col md:flex-row items-start gap-4 md:gap-5"
               >
                 {/* BOTÓN DE VOTACIÓN ADAPTATIVO */}
-                <div className="flex md:flex-col items-center justify-center gap-2 self-stretch md:self-start bg-slate-50 dark:bg-[#181926] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 min-w-[70px]">
+                <div className="flex md:flex-col items-center justify-center gap-2 self-stretch md:self-start bg-slate-50 dark:bg-[#1A1E29] p-2.5 rounded-xl border border-slate-200/80 dark:border-white/[0.06] min-w-[70px]">
                   <button
+                    type="button"
                     onClick={() => handleVote(sug.id)}
                     title={hasVoted ? 'Retirar voto' : 'Votar por esta idea'}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors cursor-pointer ${
                       hasVoted
-                        ? 'bg-gradient-to-br from-cyan-500 to-indigo-600 text-white shadow-md shadow-cyan-500/30 scale-105'
-                        : 'bg-white dark:bg-white/5 text-slate-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-transparent active:scale-95'
+                        ? 'bg-sky-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-white/[0.05] text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-300 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10'
                     }`}
                   >
                     <ChevronUp className={`w-6 h-6 ${hasVoted ? 'stroke-[3]' : 'stroke-[2]'}`} />
                   </button>
                   <span
-                    className={`text-base font-extrabold tracking-tight ${
-                      hasVoted ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-700 dark:text-slate-300'
+                    className={`text-base font-bold tracking-tight tabular-nums ${
+                      hasVoted ? 'text-sky-600 dark:text-sky-400' : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {sug.votos || 0}
@@ -670,7 +691,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   <div className="flex flex-wrap items-center gap-2">
                     {/* Categoría */}
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${cat.bg} ${cat.color} ${cat.border}`}
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium border ${cat.bg} ${cat.color} ${cat.border}`}
                     >
                       <span>{cat.icon}</span>
                       <span>{cat.label}</span>
@@ -678,7 +699,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
                     {/* Estado */}
                     <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${est.bg} ${est.color} ${est.border}`}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-semibold border ${est.bg} ${est.color} ${est.border}`}
                     >
                       {est.label}
                     </span>
@@ -689,7 +710,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                     </span>
 
                     {/* Fecha */}
-                    <span className="text-xs text-slate-400 dark:text-slate-500 ml-auto flex items-center gap-1">
+                    <span className="text-xs text-slate-400 dark:text-slate-500 ml-auto flex items-center gap-1 tabular-nums">
                       <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                       {sug.created_at ? new Date(sug.created_at).toLocaleDateString('es-PE') : ''}
                     </span>
@@ -697,10 +718,10 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
                   {/* TÍTULO Y DESCRIPCIÓN */}
                   <div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-cyan-600 dark:group-hover:text-cyan-300 transition-colors">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors break-words">
                       {sug.titulo}
                     </h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 whitespace-pre-wrap leading-relaxed">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-1.5 whitespace-pre-wrap leading-relaxed break-words">
                       {sug.descripcion}
                     </p>
                   </div>
@@ -709,7 +730,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   {sug.evidencias && sug.evidencias.length > 0 && (
                     <div className="pt-2">
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                        <Paperclip className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                        <Paperclip className="w-3.5 h-3.5 text-slate-400" />
                         <span>Pruebas y capturas adjuntas ({sug.evidencias.length}):</span>
                       </div>
                       <div className="flex flex-wrap gap-2.5">
@@ -718,7 +739,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                           return (
                             <div
                               key={evIdx}
-                              className="group/ev relative flex items-center gap-2 p-1.5 pr-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-cyan-500/50 hover:bg-cyan-50/40 dark:hover:bg-cyan-500/10 transition-all cursor-pointer shadow-2xs max-w-xs"
+                              className="group/ev relative flex items-center gap-2 p-1.5 pr-3 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200 dark:border-white/10 hover:border-sky-500/40 hover:bg-sky-50/40 dark:hover:bg-sky-500/10 transition-colors cursor-pointer max-w-xs"
                               onClick={() => {
                                 if (isImg) {
                                   setPreviewEvidencia(ev);
@@ -740,7 +761,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                                   </div>
                                 </div>
                               ) : (
-                                <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 flex items-center justify-center shrink-0">
+                                <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 flex items-center justify-center shrink-0">
                                   <FileText className="w-5 h-5" />
                                 </div>
                               )}
@@ -750,7 +771,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                                 </p>
                                 <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                                   <span>{formatFileSize(ev.tamano)}</span>
-                                  <span className="text-cyan-600 dark:text-cyan-400 font-semibold flex items-center gap-0.5">
+                                  <span className="text-sky-600 dark:text-sky-400 font-semibold flex items-center gap-0.5">
                                     {isImg ? 'Ver prueba' : 'Descargar'}
                                     <ExternalLink className="w-2.5 h-2.5" />
                                   </span>
@@ -764,10 +785,10 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   )}
 
                   {/* METADATOS DEL AUTOR */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-white/5">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-white/[0.06]">
                     <div className="flex items-center gap-2">
-                      <span className="p-1 rounded-md bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400">
-                        {sug.es_anonimo ? <Shield className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <UserIcon className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />}
+                      <span className="p-1 rounded-md bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400">
+                        {sug.es_anonimo ? <Shield className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" /> : <UserIcon className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />}
                       </span>
                       <span>
                         Propuesto por:{' '}
@@ -781,12 +802,13 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                       {/* BOTÓN RESPONDER (ADMIN/LÍDER) */}
                       {isAdminOrLeader && (
                         <button
+                          type="button"
                           onClick={() => {
                             setRespondModalSug(sug);
                             setAdminEstado(sug.estado);
                             setAdminRespuesta(sug.respuesta_admin || '');
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/60 border border-cyan-200 dark:border-cyan-500/30 transition-colors"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-sky-700 dark:text-sky-300 bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 border border-sky-200 dark:border-sky-500/25 transition-colors min-h-[36px] cursor-pointer"
                         >
                           <MessageSquare className="w-3.5 h-3.5" />
                           <span>Evaluar / Responder</span>
@@ -796,9 +818,10 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                       {/* BOTÓN ELIMINAR */}
                       {canDelete && (
                         <button
+                          type="button"
                           onClick={() => handleDeleteSug(sug.id)}
                           title="Eliminar sugerencia"
-                          className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                          className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors flex items-center justify-center cursor-pointer"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -808,19 +831,19 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
                   {/* RESPUESTA OFICIAL DE LIDERAZGO / ADMIN (SI EXISTE) */}
                   {sug.respuesta_admin && (
-                    <div className="mt-3 p-4 rounded-xl bg-gradient-to-r from-cyan-50/60 via-indigo-50/30 to-slate-50/50 dark:from-[#171a2e] dark:to-[#141528] border-l-4 border-l-cyan-500 dark:border-l-cyan-400 border border-cyan-200/80 dark:border-cyan-500/20 shadow-xs dark:shadow-inner space-y-1.5">
+                    <div className="mt-3 p-4 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border-l-4 border-l-sky-500 dark:border-l-sky-400 border border-slate-200/80 dark:border-white/[0.08] space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-cyan-800 dark:text-cyan-300 flex items-center gap-1.5">
-                          <Award className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                        <span className="text-xs font-bold text-sky-800 dark:text-sky-300 flex items-center gap-1.5">
+                          <Award className="w-4 h-4 text-sky-600 dark:text-sky-400" />
                           Respuesta de Liderazgo ({sug.respondido_por || 'Equipo Directivo'}):
                         </span>
                         {sug.respondido_at && (
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                          <span className="text-[11px] text-slate-400 dark:text-slate-500 tabular-nums">
                             {new Date(sug.respondido_at).toLocaleDateString('es-PE')}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs md:text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
+                      <p className="text-xs md:text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed break-words">
                         {sug.respuesta_admin}
                       </p>
                     </div>
@@ -834,21 +857,31 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
       {/* MODAL CREAR PROPUESTA */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+        <div
+          onClick={() => setIsModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs animate-fade-in overflow-y-auto"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200/90 dark:border-white/10 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-white/[0.08]">
               <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">
+                <span className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/80 dark:border-sky-500/25">
                   <Lightbulb className="w-5 h-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Nueva Propuesta de Mejora</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">Nueva Propuesta de Mejora</h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Tu aporte constructivo ayuda a evolucionar todo el equipo</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10"
+                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center cursor-pointer"
+                title="Cerrar (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -866,7 +899,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   placeholder="Ej: Automatizar resumen semanal de pendientes, incorporar plantilla de diseño..."
                   value={formData.titulo}
                   onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-2.5 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-2.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none"
                 />
               </div>
 
@@ -877,7 +910,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   <select
                     value={formData.categoria}
                     onChange={(e) => setFormData({ ...formData, categoria: e.target.value as CategoriaSugerencia })}
-                    className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none"
                   >
                     {(Object.keys(CATEGORIAS_CONFIG) as CategoriaSugerencia[]).map((key) => (
                       <option key={key} value={key}>
@@ -892,7 +925,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   <select
                     value={formData.impacto}
                     onChange={(e) => setFormData({ ...formData, impacto: e.target.value as ImpactoSugerencia })}
-                    className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none"
                   >
                     <option value="bajo">Bajo (Optimización menor)</option>
                     <option value="medio">Medio (Mejora notable del día a día)</option>
@@ -913,13 +946,13 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   placeholder="Explica qué problema resuelve, cómo se podría implementar y qué beneficios traerá al equipo..."
                   value={formData.descripcion}
                   onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
-                  className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-3 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none resize-none"
+                  className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-3 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none resize-none"
                 />
               </div>
 
               {/* PRUEBAS / CAPTURAS DE PANTALLA */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-1">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Pruebas / Capturas de pantalla
                   </label>
@@ -940,10 +973,10 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                     setIsDragging(false);
                     handleFileUpload(e.dataTransfer.files);
                   }}
-                  className={`relative border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+                  className={`relative border-2 border-dashed rounded-xl p-4 text-center transition-colors ${
                     isDragging
-                      ? 'border-cyan-500 bg-cyan-50/40 dark:bg-cyan-500/10'
-                      : 'border-slate-200 dark:border-white/10 hover:border-cyan-500/40 bg-slate-50/60 dark:bg-white/2'
+                      ? 'border-sky-500 bg-sky-50/40 dark:bg-sky-500/10'
+                      : 'border-slate-200 dark:border-white/10 hover:border-sky-500/40 bg-slate-50/60 dark:bg-[#1A1E29]'
                   }`}
                 >
                   <input
@@ -958,7 +991,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                     htmlFor="buzon-file-input"
                     className="flex flex-col items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <div className="p-2 rounded-full bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400">
+                    <div className="p-2 rounded-full bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400">
                       {isUploading ? (
                         <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
@@ -982,7 +1015,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                       return (
                         <div
                           key={idx}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs"
+                          className="flex items-center gap-2 p-2 rounded-xl bg-slate-100 dark:bg-[#1A1E29] border border-slate-200 dark:border-white/10 text-xs"
                         >
                           {isImg ? (
                             <img
@@ -991,7 +1024,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                               className="w-8 h-8 rounded object-cover shrink-0 border border-slate-300 dark:border-slate-700"
                             />
                           ) : (
-                            <FileText className="w-6 h-6 text-indigo-500 shrink-0" />
+                            <FileText className="w-6 h-6 text-slate-500 shrink-0" />
                           )}
                           <div className="min-w-0 flex-1">
                             <p className="font-semibold text-slate-800 dark:text-slate-200 truncate">{ev.nombre}</p>
@@ -1000,7 +1033,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                           <button
                             type="button"
                             onClick={() => handleRemoveEvidencia(idx)}
-                            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                            className="min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors flex items-center justify-center cursor-pointer"
                             title="Quitar prueba"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1013,13 +1046,13 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
               </div>
 
               {/* CHECKBOX ANÓNIMO */}
-              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#181926]/80 border border-slate-200 dark:border-white/5">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08]">
                 <input
                   type="checkbox"
                   id="check-anonimo"
                   checked={formData.es_anonimo}
                   onChange={(e) => setFormData({ ...formData, es_anonimo: e.target.checked })}
-                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-cyan-600 focus:ring-cyan-500/20"
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sky-600 focus:ring-sky-500/20"
                 />
                 <label htmlFor="check-anonimo" className="text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
                   <span className="font-semibold text-slate-900 dark:text-white block">Enviar de forma 100% Anónima</span>
@@ -1028,18 +1061,18 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
               </div>
 
               {/* BOTONES */}
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200/80 dark:border-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors min-h-[38px] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 shadow-lg shadow-cyan-500/20 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition-colors min-h-[38px] cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                   <span>{submitting ? 'Publicando...' : 'Publicar Propuesta'}</span>
@@ -1052,34 +1085,44 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
 
       {/* MODAL RESPUESTA ADMIN / LÍDER */}
       {respondModalSug && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-sm animate-fade-in overflow-y-auto">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200 dark:border-cyan-500/30 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-white/10">
+        <div
+          onClick={() => setRespondModalSug(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs animate-fade-in overflow-y-auto"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg bg-white dark:bg-[#161922] border border-slate-200/90 dark:border-white/10 rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 sm:space-y-5 my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-white/[0.08]">
               <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-cyan-50 dark:bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-200 dark:border-cyan-500/20">
+                <span className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/80 dark:border-sky-500/25">
                   <Award className="w-5 h-5" />
                 </span>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-900 dark:text-white">Gestión de Propuesta</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">Gestión de Propuesta</h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">Actualiza el estado y responde a los colaboradores</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setRespondModalSug(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10"
+                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 flex items-center justify-center cursor-pointer"
+                title="Cerrar (Esc)"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-[#181926] p-3 rounded-xl border border-slate-200 dark:border-white/5 space-y-2">
-              <div className="text-xs font-bold text-slate-900 dark:text-white">{respondModalSug.titulo}</div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3">{respondModalSug.descripcion}</div>
+            <div className="bg-slate-50 dark:bg-[#1A1E29] p-3 rounded-xl border border-slate-200/80 dark:border-white/[0.08] space-y-2">
+              <div className="text-xs font-bold text-slate-900 dark:text-white break-words">{respondModalSug.titulo}</div>
+              <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-3 break-words">{respondModalSug.descripcion}</div>
 
               {/* PRUEBAS ADJUNTAS EN EL MODAL DE EVALUACIÓN */}
               {respondModalSug.evidencias && respondModalSug.evidencias.length > 0 && (
                 <div className="pt-2 border-t border-slate-200 dark:border-white/10">
-                  <div className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1 mb-1.5">
+                  <div className="text-[11px] font-bold text-sky-700 dark:text-sky-400 flex items-center gap-1 mb-1.5">
                     <Paperclip className="w-3 h-3" />
                     <span>Pruebas adjuntas por el colaborador ({respondModalSug.evidencias.length}):</span>
                   </div>
@@ -1093,13 +1136,13 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                             if (isImg) setPreviewEvidencia(ev);
                             else window.open(ev.url, '_blank');
                           }}
-                          className="flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-xs cursor-pointer hover:border-cyan-500 transition-colors"
+                          className="flex items-center gap-1.5 p-1.5 px-2.5 rounded-lg bg-white dark:bg-white/[0.05] border border-slate-200 dark:border-white/10 text-xs cursor-pointer hover:border-sky-500 transition-colors"
                           title="Clic para ver o descargar"
                         >
                           {isImg ? (
                             <img src={ev.url} alt={ev.nombre} className="w-5 h-5 rounded object-cover" />
                           ) : (
-                            <FileText className="w-4 h-4 text-indigo-500" />
+                            <FileText className="w-4 h-4 text-slate-500" />
                           )}
                           <span className="truncate max-w-[140px] text-slate-700 dark:text-slate-300 font-medium">{ev.nombre}</span>
                           <Eye className="w-3 h-3 text-slate-400 ml-1" />
@@ -1119,7 +1162,7 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                 <select
                   value={adminEstado}
                   onChange={(e) => setAdminEstado(e.target.value as EstadoSugerencia)}
-                  className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none"
+                  className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white rounded-xl px-3 py-2.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none"
                 >
                   <option value="pendiente">Pendiente de Revisión</option>
                   <option value="en_revision">En Evaluación / Análisis</option>
@@ -1138,22 +1181,22 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   placeholder="Detalla la decisión tomada, fecha tentativa de aplicación o agradecimiento al autor..."
                   value={adminRespuesta}
                   onChange={(e) => setAdminRespuesta(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-[#181926] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-3 border border-slate-200 dark:border-white/10 focus:border-cyan-500 focus:bg-white dark:focus:bg-[#181926] focus:outline-none resize-none"
+                  className="w-full bg-slate-50 dark:bg-[#1E222D] text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl px-4 py-3 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:bg-white dark:focus:bg-[#1E222D] focus:outline-none resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-white/10">
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200/80 dark:border-white/[0.08]">
                 <button
                   type="button"
                   onClick={() => setRespondModalSug(null)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors min-h-[38px] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingStatus}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 shadow-lg shadow-cyan-500/20 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 disabled:opacity-50 transition-colors min-h-[38px] cursor-pointer"
                 >
                   <Check className="w-4 h-4" />
                   <span>{savingStatus ? 'Guardando...' : 'Guardar y Publicar Respuesta'}</span>
@@ -1167,16 +1210,18 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
       {/* MODAL LIGHTBOX / VISOR DE CAPTURA A PANTALLA COMPLETA */}
       {previewEvidencia && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto"
+          className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
           onClick={() => setPreviewEvidencia(null)}
         >
           <div
-            className="relative max-w-4xl w-full my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh] flex flex-col bg-slate-900 border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            className="relative max-w-4xl w-full my-auto max-h-[calc(100dvh-1.5rem)] sm:max-h-[92vh] flex flex-col bg-[#161922] border border-white/10 rounded-2xl overflow-hidden shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-white/10 text-white shrink-0">
+            <div className="flex items-center justify-between px-4 py-3 bg-[#1A1E29] border-b border-white/10 text-white shrink-0">
               <div className="flex items-center gap-2 min-w-0 pr-4">
-                <ImageIcon className="w-4 h-4 text-cyan-400 shrink-0" />
+                <ImageIcon className="w-4 h-4 text-sky-400 shrink-0" />
                 <span className="text-sm font-semibold truncate">{previewEvidencia.nombre}</span>
                 {previewEvidencia.tamano && (
                   <span className="text-xs text-slate-400 shrink-0">({formatFileSize(previewEvidencia.tamano)})</span>
@@ -1188,15 +1233,16 @@ export const BuzonView: React.FC<BuzonViewProps> = ({ currentUser, onShowToast }
                   download={previewEvidencia.nombre}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                  className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors flex items-center justify-center"
                   title="Abrir imagen original / descargar"
                 >
                   <Download className="w-4 h-4" />
                 </a>
                 <button
+                  type="button"
                   onClick={() => setPreviewEvidencia(null)}
-                  className="p-1.5 rounded-lg bg-white/10 hover:bg-rose-500 text-white transition-colors"
-                  title="Cerrar visor"
+                  className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg bg-white/10 hover:bg-rose-500 text-white transition-colors flex items-center justify-center cursor-pointer"
+                  title="Cerrar visor (Esc)"
                 >
                   <X className="w-4 h-4" />
                 </button>

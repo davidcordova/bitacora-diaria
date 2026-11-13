@@ -889,16 +889,16 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               }}
               className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                 feedStatusFilter === 'en_revision'
-                  ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-400 dark:border-purple-500 ring-2 ring-purple-400/20 shadow-sm'
+                  ? 'bg-sky-50 dark:bg-sky-500/10 border-sky-400 dark:border-sky-500/50 ring-2 ring-sky-400/20 shadow-sm'
                   : pendingReviewTasks.length > 0
-                  ? 'bg-white dark:bg-[#161922] border-purple-200 dark:border-purple-800/60 hover:border-purple-400 shadow-2xs'
+                  ? 'bg-white dark:bg-[#161922] border-sky-200 dark:border-sky-500/30 hover:border-sky-400 shadow-2xs'
                   : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08] opacity-80 hover:opacity-100'
               }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
                   pendingReviewTasks.length > 0
-                    ? 'bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300'
+                    ? 'bg-sky-100 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400'
                     : 'bg-slate-100 dark:bg-[#232836] text-slate-400'
                 }`}>
                   <ShieldCheck className="w-5 h-5" />
@@ -909,7 +909,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                       Por Aprobar
                     </span>
                     {feedStatusFilter === 'en_revision' && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-600 text-white">
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-600 text-white">
                         Filtro Activo
                       </span>
                     )}
@@ -923,7 +923,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
               <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
                 pendingReviewTasks.length > 0
-                  ? 'bg-purple-600 text-white shadow-xs'
+                  ? 'bg-sky-600 text-white shadow-xs'
                   : 'bg-slate-100 dark:bg-[#232836] text-slate-500'
               }`}>
                 {pendingReviewTasks.length}
@@ -1076,8 +1076,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   {(() => {
                     const pendientes = filteredLiveFeed.filter((a) => a.estado === 'en_revision' && !isOwnActivity(a)).length;
                     return pendientes > 0 ? (
-                      <div className="flex items-center gap-2.5 p-3 rounded-xl border border-purple-200 dark:border-purple-800/50 bg-purple-50 dark:bg-purple-950/30 text-xs text-purple-800 dark:text-purple-200">
-                        <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse shrink-0" />
+                      <div className="flex items-center gap-2.5 p-3 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
                         <span>
                           <strong>{pendientes} {pendientes === 1 ? 'solicitud espera' : 'solicitudes esperan'} tu aprobación.</strong>{' '}
                           Pulsa «Revisar» para dejar continuar, cerrar o devolver con observaciones.
@@ -1153,13 +1153,13 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                               isCompleted
                                 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60'
                                 : isInReview
-                                ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800/60'
-                                : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/60'
+                                ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25'
+                                : 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25'
                             }`}
                           >
                             <span
                               className={`w-2 h-2 rounded-full ${
-                                isCompleted ? 'bg-emerald-500' : isInReview ? 'bg-purple-500 animate-pulse' : 'bg-amber-500 animate-pulse'
+                                isCompleted ? 'bg-emerald-500' : isInReview ? 'bg-amber-500 animate-pulse' : 'bg-sky-500 animate-pulse'
                               }`}
                             />
                             {isCompleted ? 'Completada' : isInReview ? 'En Revisión' : 'En Proceso'}
@@ -1171,7 +1171,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                               type="button"
                               id={`feed-revisar-${act.id}`}
                               onClick={() => openReview(act)}
-                              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5"
+                              className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 min-h-[36px]"
                               title="Aprobar para continuar, aprobar y cerrar, o devolver con observaciones"
                             >
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1417,6 +1417,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                   onAddActividadConEstado={() => {}}
                   onRemoveActividad={() => {}}
                   colaborador="Todo el Equipo"
+                  users={users}
+                  currentUser={currentUser}
+                  fecha={selectedDate}
+                  onDateChange={setSelectedDate}
                   isLeaderView={true}
                   showCollaboratorBadge={true}
                   onApproveActivity={(index) => {
@@ -1498,6 +1502,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 onAddActividadConEstado={() => {}}
                 onRemoveActividad={() => {}}
                 colaborador={selectedMember?.full_name || 'Colaborador'}
+                users={users}
+                currentUser={currentUser}
+                fecha={selectedDate}
+                onDateChange={setSelectedDate}
                 isLeaderView={true}
                 showCollaboratorBadge={false}
                 onApproveActivity={(index) => {
@@ -1529,7 +1537,11 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
             className="fixed inset-0"
             onClick={() => setDrawerMemberId(null)}
           />
-          <div className="relative bg-white dark:bg-[#161922] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-white/[0.08] z-10 animate-in slide-in-from-right duration-300">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative bg-white dark:bg-[#161922] w-full max-w-lg h-full shadow-2xl flex flex-col justify-between border-l border-slate-200 dark:border-white/[0.08] z-10 animate-in slide-in-from-right duration-300"
+          >
             {/* Header */}
             <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-white/[0.08] flex items-center justify-between bg-slate-50/70 dark:bg-[#1E222D] shrink-0">
               <div className="flex items-center gap-3">
@@ -1561,7 +1573,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               <button
                 type="button"
                 onClick={() => setDrawerMemberId(null)}
-                className="p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1E222D] rounded-full transition-colors cursor-pointer shrink-0"
+                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 sm:p-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-[#1E222D] rounded-full transition-colors cursor-pointer shrink-0 flex items-center justify-center"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1643,7 +1655,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 act.estado === 'completada'
                                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60'
                                   : act.estado === 'en_revision'
-                                  ? 'bg-[#A855F7]/15 text-[#C084FC] border border-[#A855F7]/30'
+                                  ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25'
                                   : 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30'
                               }`}
                             >
@@ -1671,7 +1683,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 <button
                                   type="button"
                                   onClick={() => openReview({ ...act, colaborador: drawerWorkload.member.full_name })}
-                                  className="px-3 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-300/80 dark:border-purple-800/60 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
+                                  className="px-3 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300 border border-sky-300/80 dark:border-sky-500/30 rounded-full text-[10px] font-bold transition-colors cursor-pointer"
                                 >
                                   Revisar
                                 </button>

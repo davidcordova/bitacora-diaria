@@ -126,7 +126,11 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="bg-white dark:bg-[#161922] rounded-2xl sm:rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 dark:border-white/[0.08] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] my-auto"
+      >
         {/* Header */}
         <div className="bg-slate-50 dark:bg-[#1E222D] px-4 sm:px-6 py-3.5 sm:py-4 text-slate-900 dark:text-white flex items-center justify-between border-b border-slate-200/80 dark:border-white/[0.08] shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3">
@@ -143,7 +147,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-[#232836] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0"
+            className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-full hover:bg-slate-200/60 dark:hover:bg-[#232836] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
           >
             <X className="w-5 h-5" />
           </button>

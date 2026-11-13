@@ -4,15 +4,23 @@ import DOMPurify from 'dompurify';
 const LINK_CLASS =
   'text-sky-600 dark:text-sky-400 font-semibold underline underline-offset-2 hover:opacity-80 transition-opacity break-all';
 
-// Lista blanca estricta: solo formato de texto, listas, enlaces, imágenes y código.
-const PURIFY_CONFIG = {
+// Lista blanca estricta para HTML enriquecido pegado o guardado desde el editor:
+// omite atributos `class`, `width` y `height` externos para impedir que HTML copiado de sitios web
+// rompa el layout responsive con utilidades CSS (ej. whitespace-nowrap, fixed, w-screen).
+const USER_HTML_PURIFY_CONFIG = {
   ALLOWED_TAGS: [
     'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'strike', 'del', 'mark', 'small', 'sub', 'sup',
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'span', 'div',
     'a', 'img', 'hr', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
   ],
-  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'target', 'rel', 'width', 'height', 'colspan', 'rowspan'],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'target', 'rel', 'colspan', 'rowspan'],
   ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|data:image\/(?:png|jpe?g|gif|webp);base64,|\/|#)/i,
+};
+
+// Configuración interna para el texto plano autovínculado y bloques markdown generados por este componente
+const GENERATED_PURIFY_CONFIG = {
+  ...USER_HTML_PURIFY_CONFIG,
+  ALLOWED_ATTR: [...USER_HTML_PURIFY_CONFIG.ALLOWED_ATTR, 'class'],
 };
 
 let hooksInstalled = false;
@@ -31,7 +39,12 @@ const ensureHooks = () => {
 
 export const sanitizeHtml = (html: string): string => {
   ensureHooks();
-  return DOMPurify.sanitize(html, PURIFY_CONFIG) as unknown as string;
+  return DOMPurify.sanitize(html, USER_HTML_PURIFY_CONFIG) as unknown as string;
+};
+
+const sanitizeGeneratedHtml = (html: string): string => {
+  ensureHooks();
+  return DOMPurify.sanitize(html, GENERATED_PURIFY_CONFIG) as unknown as string;
 };
 
 interface RichHtmlRendererProps {
@@ -94,7 +107,7 @@ export const RichHtmlRenderer: React.FC<RichHtmlRendererProps> = ({
 
     // Convertir saltos de línea a <br /> preservando los bloques <pre>
     const parts = parsed.split(/(<pre[\s\S]*?<\/pre>)/gi);
-    return sanitizeHtml(
+    return sanitizeGeneratedHtml(
       parts.map((part) => (part.startsWith('<pre') ? part : part.replace(/\n/g, '<br />'))).join('')
     );
   }, [content]);

@@ -333,6 +333,84 @@ export const api = {
     return local ? JSON.parse(local) : [];
   },
 
+  async getBitacorasPaginated(opts?: {
+    fecha?: string;
+    colaborador?: string;
+    teamId?: number;
+    requestingUserId?: number;
+    userId?: number;
+    limit?: number;
+    offset?: number;
+    summary?: boolean;
+  }): Promise<{ items: Bitacora[]; total: number; hasMore: boolean }> {
+    try {
+      const params = new URLSearchParams();
+      if (opts?.fecha) params.append('fecha', opts.fecha);
+      if (opts?.colaborador) params.append('colaborador', opts.colaborador);
+      if (opts?.teamId) params.append('team_id', String(opts.teamId));
+      if (opts?.requestingUserId) params.append('requesting_user_id', String(opts.requestingUserId));
+      if (opts?.userId) params.append('user_id', String(opts.userId));
+      if (opts?.limit !== undefined) params.append('limit', String(opts.limit));
+      if (opts?.offset !== undefined) params.append('offset', String(opts.offset));
+      if (opts?.summary) params.append('summary', '1');
+
+      const res = await authFetch(`${API_BASE}/bitacoras?${params.toString()}`);
+      if (res.ok) {
+        const items: Bitacora[] = await res.json();
+        const totalHeader = res.headers.get('X-Total-Count');
+        const hasMoreHeader = res.headers.get('X-Has-More');
+        const total = totalHeader !== null ? Number(totalHeader) || items.length : items.length;
+        const hasMore = hasMoreHeader === '1';
+        return { items, total, hasMore };
+      }
+    } catch (e) {
+      console.warn('API getBitacorasPaginated error', e);
+    }
+    const local = localStorage.getItem('bitacoras_history');
+    const fallback: Bitacora[] = local ? JSON.parse(local) : [];
+    return { items: fallback, total: fallback.length, hasMore: false };
+  },
+
+  async getBitacoraById(id: number): Promise<Bitacora> {
+    const res = await authFetch(`${API_BASE}/bitacoras/${id}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'No se pudo cargar el detalle de la bitácora' }));
+      throw new Error(err.error || 'No se pudo cargar el detalle de la bitácora');
+    }
+    return await res.json();
+  },
+
+  async updateBitacoraHeader(
+    payload: {
+      id?: number;
+      fecha?: string;
+      user_id?: number;
+      colaborador?: string;
+      hora_inicio?: string;
+      area?: string;
+      pendientes?: string;
+      necesita_apoyo?: 'Si' | 'No' | string;
+      apoyo_detalle?: string;
+      prioridad_siguiente?: string;
+      resumen_texto?: string;
+      estado?: string;
+    }
+  ): Promise<{ success: boolean; bitacora_id: number; updated_fields: string[] }> {
+    const endpoint = payload.id ? `${API_BASE}/bitacoras/${payload.id}/header` : `${API_BASE}/bitacoras/header`;
+    const res = await authFetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err: any = new Error(body?.error || 'Error al actualizar cabecera de la bitácora');
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  },
+
   async saveBitacora(
     bitacora: Bitacora,
     requesting_user_id?: number,
@@ -376,10 +454,47 @@ export const api = {
     }
   },
 
+  async createActividadAtomica(
+    payload: Partial<Actividad> & {
+      bitacora_id?: number;
+      fecha: string;
+      user_id?: number;
+      colaborador?: string;
+      area?: string;
+      hora_inicio_jornada?: string;
+      requesting_user_id?: number;
+    }
+  ): Promise<{
+    success: boolean;
+    bitacora_id: number;
+    actividad: Actividad;
+    bitacora_actividades: Actividad[];
+    tiempo_total_min: number;
+    closed_lineage_ids: number[];
+  }> {
+    const res = await authFetch(`${API_BASE}/actividades`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err: any = new Error(body?.error || 'Error al registrar la actividad');
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  },
+
   async updateActividadEstado(
     actId: number | string,
     nuevoEstado: EstadoActividad
-  ): Promise<{ ok: boolean; closed_lineage_ids?: number[] }> {
+  ): Promise<{
+    ok: boolean;
+    closed_lineage_ids?: number[];
+    bitacora_actividades?: Actividad[];
+    tiempo_total_min?: number;
+  }> {
     if (typeof actId === 'number') {
       const res = await authFetch(`${API_BASE}/actividades/${actId}/estado`, {
         method: 'PATCH',
@@ -392,7 +507,12 @@ export const api = {
         err.status = res.status;
         throw err;
       }
-      return { ok: true, closed_lineage_ids: body?.closed_lineage_ids || [] };
+      return {
+        ok: true,
+        closed_lineage_ids: body?.closed_lineage_ids || [],
+        bitacora_actividades: body?.bitacora_actividades,
+        tiempo_total_min: body?.tiempo_total_min,
+      };
     }
     return { ok: true, closed_lineage_ids: [] };
   },
@@ -430,7 +550,7 @@ export const api = {
   }> {
     if (typeof actId === 'number') {
       const res = await authFetch(`${API_BASE}/actividades/${actId}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(actData),
       });
@@ -652,7 +772,12 @@ export const api = {
     return await res.json();
   },
 
-  async softDeleteActividad(actId: number | string): Promise<{ success: boolean; message: string }> {
+  async softDeleteActividad(actId: number | string): Promise<{
+    success: boolean;
+    message: string;
+    bitacora_actividades?: Actividad[];
+    tiempo_total_min?: number;
+  }> {
     const res = await authFetch(`${API_BASE}/actividades/${actId}/eliminar`, {
       method: 'POST',
     });
