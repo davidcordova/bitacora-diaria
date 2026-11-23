@@ -525,3 +525,4 @@ def get_my_delegated_targets():
     except Exception as e:
         conn.close()
         return jsonify({"error": str(e)}), 500
+

@@ -55,6 +55,92 @@ export interface Actividad {
   revisado_por?: number | null;
   revisado_por_nombre?: string | null;
   revisado_at?: string | null;
+  notas_vinculadas?: NotaResumenEnActividad[];
+  nota_ids?: number[];
+  source_nota_id?: number | null;
+  source_checklist_item_id?: string | null;
+}
+
+export type TipoNota = 'apunte' | 'checklist' | 'reunion' | 'tecnica';
+export type VisibilidadNota = 'personal' | 'compartida' | 'equipo';
+export type ColorAcentoNota = 'slate' | 'sky' | 'emerald' | 'amber' | 'rose';
+export type EstadoNota = 'activa' | 'archivada';
+
+export interface ChecklistItemNota {
+  id: string;
+  texto: string;
+  completado: boolean;
+  actividad_id?: number | null;
+}
+
+export interface NotaResumenEnActividad {
+  id: number;
+  titulo: string;
+  tipo_nota: TipoNota;
+  color_acento: ColorAcentoNota;
+  tipo_relacion: string;
+}
+
+export interface NotaVinculoActividad {
+  id: number;
+  bitacora_id: number;
+  fecha: string;
+  hora_inicio: string;
+  hora_fin?: string;
+  duracion_min: number;
+  tipo_trabajo: string;
+  descripcion: string;
+  descripcion_plana: string;
+  para_cliente: string;
+  estado: EstadoActividad;
+  colaborador: string;
+  user_id?: number;
+  tipo_relacion: string;
+  checklist_item_id?: string | null;
+  vinculado_at?: string;
+}
+
+export interface Nota {
+  id: number;
+  user_id: number;
+  team_id?: number | null;
+  titulo: string;
+  contenido: string;
+  contenido_plano?: string;
+  tipo_nota: TipoNota;
+  checklist_json: ChecklistItemNota[];
+  para_cliente: string;
+  etiquetas: string[];
+  color_acento: ColorAcentoNota;
+  visibilidad: VisibilidadNota;
+  shared_with: number[];
+  shared_with_names?: string[];
+  author_name?: string;
+  evidencias: Evidencia[];
+  estado: EstadoNota;
+  estado_operativo?: 'activa' | 'en_ejecucion' | 'convertida' | 'archivada' | 'papelera';
+  is_pinned: boolean;
+  fecha_recordatorio?: string | null;
+  is_deleted?: boolean;
+  deleted_at?: string | null;
+  actividades_count?: number;
+  actividades_completadas?: number;
+  actividades_abiertas?: number;
+  tiempo_total_min?: number;
+  actividades_vinculadas?: NotaVinculoActividad[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface NotaPrefillActividad {
+  notaId: number;
+  notaTitulo: string;
+  checklistItemId?: string | null;
+  descripcion: string;
+  paraCliente: string;
+  tipoTrabajo: string;
+  evidencias?: Evidencia[];
+  estadoInicial?: EstadoActividad;
 }
 
 export type RevisionDecision = 'aprobada_continuar' | 'aprobada_cerrada' | 'devuelta';
@@ -218,7 +304,7 @@ export interface DashboardStats {
   };
 }
 
-export type ViewMode = 'lista' | 'kanban' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon' | 'vault' | 'manual';
+export type ViewMode = 'lista' | 'kanban' | 'notas' | 'historial' | 'equipo' | 'dashboard' | 'gestion' | 'buzon' | 'vault' | 'manual';
 
 export interface SystemSettings {
   hora_inicio_default?: string;

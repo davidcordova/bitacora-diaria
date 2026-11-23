@@ -326,3 +326,4 @@ def report_support_error():
         conn.rollback()
         conn.close()
         return jsonify({"error": str(e)}), 500
+

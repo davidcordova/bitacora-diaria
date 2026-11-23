@@ -33,6 +33,8 @@ from helpers import (
     check_and_notify_stagnant_activities,
     get_default_hora_inicio,
     _mask_vault_secrets,
+    attach_linked_notes_to_activities,
+    _sync_note_activity_links,
 )
 from routes.system_routes import system_bp, normalize_client_name
 from routes.mcp_routes import mcp_bp
@@ -40,6 +42,7 @@ from routes.admin_routes import admin_bp
 from routes.supervision_routes import supervision_bp
 from routes.buzon_routes import buzon_bp
 from routes.vault_routes import vault_bp
+from routes.notas_routes import notas_bp
 from activity_lifecycle import (
     normalize_desc_key,
     enrich_activities_with_net_info,
@@ -64,6 +67,7 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(supervision_bp)
 app.register_blueprint(buzon_bp)
 app.register_blueprint(vault_bp)
+app.register_blueprint(notas_bp)
 
 
 @app.teardown_appcontext
@@ -109,7 +113,7 @@ def health_check():
         "database": "ok" if db_ok else "error",
         "schema_version": get_schema_version() if db_ok else None,
         "service": "Bitácora API",
-        "version": "2.4.0",
+        "version": "2.5.0",
         "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
         "peru_date": get_peru_today_str(),
         "timezone": "America/Lima (UTC-5)",
@@ -759,6 +763,15 @@ def rollover_user_open_tasks(cursor, u_id, u_name, today_str, now_peru):
             rev_por,
             rev_at
         ))
+        new_act_id = cursor.lastrowid
+        # Heredar automáticamente notas de contexto vinculadas a la tarea arrastrada
+        cursor.execute('''
+            INSERT OR IGNORE INTO nota_actividad_vinculos
+                (nota_id, actividad_id, tipo_relacion, checklist_item_id, created_by, created_at)
+            SELECT nota_id, ?, tipo_relacion, checklist_item_id, created_by, ?
+            FROM nota_actividad_vinculos
+            WHERE actividad_id = ?
+        ''', (new_act_id, now_peru, task['id']))
         existing_parent_ids.add(task['id'])
         current_order += 1
         rolled_count += 1
@@ -893,6 +906,7 @@ def get_bitacoras():
             b_dict['resumen_texto'] = ''
             b_dict['is_summary'] = True
         else:
+            attach_linked_notes_to_activities(cursor, enriched, getattr(g, 'current_user', None))
             b_dict['actividades'] = enriched
         result.append(b_dict)
 
@@ -1783,6 +1797,19 @@ def create_actividad_atomica():
         for tb_id in touched:
             recalculate_bitacora_durations(cursor, tb_id, fecha=fecha, now_peru=now_peru)
 
+        acting_u = getattr(g, 'current_user', None) or {'id': effective_creator_id, 'role': 'analista'}
+        if act_in.get('nota_ids') is not None or act_in.get('source_nota_id') or data.get('nota_ids') is not None or data.get('source_nota_id'):
+            _sync_note_activity_links(
+                cursor,
+                act_id,
+                acting_u,
+                nota_ids=act_in.get('nota_ids') if act_in.get('nota_ids') is not None else data.get('nota_ids'),
+                source_nota_id=act_in.get('source_nota_id') or data.get('source_nota_id'),
+                source_checklist_item_id=act_in.get('source_checklist_item_id') or data.get('source_checklist_item_id'),
+                tipo_relacion=act_in.get('tipo_relacion_nota') or data.get('tipo_relacion_nota') or 'origen',
+                now_peru=now_peru,
+            )
+
         closed_lineage_ids = []
         if estado == 'completada':
             closed_lineage_ids = propagate_completion_across_lineage(cursor, [act_id], now_peru)
@@ -2156,6 +2183,19 @@ def update_actividad_detalle(act_id):
         affected_bitacoras.add(primary_b_id)
     for b_id in affected_bitacoras:
         recalculate_bitacora_durations(cursor, b_id, now_peru=now_peru)
+
+    if 'nota_ids' in data or 'source_nota_id' in data:
+        acting_u = getattr(g, 'current_user', None) or {'id': acting_uid, 'role': 'analista'}
+        _sync_note_activity_links(
+            cursor,
+            act_id,
+            acting_u,
+            nota_ids=data.get('nota_ids'),
+            source_nota_id=data.get('source_nota_id'),
+            source_checklist_item_id=data.get('source_checklist_item_id'),
+            tipo_relacion=data.get('tipo_relacion_nota') or 'contexto',
+            now_peru=now_peru,
+        )
 
     closed_lineage_ids = []
     cur_estado_row = cursor.execute("SELECT estado, descripcion FROM actividades WHERE id = ?", (act_id,)).fetchone()

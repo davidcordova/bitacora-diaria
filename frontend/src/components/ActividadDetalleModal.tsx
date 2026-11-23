@@ -20,6 +20,7 @@ import {
   FileText,
   Link2,
   MessageSquare,
+  StickyNote,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia } from '../types';
 import { formatDuration, getTimeInStatusInfo, stripHtml, calculateHoraFin, copyToClipboard } from '../utils/formatters';
@@ -35,6 +36,7 @@ interface ActividadDetalleModalProps {
   onEdit: (actividad: Actividad, index: number) => void;
   onUpdateEstado?: (index: number, nuevoEstado: EstadoActividad) => void;
   onNavigateToRef?: (targetRefId: number | string, tipoVinculo?: string) => void;
+  onOpenNotaContext?: (notaId: number) => void;
   fecha?: string;
 }
 
@@ -46,6 +48,7 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
   onEdit,
   onUpdateEstado,
   onNavigateToRef,
+  onOpenNotaContext,
   fecha,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -365,6 +368,34 @@ export const ActividadDetalleModal: React.FC<ActividadDetalleModalProps> = ({
                 </div>
                 <div className="p-3 bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.07] rounded-xl text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed min-w-0 max-w-full overflow-x-hidden break-words [overflow-wrap:anywhere]">
                   {actividad.comentarios}
+                </div>
+              </div>
+            )}
+
+            {/* Notas de Contexto Vinculadas */}
+            {actividad.notas_vinculadas && actividad.notas_vinculadas.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <StickyNote className="w-3.5 h-3.5 text-sky-500" />
+                  <label className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                    Notas de contexto ({actividad.notas_vinculadas.length})
+                  </label>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {actividad.notas_vinculadas.map((nota) => (
+                    <button
+                      key={nota.id}
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onOpenNotaContext?.(nota.id);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-50 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/25 text-xs font-semibold transition-colors cursor-pointer"
+                    >
+                      <StickyNote className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate max-w-[260px]">{nota.titulo}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

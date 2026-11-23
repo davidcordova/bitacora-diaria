@@ -24,6 +24,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const isLider = role === 'lider' || currentUser?.is_leader || isAdmin;
 
   const secondaryLabels: Partial<Record<ViewMode, string>> = {
+    notas: 'Notas',
     dashboard: 'Métricas',
     vault: 'Accesos',
     buzon: 'Buzón',

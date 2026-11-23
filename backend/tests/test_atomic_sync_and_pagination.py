@@ -193,3 +193,4 @@ def test_paginated_summary_bitacoras_and_on_demand_detail(client, make_user):
     full_act = full_res.json['actividades'][0]
     assert '<strong>' in full_act['descripcion']
     assert len(full_act['evidencias']) == 1
+

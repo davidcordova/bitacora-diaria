@@ -15,6 +15,10 @@ const UserManagementView = lazy(() => import('./components/UserManagementView').
 const BuzonView = lazy(() => import('./components/BuzonView').then((m) => ({ default: m.BuzonView })));
 const VaultView = lazy(() => import('./components/VaultView').then((m) => ({ default: m.VaultView })));
 const ManualView = lazy(() => import('./components/ManualView').then((m) => ({ default: m.ManualView })));
+const NotasView = lazy(() => import('./components/notas/NotasView').then((m) => ({ default: m.NotasView })));
+const NotaContextDrawer = lazy(() => import('./components/notas/NotaContextDrawer').then((m) => ({ default: m.NotaContextDrawer })));
+const NotaModal = lazy(() => import('./components/notas/NotaModal').then((m) => ({ default: m.NotaModal })));
+const ActividadModal = lazy(() => import('./components/ActividadModal').then((m) => ({ default: m.ActividadModal })));
 const WhatsAppShareModal = lazy(() => import('./components/WhatsAppShareModal').then((m) => ({ default: m.WhatsAppShareModal })));
 const UserProfileModal = lazy(() => import('./components/UserProfileModal').then((m) => ({ default: m.UserProfileModal })));
 const HelpGuideModal = lazy(() => import('./components/HelpGuideModal').then((m) => ({ default: m.HelpGuideModal })));
@@ -25,7 +29,8 @@ import { LoginPage } from './components/LoginPage';
 import { BottomNav } from './components/BottomNav';
 import { TopHeader } from './components/TopHeader';
 import { ToastContainer, ToastMessage, ToastType } from './components/Toast';
-import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification } from './types';
+import { Bitacora, Actividad, EstadoActividad, ViewMode, User, Team, SystemSettings, SystemNotification, Nota, ChecklistItemNota, NotaPrefillActividad } from './types';
+import { buildPrefillFromNota } from './components/notas/notaStyles';
 import { defaultBitacora } from './utils/initialData';
 import { api, getAuthToken } from './services/api';
 import { getTodayLocalDateStr, recalculateActivitiesNetDurations, calculateHoraFin } from './utils/formatters';
@@ -112,6 +117,15 @@ export function App() {
   const [notificationsModalOpen, setNotificationsModalOpen] = useState(false);
   const [errorReportModalOpen, setErrorReportModalOpen] = useState(false);
   const [quickCierreModalOpen, setQuickCierreModalOpen] = useState(false);
+  const [noteDrawer, setNoteDrawer] = useState<{ open: boolean; mode: 'quick-create' | 'inspect'; notaId?: number | null }>({
+    open: false,
+    mode: 'quick-create',
+    notaId: null,
+  });
+  const [fullNotaModalOpen, setFullNotaModalOpen] = useState(false);
+  const [editingFullNota, setEditingFullNota] = useState<Nota | null>(null);
+  const [convertNotaPrefill, setConvertNotaPrefill] = useState<NotaPrefillActividad | null>(null);
+  const [notasHoy, setNotasHoy] = useState<Nota[]>([]);
   const headerSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   useModalBehavior(quickCierreModalOpen, () => setQuickCierreModalOpen(false));
   const [lastSyncErrorMessage, setLastSyncErrorMessage] = useState<string | null>(null);
@@ -223,6 +237,90 @@ export function App() {
       setPapeleraCount(res.total || 0);
     } catch (e) {
       console.warn('Error loading papelera count:', e);
+    }
+  };
+
+  const refreshNotasHoy = useCallback(
+    async (targetFecha?: string) => {
+      if (!currentUser?.id) return;
+      const f = targetFecha || bitacora.fecha || getTodayLocalDateStr();
+      try {
+        const res = await api.getNotas({ fecha_recordatorio: f, estado: 'activas_y_ejecucion', limit: 15 });
+        setNotasHoy(res.items || []);
+      } catch {
+        setNotasHoy([]);
+      }
+    },
+    [currentUser?.id, bitacora.fecha]
+  );
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      refreshNotasHoy(bitacora.fecha);
+    } else {
+      setNotasHoy([]);
+    }
+  }, [currentUser?.id, bitacora.fecha, refreshNotasHoy]);
+
+  // Atajo global Alt+N para captura rápida de nota
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setNoteDrawer({ open: true, mode: 'quick-create', notaId: null });
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [currentUser?.id]);
+
+  const handleOpenConvertNotaModal = (nota: Nota, checklistItem?: ChecklistItemNota) => {
+    setConvertNotaPrefill(buildPrefillFromNota(nota, checklistItem));
+  };
+
+  const handleConvertNotaSave = async (actData: Actividad) => {
+    if (!convertNotaPrefill) return;
+    const effectiveUser = activeProxyUser || currentUser;
+    const targetFecha = bitacora.fecha || getTodayLocalDateStr();
+    try {
+      setAutoSaveStatus('saving');
+      const res = await api.convertirNotaEnActividad(convertNotaPrefill.notaId, {
+        fecha: targetFecha,
+        target_user_id: effectiveUser?.id,
+        checklist_item_id: convertNotaPrefill.checklistItemId || undefined,
+        descripcion: actData.descripcion,
+        para_cliente: actData.para_cliente,
+        tipo_trabajo: actData.tipo_trabajo,
+        estado: actData.estado,
+        hora_inicio: actData.hora_inicio,
+        hora_fin: actData.hora_fin,
+        duracion_min: actData.duracion_min,
+        comentarios: actData.comentarios,
+        evidencias: actData.evidencias,
+      });
+      if (res.bitacora_actividades && targetFecha === bitacora.fecha) {
+        const colab = effectiveUser?.full_name || bitacora.colaborador;
+        const uid = effectiveUser?.id;
+        setBitacora((prev) => {
+          const synced: Bitacora = {
+            ...prev,
+            id: res.bitacora_id || prev.id,
+            tiempo_total_min: res.tiempo_total_min ?? prev.tiempo_total_min,
+            actividades: res.bitacora_actividades,
+          };
+          if (uid) lastSavedSignature.current = getBitacoraSignature(synced, colab, uid);
+          return synced;
+        });
+      }
+      setAutoSaveStatus('saved');
+      setLastSavedTime(new Date());
+      setConvertNotaPrefill(null);
+      refreshNotasHoy(targetFecha);
+      showToast('success', 'Actividad creada y vinculada a la nota', 'Conversión completada');
+    } catch (err: any) {
+      setAutoSaveStatus('error');
+      showToast('error', err?.message || 'No se pudo convertir la nota en actividad');
     }
   };
 
@@ -1512,6 +1610,7 @@ export function App() {
         onOpenProfile={() => setUserProfileModalOpen(true)}
         onOpenPapelera={() => setPapeleraModalOpen(true)}
         papeleraCount={papeleraCount}
+        notasReminderCount={notasHoy.length}
       />
 
       {/* Main Content Area */}
@@ -1533,6 +1632,7 @@ export function App() {
           activeProxyUser={activeProxyUser}
           onSelectProxyUser={handleSelectProxyUser}
           onOpenErrorReport={() => setErrorReportModalOpen(true)}
+          onOpenQuickNote={() => setNoteDrawer({ open: true, mode: 'quick-create', notaId: null })}
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
@@ -1628,6 +1728,8 @@ export function App() {
                 onOpenErrorReport={() => setErrorReportModalOpen(true)}
                 onOpenQuickCierre={!activeProxyUser ? () => setQuickCierreModalOpen(true) : undefined}
                 isJornadaClosed={isGenerated}
+                notasRecordatorio={notasHoy}
+                onOpenNotaContext={(notaId) => setNoteDrawer({ open: true, mode: 'inspect', notaId })}
               />
 
               <CierreJornada
@@ -1660,6 +1762,18 @@ export function App() {
               currentUser={currentUser}
               fecha={bitacora.fecha}
               onDateChange={handleDateChange}
+              onOpenNotaContext={(notaId) => setNoteDrawer({ open: true, mode: 'inspect', notaId })}
+            />
+          )}
+
+          {/* VIEW 2.5: NOTAS & APUNTES */}
+          {viewMode === 'notas' && (
+            <NotasView
+              currentUser={currentUser}
+              users={users}
+              onConvertToActividad={handleOpenConvertNotaModal}
+              onShowToast={(msg, type) => showToast(type || 'info', msg)}
+              onNotasChanged={() => refreshNotasHoy(bitacora.fecha)}
             />
           )}
 
@@ -1882,6 +1996,58 @@ export function App() {
               await handleForceSyncCloud();
               setErrorReportModalOpen(false);
             }}
+          />
+        )}
+
+        {noteDrawer.open && (
+          <NotaContextDrawer
+            isOpen={noteDrawer.open}
+            mode={noteDrawer.mode}
+            notaId={noteDrawer.notaId}
+            onClose={() => setNoteDrawer((prev) => ({ ...prev, open: false }))}
+            todayActividades={bitacora.actividades}
+            onNotaCreatedOrUpdated={() => {
+              refreshNotasHoy(bitacora.fecha);
+              reloadActiveBitacora();
+            }}
+            onEditFullNota={(nota) => {
+              setEditingFullNota(nota);
+              setFullNotaModalOpen(true);
+            }}
+            onConvertToActividad={handleOpenConvertNotaModal}
+            onShowToast={(msg, type) => showToast(type || 'info', msg)}
+          />
+        )}
+
+        {fullNotaModalOpen && (
+          <NotaModal
+            isOpen={fullNotaModalOpen}
+            onClose={() => setFullNotaModalOpen(false)}
+            notaToEdit={editingFullNota}
+            users={users}
+            currentUser={currentUser}
+            onSaved={() => {
+              refreshNotasHoy(bitacora.fecha);
+              reloadActiveBitacora();
+            }}
+            onConvertToActividad={handleOpenConvertNotaModal}
+            onShowToast={(msg, type) => showToast(type || 'info', msg)}
+          />
+        )}
+
+        {convertNotaPrefill && (
+          <ActividadModal
+            isOpen={Boolean(convertNotaPrefill)}
+            onClose={() => setConvertNotaPrefill(null)}
+            actividadToEdit={null}
+            editIndex={null}
+            onSave={handleConvertNotaSave}
+            users={users}
+            currentUser={currentUser}
+            fecha={bitacora.fecha}
+            existingActividades={bitacora.actividades}
+            defaultEstado={convertNotaPrefill.estadoInicial || 'en_proceso'}
+            prefillFromNota={convertNotaPrefill}
           />
         )}
       </Suspense>

@@ -1832,3 +1832,4 @@ def api_it_vault_verify_unlock():
         "expires_in": VAULT_UNLOCK_SECONDS,
         "message": "Bóveda desbloqueada con éxito"
     }), 200
+

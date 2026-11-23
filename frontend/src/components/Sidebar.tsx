@@ -19,6 +19,7 @@ import {
   Trash2,
   Lightbulb,
   BookOpen,
+  StickyNote,
 } from 'lucide-react';
 import { ViewMode, User, SystemSettings } from '../types';
 import { useModalBehavior } from '../hooks/useModalBehavior';
@@ -41,6 +42,7 @@ interface SidebarProps {
   onOpenProfile?: () => void;
   onOpenPapelera?: () => void;
   papeleraCount?: number;
+  notasReminderCount?: number;
 }
 
 interface NavItemConfig {
@@ -74,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleTheme,
   onOpenPapelera,
   papeleraCount = 0,
+  notasReminderCount = 0,
 }) => {
   useModalBehavior(Boolean(isOpenMobile), onCloseMobile);
   const role = currentUser?.role || 'analista';
@@ -98,6 +101,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Kanban,
           show: true,
           badge: null,
+        },
+        {
+          id: 'notas',
+          label: 'Notas & Apuntes',
+          icon: StickyNote,
+          show: true,
+          badge: notasReminderCount > 0 ? notasReminderCount : null,
         },
         {
           id: 'historial',

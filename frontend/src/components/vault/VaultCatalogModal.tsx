@@ -488,3 +488,4 @@ export const VaultCatalogModal: React.FC<VaultCatalogModalProps> = ({
     </div>
   );
 };
+

@@ -198,7 +198,7 @@ ACTOR_KEYS = ('requesting_user_id', 'requester_id', 'created_by', 'updated_by', 
 SELF_USER_ID_PREFIXES = (
     '/api/it-vault', '/api/quick-links', '/api/notifications', '/api/papelera/vaciar',
     '/api/delegations/my-targets', '/api/sugerencias', '/api/auth/profile',
-    '/api/support/report-error',
+    '/api/support/report-error', '/api/notas',
 )
 
 # En estas rutas el cliente envía su propio rol como "permiso": se reemplaza por el real
@@ -248,7 +248,7 @@ def _rewrite_identity(user):
 # ---------------------------------------------------------------------------
 RICH_TEXT_KEYS = frozenset({
     'descripcion', 'comentarios', 'resumen_texto', 'pendientes',
-    'apoyo_detalle', 'prioridad_siguiente',
+    'apoyo_detalle', 'prioridad_siguiente', 'contenido',
 })
 _HTML_TAG_RE = re.compile(r'<[a-zA-Z!/?]')
 _NH3_TAGS = {

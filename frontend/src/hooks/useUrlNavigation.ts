@@ -4,6 +4,7 @@ import { ViewMode } from '../types';
 const VALID_VIEWS: Set<ViewMode> = new Set([
   'lista',
   'kanban',
+  'notas',
   'historial',
   'equipo',
   'dashboard',

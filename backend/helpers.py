@@ -5,6 +5,7 @@ import html
 import secrets
 from datetime import datetime
 
+from flask import g, has_app_context
 from database import (
     get_db,
     get_peru_now,
@@ -188,6 +189,190 @@ def slim_actividad_for_summary(act_dict):
     return slim
 
 
+def attach_linked_notes_to_activities(cursor, activities, acting_user=None):
+    """Adjunta resumen de notas vinculadas a un lote de actividades en 1 sola consulta,
+    respetando estrictamente la privacidad de notas `personal`."""
+    if not activities:
+        return activities
+
+    act_ids = [int(a['id']) for a in activities if a.get('id') and str(a.get('id')).isdigit()]
+    if not act_ids:
+        for a in activities:
+            a['notas_vinculadas'] = []
+        return activities
+
+    if acting_user is None and has_app_context and has_app_context():
+        acting_user = getattr(g, 'current_user', None)
+
+    acting_uid = int(acting_user['id']) if acting_user and acting_user.get('id') else None
+    acting_role = acting_user.get('role') if acting_user else None
+    allowed_team_ids = set()
+    if acting_uid:
+        for t in cursor.execute(
+            "SELECT id FROM teams WHERE lider_id = ? OR id = ?",
+            (acting_uid, acting_user.get('team_id')),
+        ).fetchall():
+            allowed_team_ids.add(int(t['id']))
+
+    by_act = {}
+    CHUNK = 400
+    for i in range(0, len(act_ids), CHUNK):
+        chunk = act_ids[i:i + CHUNK]
+        ph = ','.join('?' * len(chunk))
+        rows = cursor.execute(
+            f'''
+            SELECT nav.actividad_id, nav.tipo_relacion,
+                   n.id AS nota_id, n.user_id, n.team_id, n.titulo,
+                   n.tipo_nota, n.color_acento, n.visibilidad, n.shared_with,
+                   owner.team_id AS owner_team_id
+            FROM nota_actividad_vinculos nav
+            JOIN notas n ON nav.nota_id = n.id
+            LEFT JOIN users owner ON n.user_id = owner.id
+            WHERE nav.actividad_id IN ({ph})
+              AND (n.is_deleted IS NULL OR n.is_deleted = 0)
+            ORDER BY nav.id ASC
+            ''',
+            chunk,
+        ).fetchall()
+
+        for r in rows:
+            vis = r['visibilidad'] or 'personal'
+            owner_id = int(r['user_id'])
+            can_see = False
+            if acting_uid is None:
+                can_see = (vis != 'personal')
+            elif vis == 'personal':
+                can_see = (owner_id == acting_uid)
+            elif owner_id == acting_uid:
+                can_see = True
+            elif vis == 'compartida':
+                try:
+                    sw = json.loads(r['shared_with'] or '[]')
+                    can_see = acting_uid in [int(x) for x in sw if str(x).isdigit()]
+                except Exception:
+                    can_see = False
+            elif vis == 'equipo':
+                if acting_role == 'admin':
+                    can_see = True
+                elif r['team_id'] and int(r['team_id']) in allowed_team_ids:
+                    can_see = True
+                elif r['owner_team_id'] and int(r['owner_team_id']) in allowed_team_ids:
+                    can_see = True
+
+            if not can_see:
+                continue
+
+            by_act.setdefault(r['actividad_id'], []).append({
+                'id': r['nota_id'],
+                'titulo': r['titulo'],
+                'tipo_nota': r['tipo_nota'] or 'apunte',
+                'color_acento': r['color_acento'] or 'slate',
+                'tipo_relacion': r['tipo_relacion'] or 'contexto',
+            })
+
+    for a in activities:
+        aid = a.get('id')
+        a['notas_vinculadas'] = by_act.get(int(aid), []) if aid and str(aid).isdigit() else []
+    return activities
+
+
+def _sync_note_activity_links(cursor, act_id, acting_user, nota_ids=None, source_nota_id=None, source_checklist_item_id=None, tipo_relacion='contexto', now_peru=None):
+    """Vincula una actividad recién creada o editada con sus notas seleccionadas y actualiza checklists."""
+    if not act_id or not acting_user:
+        return
+    now_peru = now_peru or get_peru_now_str()
+    uid = int(acting_user['id'])
+    leader_teams = {
+        int(r['id'])
+        for r in cursor.execute(
+            "SELECT id FROM teams WHERE lider_id = ? OR id = ?",
+            (uid, acting_user.get('team_id')),
+        ).fetchall()
+    }
+
+    def _nota_editable(n_row):
+        if not n_row:
+            return False
+        vis = n_row['visibilidad'] or 'personal'
+        owner_id = int(n_row['user_id'])
+        if vis == 'personal':
+            return owner_id == uid
+        if owner_id == uid:
+            return True
+        if vis == 'compartida':
+            try:
+                sw = json.loads(n_row['shared_with'] or '[]')
+                return uid in [int(x) for x in sw if str(x).isdigit()]
+            except Exception:
+                return False
+        if vis == 'equipo':
+            return acting_user.get('role') == 'admin' or (n_row['team_id'] and int(n_row['team_id']) in leader_teams)
+        return False
+
+    targets = []
+    if source_nota_id and str(source_nota_id).isdigit():
+        targets.append((int(source_nota_id), tipo_relacion or 'origen', source_checklist_item_id))
+
+    if isinstance(nota_ids, list):
+        for nid in nota_ids:
+            if nid is not None and str(nid).isdigit():
+                nid_int = int(nid)
+                if not any(t[0] == nid_int for t in targets):
+                    targets.append((nid_int, 'contexto', None))
+
+        # Si se envió explícitamente el arreglo `nota_ids` (sin ser solo creación desde nota), sincronizar eliminaciones
+        keep_ids = {t[0] for t in targets}
+        existing_links = cursor.execute(
+            "SELECT nav.nota_id FROM nota_actividad_vinculos nav JOIN notas n ON nav.nota_id = n.id WHERE nav.actividad_id = ?",
+            (act_id,),
+        ).fetchall()
+        for ex in existing_links:
+            if ex['nota_id'] not in keep_ids:
+                n_row = cursor.execute("SELECT * FROM notas WHERE id = ?", (ex['nota_id'],)).fetchone()
+                if _nota_editable(n_row):
+                    cursor.execute(
+                        "DELETE FROM nota_actividad_vinculos WHERE nota_id = ? AND actividad_id = ?",
+                        (ex['nota_id'], act_id),
+                    )
+
+    for nid_int, rel, chk_id in targets:
+        n_row = cursor.execute(
+            "SELECT * FROM notas WHERE id = ? AND (is_deleted IS NULL OR is_deleted = 0)",
+            (nid_int,),
+        ).fetchone()
+        if not n_row:
+            continue
+        # Para source_nota_id permitir lectura (ej. nota de equipo o compartida que se convierte en actividad)
+        if not (_nota_editable(n_row) or (rel == 'origen' and (n_row['visibilidad'] != 'personal' or int(n_row['user_id']) == uid))):
+            continue
+        cursor.execute(
+            '''
+            INSERT INTO nota_actividad_vinculos (nota_id, actividad_id, tipo_relacion, checklist_item_id, created_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(nota_id, actividad_id) DO UPDATE SET
+                tipo_relacion = excluded.tipo_relacion,
+                checklist_item_id = COALESCE(excluded.checklist_item_id, nota_actividad_vinculos.checklist_item_id)
+            ''',
+            (nid_int, act_id, rel, chk_id, uid, now_peru),
+        )
+        if chk_id:
+            try:
+                chk_list = json.loads(n_row['checklist_json'] or '[]')
+                if isinstance(chk_list, list):
+                    changed = False
+                    for item in chk_list:
+                        if isinstance(item, dict) and str(item.get('id')) == str(chk_id):
+                            item['actividad_id'] = int(act_id)
+                            changed = True
+                    if changed:
+                        cursor.execute(
+                            "UPDATE notas SET checklist_json = ?, updated_at = ?, updated_by_user_id = ? WHERE id = ?",
+                            (json.dumps(chk_list), now_peru, uid, nid_int),
+                        )
+            except Exception:
+                pass
+
+
 def fetch_enriched_bitacora_activities(cursor, bitacora_id, fecha=None, users_map=None):
     """Obtiene y enriquece las actividades activas de una bitácora con cálculo neto recursivo."""
     if not bitacora_id:
@@ -219,7 +404,8 @@ def fetch_enriched_bitacora_activities(cursor, bitacora_id, fecha=None, users_ma
         ORDER BY a.orden ASC, a.id ASC
     ''', (bitacora_id,)).fetchall()
     formatted = [format_actividad_dict(r, users_map, fecha) for r in rows]
-    return enrich_activities_with_net_info(formatted, fecha=fecha)
+    enriched = enrich_activities_with_net_info(formatted, fecha=fecha)
+    return attach_linked_notes_to_activities(cursor, enriched)
 
 
 def check_and_notify_stagnant_activities(user_id=None, cursor=None, conn=None):
@@ -384,3 +570,4 @@ def _mask_vault_secrets(item, fields, unlocked):
         if not raw:
             continue
         item[f] = decrypt_vault_secret(raw) if unlocked else None
+

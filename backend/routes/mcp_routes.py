@@ -31,6 +31,7 @@ from database import (
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 from security import _get_secret_key
 from routes.system_routes import normalize_client_name
+from helpers import attach_linked_notes_to_activities
 from activity_lifecycle import (
     calculate_hora_fin,
     recalculate_bitacora_durations,
@@ -374,6 +375,100 @@ MCP_TOOLS = [
             },
         },
     },
+    {
+        'name': 'buscar_notas',
+        'description': (
+            'Busca notas de contexto operativo, minutas y checklists por texto libre, cliente, tipo o etiqueta '
+            '(respeta privacidad: las notas personales privadas de otros usuarios no se exponen).'
+        ),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'texto_busqueda': {
+                    'type': 'string',
+                    'description': 'Palabra clave a buscar en título, contenido, checklists o etiquetas.',
+                },
+                'cliente': {
+                    'type': 'string',
+                    'description': 'Nombre del cliente o área (opcional).',
+                },
+                'tipo_nota': {
+                    'type': 'string',
+                    'enum': ['apunte', 'checklist', 'reunion', 'tecnica'],
+                    'description': 'Tipo de nota (opcional).',
+                },
+                'limite': {
+                    'type': 'integer',
+                    'description': 'Cantidad máxima de resultados (por defecto 20, máximo 100).',
+                },
+            },
+        },
+    },
+    {
+        'name': 'obtener_nota_contexto',
+        'description': (
+            'Obtiene el detalle completo de una nota por ID junto con su checklist y las actividades '
+            'de bitácora vinculadas a ella (respeta privacidad de notas personales).'
+        ),
+        'inputSchema': {
+            'type': 'object',
+            'required': ['nota_id'],
+            'properties': {
+                'nota_id': {
+                    'type': 'integer',
+                    'description': 'ID numérico de la nota a consultar.',
+                },
+            },
+        },
+    },
+    {
+        'name': 'crear_nota',
+        'description': (
+            'Crea una nueva nota de contexto u operativa (requiere modo read_write). '
+            'Permite vincularla opcionalmente a una actividad existente por su ID.'
+        ),
+        'inputSchema': {
+            'type': 'object',
+            'required': ['titulo'],
+            'properties': {
+                'colaborador': {
+                    'type': 'string',
+                    'description': 'Username o nombre completo del autor de la nota (por defecto usuario autenticado).',
+                },
+                'titulo': {
+                    'type': 'string',
+                    'description': 'Título de la nota.',
+                },
+                'contenido': {
+                    'type': 'string',
+                    'description': 'Contenido o minuta de la nota.',
+                },
+                'tipo_nota': {
+                    'type': 'string',
+                    'enum': ['apunte', 'checklist', 'reunion', 'tecnica'],
+                    'description': 'Formato de nota (por defecto: apunte).',
+                },
+                'para_cliente': {
+                    'type': 'string',
+                    'description': 'Cliente o proyecto relacionado (opcional).',
+                },
+                'etiquetas': {
+                    'type': 'array',
+                    'items': {'type': 'string'},
+                    'description': 'Etiquetas cortas de clasificación (opcional).',
+                },
+                'visibilidad': {
+                    'type': 'string',
+                    'enum': ['personal', 'equipo'],
+                    'description': 'Visibilidad inicial (por defecto equipo cuando se crea vía MCP, o personal).',
+                },
+                'actividad_id': {
+                    'type': 'integer',
+                    'description': 'ID de actividad de bitácora a vincular como contexto (opcional).',
+                },
+            },
+        },
+    },
 ]
 
 MCP_RESOURCES = [
@@ -613,57 +708,59 @@ def _tool_consultar_actividades(args):
     conn = get_db()
     try:
         rows = conn.execute(query, params).fetchall()
+        now_dt = get_peru_now().replace(tzinfo=None)
+        resultados = []
+        total_min_filtrado = 0
+
+        for r in rows:
+            desc_clean = _clean_html(r['descripcion'])
+            com_clean = _clean_html(r['comentarios'])
+            if texto_busqueda and (texto_busqueda not in desc_clean.lower() and texto_busqueda not in com_clean.lower()):
+                continue
+
+            # Calcular días sin cambio para tareas no completadas
+            dias_sin_cambio = 0
+            if r['estado'] != 'completada':
+                ref_ts = r['updated_at'] or r['created_at'] or f"{r['fecha']} 12:00:00"
+                try:
+                    clean_ts = str(ref_ts).replace('T', ' ').split('.')[0].split('+')[0].strip()
+                    if len(clean_ts) == 10:
+                        clean_ts += ' 12:00:00'
+                    dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
+                    dias_sin_cambio = max(0, (now_dt - dt).days)
+                except Exception:
+                    dias_sin_cambio = 0
+
+            if solo_estancadas and (r['estado'] == 'completada' or dias_sin_cambio < 7):
+                continue
+
+            dur = int(r['duracion_min'] or 0)
+            total_min_filtrado += dur
+
+            if len(resultados) < limite:
+                resultados.append({
+                    'id': r['id'],
+                    'fecha': r['fecha'],
+                    'colaborador': r['colaborador'],
+                    'area': r['area'],
+                    'hora_inicio': r['hora_inicio'] or '',
+                    'hora_fin': r['hora_fin'] or '',
+                    'duracion_min': dur,
+                    'cliente': normalize_client_name(r['para_cliente']) or '',
+                    'tipo_trabajo': r['tipo_trabajo'] or '',
+                    'estado': r['estado'] or 'en_proceso',
+                    'descripcion': desc_clean,
+                    'comentarios': com_clean,
+                    'revision_decision': r['revision_decision'] or None,
+                    'revision_comentario': _clean_html(r['revision_comentario']) if r['revision_comentario'] else None,
+                    'dias_sin_cambio': dias_sin_cambio,
+                    'estancada': bool(dias_sin_cambio >= 7 and r['estado'] != 'completada'),
+                })
+
+        if resultados:
+            attach_linked_notes_to_activities(conn.cursor(), resultados, getattr(g, 'current_user', None))
     finally:
         conn.close()
-
-    now_dt = get_peru_now().replace(tzinfo=None)
-    resultados = []
-    total_min_filtrado = 0
-
-    for r in rows:
-        desc_clean = _clean_html(r['descripcion'])
-        com_clean = _clean_html(r['comentarios'])
-        if texto_busqueda and (texto_busqueda not in desc_clean.lower() and texto_busqueda not in com_clean.lower()):
-            continue
-
-        # Calcular días sin cambio para tareas no completadas
-        dias_sin_cambio = 0
-        if r['estado'] != 'completada':
-            ref_ts = r['updated_at'] or r['created_at'] or f"{r['fecha']} 12:00:00"
-            try:
-                clean_ts = str(ref_ts).replace('T', ' ').split('.')[0].split('+')[0].strip()
-                if len(clean_ts) == 10:
-                    clean_ts += ' 12:00:00'
-                dt = datetime.strptime(clean_ts[:19], '%Y-%m-%d %H:%M:%S')
-                dias_sin_cambio = max(0, (now_dt - dt).days)
-            except Exception:
-                dias_sin_cambio = 0
-
-        if solo_estancadas and (r['estado'] == 'completada' or dias_sin_cambio < 7):
-            continue
-
-        dur = int(r['duracion_min'] or 0)
-        total_min_filtrado += dur
-
-        if len(resultados) < limite:
-            resultados.append({
-                'id': r['id'],
-                'fecha': r['fecha'],
-                'colaborador': r['colaborador'],
-                'area': r['area'],
-                'hora_inicio': r['hora_inicio'] or '',
-                'hora_fin': r['hora_fin'] or '',
-                'duracion_min': dur,
-                'cliente': normalize_client_name(r['para_cliente']) or '',
-                'tipo_trabajo': r['tipo_trabajo'] or '',
-                'estado': r['estado'] or 'en_proceso',
-                'descripcion': desc_clean,
-                'comentarios': com_clean,
-                'revision_decision': r['revision_decision'] or None,
-                'revision_comentario': _clean_html(r['revision_comentario']) if r['revision_comentario'] else None,
-                'dias_sin_cambio': dias_sin_cambio,
-                'estancada': bool(dias_sin_cambio >= 7 and r['estado'] != 'completada'),
-            })
 
     return {
         'total_coincidencias_retornadas': len(resultados),
@@ -1180,6 +1277,212 @@ def _tool_registrar_actividad_bitacora(args):
         conn.close()
 
 
+def _mcp_note_visible(nota_row, actor):
+    vis = nota_row['visibilidad'] or 'personal'
+    if not actor or actor.get('is_mcp'):
+        return vis != 'personal'
+    uid = int(actor['id'])
+    if vis == 'personal':
+        return int(nota_row['user_id']) == uid
+    if int(nota_row['user_id']) == uid:
+        return True
+    if vis == 'compartida':
+        try:
+            sw = json.loads(nota_row['shared_with'] or '[]')
+            return uid in [int(x) for x in sw if str(x).isdigit()]
+        except Exception:
+            return False
+    return True
+
+
+def _tool_buscar_notas(args):
+    texto = (args.get('texto_busqueda') or '').strip().lower()
+    cliente = (args.get('cliente') or '').strip().lower()
+    tipo_nota = (args.get('tipo_nota') or '').strip().lower()
+    try:
+        limite = min(max(int(args.get('limite') or 20), 1), 100)
+    except Exception:
+        limite = 20
+
+    actor = getattr(g, 'current_user', None) or {}
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            '''
+            SELECT n.*, u.full_name AS autor
+            FROM notas n
+            LEFT JOIN users u ON n.user_id = u.id
+            WHERE (n.is_deleted IS NULL OR n.is_deleted = 0)
+            ORDER BY n.is_pinned DESC, n.updated_at DESC, n.id DESC
+            '''
+        ).fetchall()
+        results = []
+        for r in rows:
+            if not _mcp_note_visible(r, actor):
+                continue
+            if tipo_nota and (r['tipo_nota'] or '').lower() != tipo_nota:
+                continue
+            cli = normalize_client_name(r['para_cliente']) or ''
+            if cliente and cliente not in cli.lower():
+                continue
+            plain = _clean_html(r['contenido'])
+            try:
+                chk = json.loads(r['checklist_json'] or '[]')
+            except Exception:
+                chk = []
+            try:
+                tags = json.loads(r['etiquetas'] or '[]')
+            except Exception:
+                tags = []
+            if texto:
+                hay = f"{r['titulo']} {plain} {cli} {' '.join(tags)} {' '.join(c.get('texto','') for c in chk if isinstance(c, dict))}".lower()
+                if texto not in hay:
+                    continue
+            results.append({
+                'id': r['id'],
+                'titulo': r['titulo'],
+                'tipo_nota': r['tipo_nota'] or 'apunte',
+                'visibilidad': r['visibilidad'] or 'personal',
+                'cliente': cli,
+                'etiquetas': tags,
+                'autor': r['autor'] or '',
+                'extracto': (plain[:240] + '...') if len(plain) > 240 else plain,
+                'checklist_items': len(chk),
+                'estado': r['estado'] or 'activa',
+                'updated_at': r['updated_at'],
+            })
+            if len(results) >= limite:
+                break
+        return {'total_encontradas': len(results), 'notas': results}
+    finally:
+        conn.close()
+
+
+def _tool_obtener_nota_contexto(args):
+    nota_id = args.get('nota_id')
+    if not nota_id or not str(nota_id).isdigit():
+        raise ValueError('El parámetro numérico "nota_id" es obligatorio.')
+    actor = getattr(g, 'current_user', None) or {}
+    conn = get_db()
+    try:
+        r = conn.execute(
+            "SELECT n.*, u.full_name AS autor FROM notas n LEFT JOIN users u ON n.user_id = u.id WHERE n.id = ?",
+            (int(nota_id),),
+        ).fetchone()
+        if not r:
+            raise KeyError(f'Nota #{nota_id} no encontrada.')
+        if not _mcp_note_visible(r, actor):
+            raise PermissionError('No tienes permiso para consultar una nota personal de otro usuario.')
+        acts = conn.execute(
+            '''
+            SELECT a.id, b.fecha, b.colaborador, a.estado, a.duracion_min, a.descripcion, nav.tipo_relacion
+            FROM nota_actividad_vinculos nav
+            JOIN actividades a ON nav.actividad_id = a.id
+            JOIN bitacoras b ON a.bitacora_id = b.id
+            WHERE nav.nota_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
+            ORDER BY b.fecha DESC, a.id DESC
+            ''',
+            (int(nota_id),),
+        ).fetchall()
+        return {
+            'id': r['id'],
+            'titulo': r['titulo'],
+            'tipo_nota': r['tipo_nota'] or 'apunte',
+            'visibilidad': r['visibilidad'] or 'personal',
+            'cliente': normalize_client_name(r['para_cliente']) or '',
+            'etiquetas': json.loads(r['etiquetas'] or '[]'),
+            'autor': r['autor'] or '',
+            'contenido': _clean_html(r['contenido']),
+            'checklist': json.loads(r['checklist_json'] or '[]'),
+            'estado': r['estado'] or 'activa',
+            'actividades_vinculadas': [
+                {
+                    'id': a['id'],
+                    'fecha': a['fecha'],
+                    'colaborador': a['colaborador'],
+                    'estado': a['estado'],
+                    'duracion_min': int(a['duracion_min'] or 0),
+                    'tipo_relacion': a['tipo_relacion'],
+                    'descripcion': _clean_html(a['descripcion']),
+                }
+                for a in acts
+            ],
+        }
+    finally:
+        conn.close()
+
+
+def _tool_crear_nota(args):
+    actor = getattr(g, 'current_user', None) or {}
+    if actor.get('is_mcp') and actor.get('mcp_mode') != 'read_write':
+        raise PermissionError(
+            'El servidor MCP está en modo Solo Lectura (read_only). Habilita read_write para crear notas por IA.'
+        )
+    titulo = (args.get('titulo') or '').strip()
+    if not titulo:
+        raise ValueError('El campo "titulo" es obligatorio.')
+    contenido = args.get('contenido') or ''
+    tipo_nota = (args.get('tipo_nota') or 'apunte').strip().lower()
+    if tipo_nota not in ('apunte', 'checklist', 'reunion', 'tecnica'):
+        tipo_nota = 'apunte'
+    visibilidad = (args.get('visibilidad') or 'equipo').strip().lower()
+    if visibilidad not in ('personal', 'equipo'):
+        visibilidad = 'equipo'
+    para_cliente = normalize_client_name(args.get('para_cliente') or '')
+    etiquetas = [str(t).strip().lower()[:40] for t in (args.get('etiquetas') or []) if str(t).strip()][:20]
+    now_str = get_peru_now_str()
+
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        colab_q = (args.get('colaborador') or '').strip()
+        uid = int(actor.get('id') or 1)
+        team_id = actor.get('team_id')
+        if colab_q:
+            u_row = cursor.execute(
+                "SELECT id, team_id FROM users WHERE is_active = 1 AND (LOWER(username) = LOWER(?) OR LOWER(full_name) LIKE LOWER(?)) LIMIT 1",
+                (colab_q, f'%{colab_q}%'),
+            ).fetchone()
+            if u_row:
+                uid = u_row['id']
+                team_id = u_row['team_id']
+        cursor.execute(
+            '''
+            INSERT INTO notas (
+                user_id, team_id, titulo, contenido, tipo_nota, checklist_json,
+                para_cliente, etiquetas, color_acento, visibilidad, shared_with,
+                evidencias, estado, is_pinned, is_deleted,
+                created_by_user_id, updated_by_user_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, '[]', ?, ?, 'slate', ?, '[]', '[]', 'activa', 0, 0, ?, ?, ?, ?)
+            ''',
+            (
+                uid, team_id if visibilidad == 'equipo' else None, titulo[:250], contenido,
+                tipo_nota, para_cliente, json.dumps(etiquetas), visibilidad,
+                uid, uid, now_str, now_str,
+            ),
+        )
+        nota_id = cursor.lastrowid
+        act_id = args.get('actividad_id')
+        if act_id and str(act_id).isdigit():
+            act_exists = cursor.execute("SELECT id FROM actividades WHERE id = ?", (int(act_id),)).fetchone()
+            if act_exists:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO nota_actividad_vinculos (nota_id, actividad_id, tipo_relacion, created_by, created_at) VALUES (?, ?, 'contexto', ?, ?)",
+                    (nota_id, int(act_id), uid, now_str),
+                )
+        conn.commit()
+        return {
+            'status': 'created',
+            'nota_id': nota_id,
+            'titulo': titulo,
+            'visibilidad': visibilidad,
+            'cliente': para_cliente,
+            'etiquetas': etiquetas,
+        }
+    finally:
+        conn.close()
+
+
 _TOOL_DISPATCH = {
     'resumen_ejecutivo_equipo': _tool_resumen_ejecutivo_equipo,
     'consultar_actividades': _tool_consultar_actividades,
@@ -1188,6 +1491,9 @@ _TOOL_DISPATCH = {
     'detectar_alertas_y_cuellos_botella': _tool_detectar_alertas_y_cuellos_botella,
     'listar_colaboradores_y_equipos': _tool_listar_colaboradores_y_equipos,
     'registrar_actividad_bitacora': _tool_registrar_actividad_bitacora,
+    'buscar_notas': _tool_buscar_notas,
+    'obtener_nota_contexto': _tool_obtener_nota_contexto,
+    'crear_nota': _tool_crear_nota,
 }
 
 

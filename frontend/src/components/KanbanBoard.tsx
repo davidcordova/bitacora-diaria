@@ -19,6 +19,7 @@ import {
   Eye,
   Link2,
   MessageSquare,
+  StickyNote,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, Evidencia, User } from '../types';
 import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatters';
@@ -45,6 +46,7 @@ interface KanbanBoardProps {
   showCollaboratorBadge?: boolean;
   onApproveActivity?: (index: number) => void;
   onRejectActivity?: (index: number) => void;
+  onOpenNotaContext?: (notaId: number) => void;
 }
 
 interface ColumnConfig {
@@ -107,6 +109,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   showCollaboratorBadge = false,
   onApproveActivity,
   onRejectActivity,
+  onOpenNotaContext,
 }) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -498,7 +501,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                       {(act.para_cliente ||
                         act.tipo_trabajo ||
                         act.parent_task_id ||
-                        (act.evidencias && act.evidencias.length > 0)) && (
+                        (act.evidencias && act.evidencias.length > 0) ||
+                        (act.notas_vinculadas && act.notas_vinculadas.length > 0)) && (
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-slate-400 dark:text-slate-500 mb-2">
                           {act.para_cliente && (
                             <span className="font-medium text-slate-600 dark:text-slate-300 truncate max-w-[130px]">
@@ -534,6 +538,20 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             >
                               <Paperclip className="w-3 h-3" />
                               <span>{act.evidencias.length}</span>
+                            </button>
+                          )}
+                          {act.notas_vinculadas && act.notas_vinculadas.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenNotaContext?.(act.notas_vinculadas![0].id);
+                              }}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/25 font-medium cursor-pointer"
+                              title={`Ver nota vinculada: ${act.notas_vinculadas[0].titulo}`}
+                            >
+                              <StickyNote className="w-3 h-3" />
+                              <span>{act.notas_vinculadas.length}</span>
                             </button>
                           )}
                         </div>
@@ -649,6 +667,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           setDetailIndex(null);
           handleNavigateToRef(refId, tipo);
         }}
+        onOpenNotaContext={onOpenNotaContext}
       />
 
       {/* MODAL INSPECCIÓN DE TAREA VINCULADA / ORIGEN */}

@@ -1,4 +1,4 @@
-import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation, RevisionDecision, RevisionResult } from '../types';
+import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation, RevisionDecision, RevisionResult, Nota, ChecklistItemNota } from '../types';
 
 const API_BASE = '/api';
 
@@ -1542,6 +1542,179 @@ export const api = {
       throw new Error(data.error || 'Error al probar herramienta MCP');
     }
     return data.result;
+  },
+
+  // ================= NOTAS & CONTEXTO OPERATIVO =================
+  async getNotas(params?: {
+    q?: string;
+    estado?: string;
+    alcance?: 'todas' | 'mis' | 'compartidas' | 'equipo';
+    tipo_nota?: string;
+    cliente?: string;
+    etiqueta?: string;
+    fecha_desde?: string;
+    fecha_hasta?: string;
+    fecha_recordatorio?: string;
+    actividad_id?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ items: Nota[]; total: number; hasMore: boolean }> {
+    const sp = new URLSearchParams();
+    if (params?.q) sp.set('q', params.q);
+    if (params?.estado) sp.set('estado', params.estado);
+    if (params?.alcance) sp.set('alcance', params.alcance);
+    if (params?.tipo_nota) sp.set('tipo_nota', params.tipo_nota);
+    if (params?.cliente) sp.set('cliente', params.cliente);
+    if (params?.etiqueta) sp.set('etiqueta', params.etiqueta);
+    if (params?.fecha_desde) sp.set('fecha_desde', params.fecha_desde);
+    if (params?.fecha_hasta) sp.set('fecha_hasta', params.fecha_hasta);
+    if (params?.fecha_recordatorio) sp.set('fecha_recordatorio', params.fecha_recordatorio);
+    if (params?.actividad_id) sp.set('actividad_id', String(params.actividad_id));
+    if (params?.limit !== undefined) sp.set('limit', String(params.limit));
+    if (params?.offset !== undefined) sp.set('offset', String(params.offset));
+    const res = await authFetch(`${API_BASE}/notas${sp.toString() ? `?${sp.toString()}` : ''}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al cargar notas' }));
+      throw new Error(err.error || 'Error al cargar notas');
+    }
+    const items: Nota[] = await res.json();
+    const totalHdr = res.headers.get('X-Total-Count');
+    const hasMoreHdr = res.headers.get('X-Has-More');
+    return {
+      items: Array.isArray(items) ? items : [],
+      total: totalHdr !== null ? Number(totalHdr) : (Array.isArray(items) ? items.length : 0),
+      hasMore: hasMoreHdr === '1',
+    };
+  },
+
+  async getNotaById(notaId: number): Promise<Nota> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al cargar la nota' }));
+      throw new Error(err.error || 'Error al cargar la nota');
+    }
+    return res.json();
+  },
+
+  async createNota(payload: Partial<Nota> & { actividad_ids?: number[]; tipo_relacion?: string }): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al crear la nota' }));
+      throw new Error(err.error || 'Error al crear la nota');
+    }
+    return res.json();
+  },
+
+  async updateNota(notaId: number, payload: Partial<Nota>): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar la nota' }));
+      throw new Error(err.error || 'Error al actualizar la nota');
+    }
+    return res.json();
+  },
+
+  async updateNotaChecklist(notaId: number, payload: { checklist_json?: ChecklistItemNota[]; item_id?: string; completado?: boolean; texto?: string }): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}/checklist`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar checklist' }));
+      throw new Error(err.error || 'Error al actualizar checklist');
+    }
+    return res.json();
+  },
+
+  async deleteNota(notaId: number, permanent = false): Promise<{ success: boolean }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}${permanent ? '?permanent=1' : ''}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al eliminar la nota' }));
+      throw new Error(err.error || 'Error al eliminar la nota');
+    }
+    return res.json();
+  },
+
+  async restaurarNota(notaId: number): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}/restaurar`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al restaurar la nota' }));
+      throw new Error(err.error || 'Error al restaurar la nota');
+    }
+    return res.json();
+  },
+
+  async vincularNotaActividad(notaId: number, payload: { actividad_id: number; tipo_relacion?: string; checklist_item_id?: string }): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}/vinculos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al vincular actividad' }));
+      throw new Error(err.error || 'Error al vincular actividad');
+    }
+    return res.json();
+  },
+
+  async desvincularNotaActividad(notaId: number, actividadId: number): Promise<{ success: boolean; nota: Nota }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}/vinculos/${actividadId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al desvincular actividad' }));
+      throw new Error(err.error || 'Error al desvincular actividad');
+    }
+    return res.json();
+  },
+
+  async convertirNotaEnActividad(
+    notaId: number,
+    payload: {
+      fecha?: string;
+      target_user_id?: number;
+      checklist_item_id?: string;
+      descripcion?: string;
+      para_cliente?: string;
+      tipo_trabajo?: string;
+      estado?: EstadoActividad;
+      hora_inicio?: string;
+      hora_fin?: string;
+      duracion_min?: number;
+      comentarios?: string;
+      evidencias?: Evidencia[];
+    }
+  ): Promise<{
+    success: boolean;
+    actividad: Actividad;
+    nota: Nota;
+    bitacora_id: number;
+    bitacora_actividades: Actividad[];
+    tiempo_total_min: number;
+  }> {
+    const res = await authFetch(`${API_BASE}/notas/${notaId}/convertir`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al convertir nota en actividad' }));
+      throw new Error(err.error || 'Error al convertir nota en actividad');
+    }
+    return res.json();
   },
 
   saveToLocalStorage(bitacora: Bitacora) {

@@ -273,3 +273,4 @@ def get_dashboard_stats():
             "actividades_completadas": completed_acts
         }
     })
+

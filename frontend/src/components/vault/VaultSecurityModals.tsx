@@ -648,3 +648,4 @@ export const VaultSecurityModals: React.FC<VaultSecurityModalsProps> = ({
     </>
   );
 };
+

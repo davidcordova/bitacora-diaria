@@ -922,11 +922,64 @@ def _mig_004_close_completed_continuation_lineages(cursor):
         mark_lineage_rollover_dismissed(cursor, deleted_cont_ids)
 
 
+def _mig_005_create_notas_and_links(cursor):
+    """
+    Migración no destructiva v5: crea el módulo de Notas & Contexto Operativo
+    (`notas` y tabla puente N:M `nota_actividad_vinculos`) junto con sus índices.
+    """
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS notas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+            titulo TEXT NOT NULL,
+            contenido TEXT DEFAULT '',
+            tipo_nota TEXT DEFAULT 'apunte',
+            checklist_json TEXT DEFAULT '[]',
+            para_cliente TEXT DEFAULT '',
+            etiquetas TEXT DEFAULT '[]',
+            color_acento TEXT DEFAULT 'slate',
+            visibilidad TEXT DEFAULT 'personal',
+            shared_with TEXT DEFAULT '[]',
+            evidencias TEXT DEFAULT '[]',
+            estado TEXT DEFAULT 'activa',
+            is_pinned INTEGER DEFAULT 0,
+            fecha_recordatorio TEXT,
+            is_deleted INTEGER DEFAULT 0,
+            deleted_at DATETIME,
+            created_by_user_id INTEGER REFERENCES users(id),
+            updated_by_user_id INTEGER REFERENCES users(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS nota_actividad_vinculos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nota_id INTEGER NOT NULL REFERENCES notas(id) ON DELETE CASCADE,
+            actividad_id INTEGER NOT NULL REFERENCES actividades(id) ON DELETE CASCADE,
+            tipo_relacion TEXT DEFAULT 'contexto',
+            checklist_item_id TEXT,
+            created_by INTEGER REFERENCES users(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(nota_id, actividad_id)
+        )
+    ''')
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_notas_user_estado ON notas(user_id, is_deleted, estado, is_pinned)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_notas_team ON notas(team_id, visibilidad, is_deleted)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_notas_recordatorio ON notas(user_id, fecha_recordatorio, is_deleted)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_nav_nota ON nota_actividad_vinculos(nota_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_nav_actividad ON nota_actividad_vinculos(actividad_id)")
+
+
 MIGRATIONS = [
     (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
     (2, 'normalize_existing_client_names', _mig_002_normalize_client_names),
     (3, 'backfill_bitacora_user_ids_and_indexes', _mig_003_backfill_bitacora_user_ids_and_indexes),
     (4, 'close_completed_continuation_lineages', _mig_004_close_completed_continuation_lineages),
+    (5, 'create_notas_and_links', _mig_005_create_notas_and_links),
 ]
 
 

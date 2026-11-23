@@ -18,8 +18,9 @@ import {
   Unlink,
   Search,
   GitBranch,
+  StickyNote,
 } from 'lucide-react';
-import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia } from '../types';
+import { Actividad, EstadoActividad, User, Evidencia, ActividadReferencia, NotaPrefillActividad, NotaResumenEnActividad, Nota } from '../types';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import {
   calculateHoraFin,
@@ -48,6 +49,7 @@ interface ActividadModalProps {
   fecha?: string;
   existingActividades?: Actividad[];
   defaultEstado?: EstadoActividad;
+  prefillFromNota?: NotaPrefillActividad | null;
 }
 
 export const ActividadModal: React.FC<ActividadModalProps> = ({
@@ -61,6 +63,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   fecha,
   existingActividades = [],
   defaultEstado = 'completada',
+  prefillFromNota = null,
 }) => {
   const [horaInicio, setHoraInicio] = useState('08:00');
   const [duracionMin, setDuracionMin] = useState<number>(30);
@@ -81,6 +84,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const [refSearch, setRefSearch] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([]);
+  const [selectedNotas, setSelectedNotas] = useState<NotaResumenEnActividad[]>([]);
+  const [showNotaPicker, setShowNotaPicker] = useState(false);
+  const [availableNotas, setAvailableNotas] = useState<Nota[]>([]);
+  const [notaSearch, setNotaSearch] = useState('');
+  const [loadingNotas, setLoadingNotas] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -104,6 +112,18 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       console.error('Error fetching referencias:', err);
     } finally {
       setLoadingRefs(false);
+    }
+  };
+
+  const loadNotasDisponibles = async (query = '') => {
+    try {
+      setLoadingNotas(true);
+      const res = await api.getNotas({ q: query || undefined, estado: 'activas_y_ejecucion', limit: 25 });
+      setAvailableNotas(res.items);
+    } catch {
+      setAvailableNotas([]);
+    } finally {
+      setLoadingNotas(false);
     }
   };
 
@@ -141,6 +161,31 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setParentTaskId(actividadToEdit.parent_task_id ? Number(actividadToEdit.parent_task_id) : null);
         setParentTaskDesc(actividadToEdit.parent_task_desc || '');
         setTipoVinculo(actividadToEdit.tipo_vinculo || 'continuacion');
+        setSelectedNotas(actividadToEdit.notas_vinculadas || []);
+      } else if (prefillFromNota) {
+        const hIni = getCurrentRoundedTimeStr(5);
+        setHoraInicio(hIni);
+        setDuracionMin(30);
+        setHoraFin(calculateHoraFin(hIni, 30, fecha));
+        setTipoTrabajo(prefillFromNota.tipoTrabajo || 'Desarrollo');
+        setDescripcion(prefillFromNota.descripcion || '');
+        setParaCliente(prefillFromNota.paraCliente || '');
+        setEstado(prefillFromNota.estadoInicial || 'en_proceso');
+        setSharedWith([]);
+        setEvidencias(prefillFromNota.evidencias || []);
+        setComentarios('');
+        setParentTaskId(null);
+        setParentTaskDesc('');
+        setTipoVinculo('continuacion');
+        setSelectedNotas([
+          {
+            id: prefillFromNota.notaId,
+            titulo: prefillFromNota.notaTitulo,
+            tipo_nota: 'apunte',
+            color_acento: 'slate',
+            tipo_relacion: 'origen',
+          },
+        ]);
       } else {
         // Defaults for new activity (hora actual en Perú redondeada a 5 min)
         const hIni = getCurrentRoundedTimeStr(5);
@@ -157,12 +202,15 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         setParentTaskId(null);
         setParentTaskDesc('');
         setTipoVinculo('continuacion');
+        setSelectedNotas([]);
       }
       setShowLinkSelector(false);
+      setShowNotaPicker(false);
+      setNotaSearch('');
       setRefSearch('');
       setErrorMsg(null);
     }
-  }, [isOpen, actividadToEdit, fecha, defaultEstado]);
+  }, [isOpen, actividadToEdit, fecha, defaultEstado, prefillFromNota]);
 
   // Bloqueo de scroll del body y cierre por tecla Escape
   useModalBehavior(isOpen, onClose);
@@ -374,6 +422,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       parent_task_id: parentTaskId || null,
       parent_task_desc: parentTaskDesc || undefined,
       tipo_vinculo: tipoVinculo,
+      notas_vinculadas: selectedNotas,
+      nota_ids: selectedNotas.map((n) => n.id),
+      source_nota_id: prefillFromNota?.notaId ?? undefined,
+      source_checklist_item_id: prefillFromNota?.checklistItemId ?? undefined,
     };
 
     onSave(actividadResult, editIndex);
@@ -415,6 +467,15 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
         {/* Modal Form with Scrollable Body & Sticky Footer */}
         <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-4">
+            {prefillFromNota && !actividadToEdit && (
+              <div className="flex items-center gap-2.5 p-3 rounded-xl bg-sky-50/90 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/25 text-xs text-sky-800 dark:text-sky-200">
+                <StickyNote className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                <span className="truncate">
+                  Creando desde nota: <strong className="font-semibold">{prefillFromNota.notaTitulo}</strong>
+                </span>
+              </div>
+            )}
+
             {errorMsg && (
               <div className="flex items-center gap-2 p-3 text-xs text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/25 rounded-xl">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
@@ -872,6 +933,114 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                     </div>
                   </div>
                 )
+              )}
+            </div>
+
+            {/* Row 4.9: Vincular Notas de Contexto */}
+            <div className="p-3 rounded-xl bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08] space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <StickyNote className="w-4 h-4 text-sky-500" />
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                    Notas de contexto {selectedNotas.length > 0 ? `(${selectedNotas.length})` : ''}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showNotaPicker;
+                    setShowNotaPicker(next);
+                    if (next) loadNotasDisponibles(notaSearch);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/10 rounded-lg transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{showNotaPicker ? 'Cerrar' : 'Adjuntar nota'}</span>
+                </button>
+              </div>
+
+              {selectedNotas.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedNotas.map((n) => (
+                    <span
+                      key={n.id}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1E222D] border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-200"
+                    >
+                      <StickyNote className="w-3 h-3 text-sky-500 shrink-0" />
+                      <span className="truncate max-w-[200px] font-medium">{n.titulo}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedNotas((prev) => prev.filter((x) => x.id !== n.id))}
+                        className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                        title="Desvincular nota"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {showNotaPicker && (
+                <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-white/[0.06]">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={notaSearch}
+                      onChange={(e) => {
+                        setNotaSearch(e.target.value);
+                        loadNotasDisponibles(e.target.value);
+                      }}
+                      placeholder="Buscar nota por título, etiqueta o cliente..."
+                      className="w-full bg-white dark:bg-[#1E222D] text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-lg pl-8 pr-3 py-1.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1">
+                    {loadingNotas ? (
+                      <div className="text-center py-2 text-xs text-slate-400">Buscando notas...</div>
+                    ) : availableNotas.length === 0 ? (
+                      <div className="text-center py-2 text-xs text-slate-400">No hay notas disponibles</div>
+                    ) : (
+                      availableNotas.map((nota) => {
+                        const already = selectedNotas.some((x) => x.id === nota.id);
+                        return (
+                          <button
+                            key={nota.id}
+                            type="button"
+                            disabled={already}
+                            onClick={() => {
+                              setSelectedNotas((prev) => [
+                                ...prev,
+                                {
+                                  id: nota.id,
+                                  titulo: nota.titulo,
+                                  tipo_nota: nota.tipo_nota,
+                                  color_acento: nota.color_acento,
+                                  tipo_relacion: 'contexto',
+                                },
+                              ]);
+                              setShowNotaPicker(false);
+                            }}
+                            className="w-full text-left p-2 rounded-lg bg-white dark:bg-[#1E222D] hover:bg-slate-50 dark:hover:bg-white/[0.06] border border-slate-200/70 dark:border-white/[0.08] flex items-center justify-between gap-2 text-xs cursor-pointer disabled:opacity-45"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
+                                {nota.titulo}
+                              </span>
+                              {nota.para_cliente && (
+                                <span className="text-[10px] text-sky-600 dark:text-sky-400">{nota.para_cliente}</span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 shrink-0">
+                              {already ? 'Adjunta' : 'Vincular'}
+                            </span>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 

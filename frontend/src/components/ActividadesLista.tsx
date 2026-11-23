@@ -33,8 +33,9 @@ import {
   Square,
   Check,
   X,
+  StickyNote,
 } from 'lucide-react';
-import { Actividad, EstadoActividad, User, Evidencia } from '../types';
+import { Actividad, EstadoActividad, User, Evidencia, Nota } from '../types';
 import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays, stripHtml } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { api } from '../services/api';
@@ -64,6 +65,8 @@ interface ActividadesListaProps {
   onOpenErrorReport?: () => void;
   onOpenQuickCierre?: () => void;
   isJornadaClosed?: boolean;
+  notasRecordatorio?: Nota[];
+  onOpenNotaContext?: (notaId: number) => void;
 }
 
 export const ActividadesLista: React.FC<ActividadesListaProps> = ({
@@ -85,6 +88,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   onOpenErrorReport,
   onOpenQuickCierre,
   isJornadaClosed = false,
+  notasRecordatorio = [],
+  onOpenNotaContext,
 }) => {
   const dateInputRef = useRef<HTMLInputElement>(null);
   // Modal states
@@ -832,6 +837,25 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             <span>{recentFeedback}</span>
           </div>
         )}
+
+        {notasRecordatorio && notasRecordatorio.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-xs bg-sky-50/70 dark:bg-sky-500/10 px-3 py-2 rounded-xl border border-sky-200/80 dark:border-sky-500/25">
+            <StickyNote className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+            <span className="font-semibold text-sky-800 dark:text-sky-200">
+              Notas programadas ({notasRecordatorio.length}):
+            </span>
+            {notasRecordatorio.map((nota) => (
+              <button
+                key={nota.id}
+                type="button"
+                onClick={() => onOpenNotaContext?.(nota.id)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-[#1E222D] hover:bg-sky-600 text-sky-700 dark:text-sky-300 hover:text-white border border-sky-200 dark:border-sky-500/30 font-medium transition-colors cursor-pointer"
+              >
+                <span className="truncate max-w-[180px]">{nota.titulo}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Empty State */}
@@ -883,13 +907,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   const grossMin = Number(act.duracion_bruta_min) || Number(act.duracion_min) || 0;
                   const hasChildLinks =
                     act.id !== undefined && act.id !== null && childTasksMap.has(Number(act.id));
+                  const hasLinkedNotas = (act.notas_vinculadas?.length || 0) > 0;
                   const hasMetaRow =
                     Boolean(act.parent_task_id) ||
                     hasChildLinks ||
                     hasShared ||
                     evidenceCount > 0 ||
                     Boolean(act.comentarios) ||
-                    Boolean(act.created_by_name);
+                    Boolean(act.created_by_name) ||
+                    hasLinkedNotas;
 
                   return (
                     <tr
@@ -1032,6 +1058,23 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                   <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
                                 </span>
                               )}
+
+                              {hasLinkedNotas &&
+                                act.notas_vinculadas!.map((nota) => (
+                                  <button
+                                    key={nota.id}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onOpenNotaContext?.(nota.id);
+                                    }}
+                                    title={`Ver nota de contexto: ${nota.titulo}`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/25 hover:bg-sky-100 dark:hover:bg-sky-500/20 font-medium transition-colors cursor-pointer"
+                                  >
+                                    <StickyNote className="w-3 h-3 shrink-0" />
+                                    <span className="truncate max-w-[140px]">{nota.titulo}</span>
+                                  </button>
+                                ))}
                             </div>
                           )}
 
@@ -1227,6 +1270,19 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                           <span>{evidenceCount}</span>
                         </span>
                       )}
+                      {(act.notas_vinculadas?.length || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenNotaContext?.(act.notas_vinculadas![0].id);
+                          }}
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/25 font-medium cursor-pointer"
+                        >
+                          <StickyNote className="w-3 h-3" />
+                          <span>{act.notas_vinculadas!.length}</span>
+                        </button>
+                      )}
                     </div>
 
                     <div className="relative inline-flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
@@ -1278,6 +1334,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
           setDetailModalOpen(false);
           handleNavigateToRef(refId, tipo);
         }}
+        onOpenNotaContext={onOpenNotaContext}
       />
 
       {/* MODAL 2: Creation & Edition Modal */}

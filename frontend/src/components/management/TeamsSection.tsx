@@ -304,3 +304,4 @@ export const TeamsSection: React.FC<TeamsSectionProps> = ({
     </>
   );
 };
+

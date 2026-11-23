@@ -20,6 +20,7 @@ import {
   X,
   BookOpen,
   LayoutList,
+  StickyNote,
 } from 'lucide-react';
 import { User, ViewMode } from '../types';
 
@@ -39,6 +40,7 @@ interface TopHeaderProps {
   activeProxyUser?: User | null;
   onSelectProxyUser?: (user: User | null) => void;
   onOpenErrorReport?: () => void;
+  onOpenQuickNote?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
@@ -57,6 +59,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   activeProxyUser = null,
   onSelectProxyUser,
   onOpenErrorReport,
+  onOpenQuickNote,
 }) => {
   const [proxyMenuOpen, setProxyMenuOpen] = useState(false);
   const [proxySearch, setProxySearch] = useState('');
@@ -149,6 +152,13 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           badge: null,
           badgeColor: '',
         };
+      case 'notas':
+        return {
+          title: 'Notas & Apuntes',
+          icon: <StickyNote className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
+          badge: null,
+          badgeColor: '',
+        };
       case 'lista':
       default:
         return {
@@ -229,6 +239,18 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
       {/* Action Icons Right */}
       <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        {onOpenQuickNote && (
+          <button
+            type="button"
+            onClick={onOpenQuickNote}
+            title="Nota rápida (Alt+N)"
+            className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-[34px] px-2 sm:px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <StickyNote className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+            <span className="hidden lg:inline">Nota rápida</span>
+          </button>
+        )}
+
         {/* Cloud Sync Status */}
         {onForceSyncCloud && (
           <button
