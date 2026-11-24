@@ -81,6 +81,31 @@ export function getChecklistProgress(items?: ChecklistItemNota[] | null) {
   return { total, done, percent: total > 0 ? Math.round((done / total) * 100) : 0 };
 }
 
+/** Convierte líneas de texto plano en ítems iniciales de checklist. */
+export function parseChecklistLines(rawText: string): ChecklistItemNota[] {
+  return rawText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((texto, idx) => ({
+      id: `chk-${Date.now()}-${idx}`,
+      texto,
+      completado: false,
+      actividad_id: null,
+    }));
+}
+
+/** Convierte texto plano multilínea de nota rápida en HTML seguro de párrafo. */
+export function formatQuickNotaHtml(rawText: string): string {
+  const trimmed = rawText.trim();
+  if (!trimmed) return '';
+  const escaped = trimmed
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<p>${escaped.replace(/\n/g, '<br />')}</p>`;
+}
+
 export function buildPrefillFromNota(
   nota: {
     id: number;

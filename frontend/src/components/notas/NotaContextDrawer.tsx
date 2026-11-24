@@ -25,7 +25,14 @@ import { api } from '../../services/api';
 import { useModalBehavior } from '../../hooks/useModalBehavior';
 import { RichHtmlRenderer } from '../RichHtmlRenderer';
 import { formatDuration, stripHtml } from '../../utils/formatters';
-import { ACCENT_COLORS, TIPOS_NOTA_CONFIG, VISIBILIDAD_LABELS, getChecklistProgress } from './notaStyles';
+import {
+  ACCENT_COLORS,
+  TIPOS_NOTA_CONFIG,
+  VISIBILIDAD_LABELS,
+  getChecklistProgress,
+  parseChecklistLines,
+  formatQuickNotaHtml,
+} from './notaStyles';
 
 interface NotaContextDrawerProps {
   isOpen: boolean;
@@ -111,25 +118,13 @@ export const NotaContextDrawer: React.FC<NotaContextDrawerProps> = ({
       return;
     }
 
-    const chkItems: ChecklistItemNota[] =
-      tipoNota === 'checklist'
-        ? checklistText
-            .split('\n')
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((texto, idx) => ({
-              id: `chk-${Date.now()}-${idx}`,
-              texto,
-              completado: false,
-              actividad_id: null,
-            }))
-        : [];
+    const chkItems = tipoNota === 'checklist' ? parseChecklistLines(checklistText) : [];
 
     setSavingQuick(true);
     try {
       const res = await api.createNota({
         titulo: titulo.trim(),
-        contenido: contenido.trim() ? `<p>${contenido.trim().replace(/\n/g, '<br />')}</p>` : '',
+        contenido: formatQuickNotaHtml(contenido),
         tipo_nota: tipoNota,
         checklist_json: chkItems,
         para_cliente: paraCliente.trim(),

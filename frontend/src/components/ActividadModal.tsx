@@ -36,6 +36,12 @@ import { useModalBehavior } from '../hooks/useModalBehavior';
 import { EvidenceDropzone } from './EvidenceDropzone';
 import { HtmlEditor } from './HtmlEditor';
 import { api } from '../services/api';
+import {
+  NotaRapidaInline,
+  QuickNotaDraft,
+  DEFAULT_QUICK_NOTA_DRAFT,
+} from './notas/NotaRapidaInline';
+import { parseChecklistLines, formatQuickNotaHtml, ACCENT_COLORS } from './notas/notaStyles';
 
 
 interface ActividadModalProps {
@@ -89,6 +95,11 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
   const [availableNotas, setAvailableNotas] = useState<Nota[]>([]);
   const [notaSearch, setNotaSearch] = useState('');
   const [loadingNotas, setLoadingNotas] = useState(false);
+  const [quickNota, setQuickNota] = useState<QuickNotaDraft>(DEFAULT_QUICK_NOTA_DRAFT);
+  const [quickNotaError, setQuickNotaError] = useState<string | null>(null);
+  const [savingQuickNota, setSavingQuickNota] = useState(false);
+  const [submittingActividad, setSubmittingActividad] = useState(false);
+  const quickNotaTitleRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -206,6 +217,10 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       }
       setShowLinkSelector(false);
       setShowNotaPicker(false);
+      setQuickNota(DEFAULT_QUICK_NOTA_DRAFT);
+      setQuickNotaError(null);
+      setSavingQuickNota(false);
+      setSubmittingActividad(false);
       setNotaSearch('');
       setRefSearch('');
       setErrorMsg(null);
@@ -371,12 +386,75 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const createAndAttachQuickNota = async (): Promise<NotaResumenEnActividad | null> => {
+    const cleanTitle = quickNota.titulo.trim();
+    if (!cleanTitle) {
+      setQuickNotaError('Ingresa un título para la nota rápida.');
+      quickNotaTitleRef.current?.focus();
+      return null;
+    }
+
+    setSavingQuickNota(true);
+    setQuickNotaError(null);
+    try {
+      const res = await api.createNota({
+        titulo: cleanTitle,
+        contenido: quickNota.tipo === 'checklist' ? '' : formatQuickNotaHtml(quickNota.body),
+        tipo_nota: quickNota.tipo,
+        checklist_json: quickNota.tipo === 'checklist' ? parseChecklistLines(quickNota.body) : [],
+        para_cliente: paraCliente.trim(),
+        visibilidad: quickNota.visibilidad,
+        color_acento: quickNota.color,
+      });
+      const summary: NotaResumenEnActividad = {
+        id: res.nota.id,
+        titulo: res.nota.titulo,
+        tipo_nota: res.nota.tipo_nota,
+        color_acento: res.nota.color_acento,
+        tipo_relacion: 'contexto',
+      };
+      setSelectedNotas((prev) => (prev.some((x) => x.id === summary.id) ? prev : [...prev, summary]));
+      setQuickNota(DEFAULT_QUICK_NOTA_DRAFT);
+      return summary;
+    } catch (err: any) {
+      setQuickNotaError(err?.message || 'No se pudo guardar la nota rápida.');
+      return null;
+    } finally {
+      setSavingQuickNota(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submittingActividad || savingQuickNota) return;
+
     const plainText = descripcion.replace(/<[^>]*>/g, '').trim();
     if (!plainText && !/<img\s+[^>]*src=/i.test(descripcion)) {
       setErrorMsg('La descripción de la actividad es obligatoria.');
       return;
+    }
+
+    let notasForSave = selectedNotas;
+    if (quickNota.open) {
+      const hasTitle = Boolean(quickNota.titulo.trim());
+      const hasBody = Boolean(quickNota.body.trim());
+      if (hasTitle) {
+        setSubmittingActividad(true);
+        const createdSummary = await createAndAttachQuickNota();
+        if (!createdSummary) {
+          setSubmittingActividad(false);
+          return;
+        }
+        if (!notasForSave.some((x) => x.id === createdSummary.id)) {
+          notasForSave = [...notasForSave, createdSummary];
+        }
+      } else if (hasBody) {
+        setQuickNotaError('Agrega un título a tu nota rápida o cancélala antes de guardar la actividad.');
+        quickNotaTitleRef.current?.focus();
+        return;
+      } else {
+        setQuickNota(DEFAULT_QUICK_NOTA_DRAFT);
+      }
     }
 
     // Filtrar evidencias para que no incluyan archivos o imágenes ya embebidos en el HTML de descripción
@@ -422,12 +500,13 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
       parent_task_id: parentTaskId || null,
       parent_task_desc: parentTaskDesc || undefined,
       tipo_vinculo: tipoVinculo,
-      notas_vinculadas: selectedNotas,
-      nota_ids: selectedNotas.map((n) => n.id),
+      notas_vinculadas: notasForSave,
+      nota_ids: notasForSave.map((n) => n.id),
       source_nota_id: prefillFromNota?.notaId ?? undefined,
       source_checklist_item_id: prefillFromNota?.checklistItemId ?? undefined,
     };
 
+    setSubmittingActividad(false);
     onSave(actividadResult, editIndex);
     onClose();
   };
@@ -936,50 +1015,96 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
               )}
             </div>
 
-            {/* Row 4.9: Vincular Notas de Contexto */}
+            {/* Row 4.9: Vincular o Crear Notas de Contexto */}
             <div className="p-3 rounded-xl bg-slate-50/70 dark:bg-[#1A1E29] border border-slate-200/80 dark:border-white/[0.08] space-y-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <StickyNote className="w-4 h-4 text-sky-500" />
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
                     Notas de contexto {selectedNotas.length > 0 ? `(${selectedNotas.length})` : ''}
                   </span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = !showNotaPicker;
-                    setShowNotaPicker(next);
-                    if (next) loadNotasDisponibles(notaSearch);
-                  }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/10 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>{showNotaPicker ? 'Cerrar' : 'Adjuntar nota'}</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !quickNota.open;
+                      setQuickNotaError(null);
+                      setShowNotaPicker(false);
+                      setQuickNota((prev) => ({ ...prev, open: next }));
+                      if (next) {
+                        requestAnimationFrame(() => quickNotaTitleRef.current?.focus());
+                      }
+                    }}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
+                      quickNota.open
+                        ? 'bg-sky-600 text-white border-sky-600'
+                        : 'text-sky-700 dark:text-sky-300 bg-sky-50/80 dark:bg-sky-500/15 hover:bg-sky-100 dark:hover:bg-sky-500/25 border-sky-200 dark:border-sky-500/25'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{quickNota.open ? 'Ocultar nota rápida' : 'Nueva nota rápida'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = !showNotaPicker;
+                      if (next) {
+                        setQuickNota((prev) => ({ ...prev, open: false }));
+                        setQuickNotaError(null);
+                        loadNotasDisponibles(notaSearch);
+                      }
+                      setShowNotaPicker(next);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.08] border border-slate-200 dark:border-white/10 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>{showNotaPicker ? 'Cerrar búsqueda' : 'Adjuntar existente'}</span>
+                  </button>
+                </div>
               </div>
 
               {selectedNotas.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {selectedNotas.map((n) => (
-                    <span
-                      key={n.id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1E222D] border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-200"
-                    >
-                      <StickyNote className="w-3 h-3 text-sky-500 shrink-0" />
-                      <span className="truncate max-w-[200px] font-medium">{n.titulo}</span>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedNotas((prev) => prev.filter((x) => x.id !== n.id))}
-                        className="text-slate-400 hover:text-rose-500 cursor-pointer"
-                        title="Desvincular nota"
+                  {selectedNotas.map((n) => {
+                    const accentDot = ACCENT_COLORS[n.color_acento || 'slate']?.dot || 'bg-sky-500';
+                    return (
+                      <span
+                        key={n.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-[#1E222D] border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-200"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
+                        <span className={`w-1.5 h-1.5 rounded-full ${accentDot} shrink-0`} />
+                        <span className="truncate max-w-[200px] font-medium">{n.titulo}</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNotas((prev) => prev.filter((x) => x.id !== n.id))}
+                          className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                          title="Desvincular nota"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
+
+              <NotaRapidaInline
+                draft={quickNota}
+                paraCliente={paraCliente}
+                error={quickNotaError}
+                saving={savingQuickNota}
+                titleInputRef={quickNotaTitleRef}
+                onChange={(patch) => {
+                  setQuickNotaError(null);
+                  setQuickNota((prev) => ({ ...prev, ...patch }));
+                }}
+                onSaveAndAttach={() => void createAndAttachQuickNota()}
+                onCancel={() => {
+                  setQuickNota(DEFAULT_QUICK_NOTA_DRAFT);
+                  setQuickNotaError(null);
+                }}
+              />
 
               {showNotaPicker && (
                 <div className="space-y-2 pt-2 border-t border-slate-200/60 dark:border-white/[0.06]">
@@ -1062,16 +1187,24 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer min-h-[36px]"
+              disabled={submittingActividad}
+              className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/60 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer min-h-[36px] disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors cursor-pointer min-h-[36px]"
+              disabled={submittingActividad || savingQuickNota}
+              className="flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-700 rounded-lg transition-colors cursor-pointer min-h-[36px] disabled:opacity-60"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{editIndex !== null ? 'Guardar cambios' : 'Guardar actividad'}</span>
+              <span>
+                {submittingActividad
+                  ? 'Guardando...'
+                  : editIndex !== null
+                  ? 'Guardar cambios'
+                  : 'Guardar actividad'}
+              </span>
             </button>
           </div>
         </form>

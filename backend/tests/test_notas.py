@@ -278,3 +278,74 @@ def test_mcp_notes_tools_privacy_and_mode(client, admin, make_user):
     }, headers={'X-MCP-API-Key': api_key})
     assert r_rw.json['result']['isError'] is False
     assert r_rw.json['result']['structuredContent']['status'] == 'created'
+
+
+def test_quick_note_linked_on_activity_create_edit_and_bitacora_sync(client, make_user):
+    u = make_user()
+    hoy = get_peru_today_str()
+
+    # 1. Nota rápida creada desde flujo de creación de actividad y vinculada al crear actividad
+    rn1 = client.post('/api/notas', json={
+        'titulo': 'Acuerdo rápido de llamada',
+        'contenido': '<p>Revisar DNS</p>',
+        'tipo_nota': 'apunte',
+        'para_cliente': 'Gerencia',
+        'visibilidad': 'personal',
+    }, headers=u['h'])
+    assert rn1.status_code == 201
+    n1_id = rn1.json['nota']['id']
+
+    r_create = client.post('/api/actividades', json={
+        'fecha': hoy,
+        'user_id': u['user']['id'],
+        'colaborador': u['user']['full_name'],
+        'hora_inicio': '09:00',
+        'duracion_min': 30,
+        'tipo_trabajo': 'Desarrollo',
+        'descripcion': 'Configurar registros DNS',
+        'para_cliente': 'Gerencia',
+        'estado': 'en_proceso',
+        'nota_ids': [n1_id],
+    }, headers=u['h'])
+    assert r_create.status_code in (200, 201)
+    act_id = r_create.json['actividad']['id']
+    assert [n['id'] for n in r_create.json['actividad']['notas_vinculadas']] == [n1_id]
+
+    # 2. Al editar la actividad, crear segunda nota rápida y vincular ambas vía PUT /api/actividades/<id>
+    rn2 = client.post('/api/notas', json={
+        'titulo': 'Checklist post-cambio',
+        'tipo_nota': 'checklist',
+        'checklist_json': [{'id': 'c1', 'texto': 'Validar SSL', 'completado': False}],
+        'para_cliente': 'Gerencia',
+    }, headers=u['h'])
+    assert rn2.status_code == 201
+    n2_id = rn2.json['nota']['id']
+
+    r_edit = client.put(f'/api/actividades/{act_id}', json={
+        'descripcion': 'Configurar registros DNS y certificado SSL',
+        'nota_ids': [n1_id, n2_id],
+    }, headers=u['h'])
+    assert r_edit.status_code == 200
+    linked_ids = {n['id'] for n in r_edit.json['actividad']['notas_vinculadas']}
+    assert linked_ids == {n1_id, n2_id}
+
+    # 3. Sincronización completa por POST /api/bitacoras conserva/actualiza nota_ids
+    r_bit = client.post('/api/bitacoras', json={
+        'fecha': hoy,
+        'user_id': u['user']['id'],
+        'colaborador': u['user']['full_name'],
+        'actividades': [{
+            'id': act_id,
+            'hora_inicio': '09:00',
+            'duracion_min': 30,
+            'tipo_trabajo': 'Desarrollo',
+            'descripcion': 'Configurar registros DNS y certificado SSL',
+            'para_cliente': 'Gerencia',
+            'estado': 'completada',
+            'nota_ids': [n2_id],
+        }],
+    }, headers=u['h'])
+    assert r_bit.status_code == 200
+    acts_saved = r_bit.json['bitacora']['actividades']
+    target_act = next(a for a in acts_saved if a['id'] == act_id)
+    assert [n['id'] for n in target_act['notas_vinculadas']] == [n2_id]

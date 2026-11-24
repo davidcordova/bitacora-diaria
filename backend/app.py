@@ -1522,6 +1522,19 @@ def save_bitacora():
                 saved_id = cursor.lastrowid
                 used_ids.add(saved_id)
 
+            if saved_id and (act.get('nota_ids') is not None or act.get('source_nota_id')):
+                acting_u = getattr(g, 'current_user', None) or {'id': effective_creator_id, 'role': 'analista'}
+                _sync_note_activity_links(
+                    cursor,
+                    saved_id,
+                    acting_u,
+                    nota_ids=act.get('nota_ids'),
+                    source_nota_id=act.get('source_nota_id'),
+                    source_checklist_item_id=act.get('source_checklist_item_id'),
+                    tipo_relacion=act.get('tipo_relacion_nota') or 'contexto',
+                    now_peru=now_peru,
+                )
+
             if estado_to_write == 'completada' and saved_id:
                 completed_in_save.append(saved_id)
 
