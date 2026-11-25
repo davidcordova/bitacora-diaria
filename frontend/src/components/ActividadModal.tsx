@@ -113,29 +113,59 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
     };
   }, [isOpen]);
 
+  const refDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notaDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refSeqRef = useRef(0);
+  const notaSeqRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (refDebounceRef.current) clearTimeout(refDebounceRef.current);
+      if (notaDebounceRef.current) clearTimeout(notaDebounceRef.current);
+    };
+  }, []);
+
   const loadReferencias = async (query = '') => {
+    const seq = ++refSeqRef.current;
     try {
       setLoadingRefs(true);
       const list = await api.getActividadesReferencias(currentUser?.id, currentUser?.full_name, query);
+      if (seq !== refSeqRef.current) return;
       const filtered = actividadToEdit?.id ? list.filter((a) => a.id !== Number(actividadToEdit.id)) : list;
       setReferencias(filtered);
     } catch (err) {
-      console.error('Error fetching referencias:', err);
+      if (seq === refSeqRef.current) console.error('Error fetching referencias:', err);
     } finally {
-      setLoadingRefs(false);
+      if (seq === refSeqRef.current) setLoadingRefs(false);
     }
   };
 
   const loadNotasDisponibles = async (query = '') => {
+    const seq = ++notaSeqRef.current;
     try {
       setLoadingNotas(true);
       const res = await api.getNotas({ q: query || undefined, estado: 'activas_y_ejecucion', limit: 25 });
+      if (seq !== notaSeqRef.current) return;
       setAvailableNotas(res.items);
     } catch {
-      setAvailableNotas([]);
+      if (seq === notaSeqRef.current) setAvailableNotas([]);
     } finally {
-      setLoadingNotas(false);
+      if (seq === notaSeqRef.current) setLoadingNotas(false);
     }
+  };
+
+  const scheduleRefSearch = (query: string) => {
+    if (refDebounceRef.current) clearTimeout(refDebounceRef.current);
+    refDebounceRef.current = setTimeout(() => {
+      void loadReferencias(query);
+    }, 250);
+  };
+
+  const scheduleNotaSearch = (query: string) => {
+    if (notaDebounceRef.current) clearTimeout(notaDebounceRef.current);
+    notaDebounceRef.current = setTimeout(() => {
+      void loadNotasDisponibles(query);
+    }, 250);
   };
 
   // Sync form state when modal opens or actividadToEdit changes
@@ -962,7 +992,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                           value={refSearch}
                           onChange={(e) => {
                             setRefSearch(e.target.value);
-                            loadReferencias(e.target.value);
+                            scheduleRefSearch(e.target.value);
                           }}
                           className="w-full bg-white dark:bg-[#1E222D] text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-lg pl-8 pr-3 py-1.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:outline-none"
                         />
@@ -1115,7 +1145,7 @@ export const ActividadModal: React.FC<ActividadModalProps> = ({
                       value={notaSearch}
                       onChange={(e) => {
                         setNotaSearch(e.target.value);
-                        loadNotasDisponibles(e.target.value);
+                        scheduleNotaSearch(e.target.value);
                       }}
                       placeholder="Buscar nota por título, etiqueta o cliente..."
                       className="w-full bg-white dark:bg-[#1E222D] text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 rounded-lg pl-8 pr-3 py-1.5 border border-slate-200 dark:border-white/10 focus:border-sky-500 focus:outline-none"

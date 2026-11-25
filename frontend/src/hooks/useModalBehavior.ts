@@ -18,10 +18,12 @@ const FOCUSABLE_SELECTOR = [
 
 function getTopmostDialog(): HTMLElement | null {
   const dialogs = Array.from(
-    document.querySelectorAll<HTMLElement>('[role="dialog"], [aria-modal="true"]')
+    document.querySelectorAll<HTMLElement>('[role="dialog"], [role="alertdialog"], [aria-modal="true"]')
   ).filter((el) => {
     const style = window.getComputedStyle(el);
-    return style.display !== 'none' && style.visibility !== 'hidden' && el.offsetParent !== null;
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
   });
   return dialogs.length > 0 ? dialogs[dialogs.length - 1] : null;
 }

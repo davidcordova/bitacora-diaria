@@ -214,13 +214,15 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
     }
   };
 
-  // Immediate fetch on mount, date change, or team filter change
+  // Immediate fetch on mount, date change, team filter change, or when member directory hydrates
   useEffect(() => {
     loadAllTeamData(false);
-  }, [selectedDate, selectedTeamFilter, currentUser?.id]);
+  }, [selectedDate, selectedTeamFilter, currentUser?.id, allMembers.length]);
 
-  // Auto-refresh silencioso cada 20 s solo mientras la pestaña está visible; al volver se refresca sin parpadeo.
+  // Auto-refresh silencioso cada 20 s solo para la fecha de hoy y mientras la pestaña está visible
   useEffect(() => {
+    const isViewingToday = selectedDate === getTodayLocalDateStr();
+    if (!isViewingToday) return;
     let interval: ReturnType<typeof setInterval> | null = null;
     const start = () => {
       if (!interval) interval = setInterval(() => loadAllTeamData(true), 20000);
@@ -275,23 +277,23 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
 
       let statusType: 'optimo' | 'bajo' | 'sobrecarga' | 'sin_registro' = 'optimo';
       let statusLabel = 'Carga Óptima';
-      let statusBadge = 'bg-[#E6F9F5] text-[#00A88B] border-[#00C9A7]/30';
-      let barColor = 'bg-[#00C9A7]';
+      let statusBadge = 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30';
+      let barColor = 'bg-emerald-500';
 
       if (totalMinutos === 0) {
         statusType = 'sin_registro';
         statusLabel = 'Sin registro';
-        statusBadge = 'bg-slate-100 text-slate-500 border-slate-200';
-        barColor = 'bg-slate-300';
+        statusBadge = 'bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400 border-slate-200 dark:border-white/10';
+        barColor = 'bg-slate-300 dark:bg-slate-600';
       } else if (totalMinutos < 360) {
         statusType = 'bajo';
         statusLabel = 'Bajo Registro (<6h)';
-        statusBadge = 'bg-amber-50 text-amber-700 border-amber-200';
+        statusBadge = 'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30';
         barColor = 'bg-amber-500';
       } else if (totalMinutos > 510) {
         statusType = 'sobrecarga';
         statusLabel = 'Sobrecarga (+8.5h)';
-        statusBadge = 'bg-rose-50 text-rose-700 border-rose-200';
+        statusBadge = 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30';
         barColor = 'bg-rose-500';
       }
 
@@ -1162,7 +1164,7 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 isCompleted ? 'bg-emerald-500' : isInReview ? 'bg-amber-500 animate-pulse' : 'bg-sky-500 animate-pulse'
                               }`}
                             />
-                            {isCompleted ? 'Completada' : isInReview ? 'En Revisión' : 'En Proceso'}
+                            {isCompleted ? 'Completada' : isInReview ? 'En Revisión' : act.estado === 'pendiente' ? 'Por iniciar' : 'En Proceso'}
                           </span>
 
                           {/* Revisión: solo cuando el colaborador pidió aprobación */}
@@ -1401,9 +1403,9 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
           {/* TAB 3: TABLERO KANBAN MAESTRO */}
           {teamTab === 'kanban' && (
             <div className="space-y-4">
-              <div className="bg-[#E6F9F5] border border-[#00C9A7]/30 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-800 shadow-2xs">
+              <div className="bg-sky-50/80 dark:bg-sky-500/10 border border-sky-200/80 dark:border-sky-500/25 rounded-2xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-800 dark:text-slate-200 shadow-2xs">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#00C9A7] shrink-0" />
+                  <Sparkles className="w-4 h-4 text-sky-600 dark:text-sky-400 shrink-0" />
                   <span>
                     <strong>Tablero Maestro de Equipo:</strong> Viendo actividades del <strong>{formatDateDisplay(selectedDate)}</strong> ({unifiedActivities.length} tareas totales). Arrastra tareas entre columnas o usa los botones rápidos para aprobarlas.
                   </span>
@@ -1663,6 +1665,8 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                                 ? 'Completada'
                                 : act.estado === 'en_revision'
                                 ? 'En Revisión'
+                                : act.estado === 'pendiente'
+                                ? 'Por iniciar'
                                 : 'En Proceso'}
                             </span>
                           </div>

@@ -279,8 +279,9 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                           e.stopPropagation();
                           onRemoveNotification(notif.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-500 p-1 rounded-md transition-all cursor-pointer"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 text-slate-400 hover:text-rose-500 p-1 rounded-md transition-all cursor-pointer"
                         title="Eliminar notificación"
+                        aria-label="Eliminar notificación"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>

@@ -70,11 +70,12 @@ def get_clientes_sugerencias():
     conn = get_db()
     try:
         rows = conn.execute('''
-            SELECT para_cliente
+            SELECT TRIM(para_cliente) AS para_cliente, COUNT(*) AS cnt
             FROM actividades
             WHERE para_cliente IS NOT NULL
               AND TRIM(para_cliente) != ''
-              AND (is_deleted IS NULL OR is_deleted = 0)
+              AND is_deleted = 0
+            GROUP BY TRIM(para_cliente)
         ''').fetchall()
     finally:
         conn.close()
@@ -87,9 +88,10 @@ def get_clientes_sugerencias():
         cleaned = normalize_client_name(r['para_cliente'])
         if not cleaned:
             continue
+        cnt = int(r['cnt'] or 1)
         key = cleaned.lower()
-        variant_counts[key][cleaned] += 1
-        total_counts[key] += 1
+        variant_counts[key][cleaned] += cnt
+        total_counts[key] += cnt
 
     sugerencias = []
     for key, count in total_counts.most_common(100):
@@ -99,8 +101,10 @@ def get_clientes_sugerencias():
             'usos': count,
         })
 
-    return jsonify({
+    resp = jsonify({
         'clientes': [s['nombre'] for s in sugerencias],
         'detalle': sugerencias,
     })
+    resp.headers['Cache-Control'] = 'private, max-age=60'
+    return resp
 

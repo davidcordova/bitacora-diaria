@@ -89,6 +89,7 @@ export const EvidenceDropzone: React.FC<EvidenceDropzoneProps> = ({
 
     if (filesToUpload.length > 0) {
       e.preventDefault();
+      e.stopPropagation();
       await handleFiles(filesToUpload);
     }
   };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import {
   Plus,
   Trash2,
@@ -26,7 +26,7 @@ import { formatDuration, getTimeInStatusInfo, stripHtml } from '../utils/formatt
 import { EvidenceViewerModal } from './EvidenceViewerModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
 import { ActividadDetalleModal } from './ActividadDetalleModal';
-import { ActividadModal } from './ActividadModal';
+const ActividadModal = lazy(() => import('./ActividadModal').then((m) => ({ default: m.ActividadModal })));
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
 
 interface KanbanBoardProps {
@@ -638,18 +638,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </div>
 
       {/* UNIFIED CREATION & EDITION MODAL (shared with Mi Bitácora) */}
-      <ActividadModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        actividadToEdit={editingActividad}
-        editIndex={editingIndex}
-        onSave={handleSaveModal}
-        users={users}
-        currentUser={currentUser}
-        fecha={fecha}
-        existingActividades={actividades}
-        defaultEstado={modalDefaultEstado}
-      />
+      {modalOpen && (
+        <Suspense fallback={null}>
+          <ActividadModal
+            isOpen={modalOpen}
+            onClose={() => setModalOpen(false)}
+            actividadToEdit={editingActividad}
+            editIndex={editingIndex}
+            onSave={handleSaveModal}
+            users={users}
+            currentUser={currentUser}
+            fecha={fecha}
+            existingActividades={actividades}
+            defaultEstado={modalDefaultEstado}
+          />
+        </Suspense>
+      )}
 
       {/* MODAL DETALLE DE ACTIVIDAD DESDE KANBAN */}
       <ActividadDetalleModal

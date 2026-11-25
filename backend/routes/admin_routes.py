@@ -263,16 +263,24 @@ def admin_teams():
             ORDER BY t.nombre ASC
         ''').fetchall()
 
+        all_members = cursor.execute('''
+            SELECT id, username, full_name, role, email, phone, team_id
+            FROM users
+            WHERE team_id IS NOT NULL AND is_active = 1
+            ORDER BY full_name ASC
+        ''').fetchall()
+        members_by_team = {}
+        for m in all_members:
+            md = dict(m)
+            tid = md.pop('team_id', None)
+            members_by_team.setdefault(tid, []).append(md)
+
         result = []
         for t in teams:
             t_dict = dict(t)
-            members = cursor.execute('''
-                SELECT id, username, full_name, role, email, phone
-                FROM users
-                WHERE team_id = ? AND is_active = 1
-            ''', (t['id'],)).fetchall()
-            t_dict['members'] = [dict(m) for m in members]
-            t_dict['members_count'] = len(members)
+            team_members = members_by_team.get(t['id'], [])
+            t_dict['members'] = team_members
+            t_dict['members_count'] = len(team_members)
             result.append(t_dict)
 
         conn.close()

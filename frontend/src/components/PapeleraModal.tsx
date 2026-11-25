@@ -64,13 +64,7 @@ export const PapeleraModal: React.FC<PapeleraModalProps> = ({
       loadPapelera();
       setFeedbackMsg(null);
       setConfirmVaciar(false);
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
     }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
   }, [isOpen]);
 
   const handleRestaurar = async (act: ActividadPapelera, restoreToToday = false) => {

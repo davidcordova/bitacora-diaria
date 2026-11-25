@@ -145,7 +145,7 @@ def health_check():
         "schema_version": schema_ver,
         "expected_schema_version": EXPECTED_SCHEMA_VERSION,
         "service": "Bitácora API",
-        "version": "2.6.0",
+        "version": "2.7.0",
         "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
         "peru_date": get_peru_today_str(),
         "timezone": "America/Lima (UTC-5)",
@@ -928,6 +928,7 @@ def get_bitacoras():
             acts_by_bitacora.setdefault(a['bitacora_id'], []).append(a)
 
     result = []
+    non_summary_acts = []
     for b in bitacoras:
         b_dict = dict(b)
         acts = acts_by_bitacora.get(b['id'], [])
@@ -938,9 +939,12 @@ def get_bitacoras():
             b_dict['resumen_texto'] = ''
             b_dict['is_summary'] = True
         else:
-            attach_linked_notes_to_activities(cursor, enriched, getattr(g, 'current_user', None))
             b_dict['actividades'] = enriched
+            non_summary_acts.extend(enriched)
         result.append(b_dict)
+
+    if non_summary_acts:
+        attach_linked_notes_to_activities(cursor, non_summary_acts, getattr(g, 'current_user', None))
 
     conn.close()
     resp = jsonify(result)

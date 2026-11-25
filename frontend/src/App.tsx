@@ -35,7 +35,9 @@ import { defaultBitacora } from './utils/initialData';
 import { api, getAuthToken } from './services/api';
 import { getTodayLocalDateStr, recalculateActivitiesNetDurations, calculateHoraFin } from './utils/formatters';
 import { confirmDialog, DialogHost } from './components/DialogHost';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ForcePasswordChangeModal } from './components/ForcePasswordChangeModal';
+import { safeSetItem, pruneOldBitacoraDrafts } from './utils/safeStorage';
 import {
   getDraftKey,
   getBitacoraSignature,
@@ -475,10 +477,11 @@ export function App() {
       return;
     }
 
-    // Persistir siempre el borrador en localStorage de manera síncrona e instantánea (0ms de latencia)
-    localStorage.setItem(getDraftKey(uid, bitacora.fecha), JSON.stringify(bitacora));
+    // Persistir siempre el borrador en localStorage de manera segura (una sola serialización JSON)
+    const serializedBitacora = JSON.stringify(bitacora);
+    safeSetItem(getDraftKey(uid, bitacora.fecha), serializedBitacora);
     if (!activeProxyUser) {
-      localStorage.setItem('active_bitacora', JSON.stringify(bitacora));
+      safeSetItem('active_bitacora', serializedBitacora);
     }
 
     const currentSignature = getBitacoraSignature(bitacora, colab, uid);
@@ -517,6 +520,13 @@ export function App() {
     return () => clearTimeout(timer);
   }, [bitacora, currentUser, activeProxyUser, syncNudge]);
 
+  // Cargar configuración pública de marca/sistema incluso antes de iniciar sesión (para LoginPage)
+  useEffect(() => {
+    api.getSettings().then((s) => {
+      if (s) setSystemSettings(s);
+    }).catch(() => {});
+  }, []);
+
   // Carga inicial de datos con aislamiento estricto de usuario
   const loadInitialData = async (userOverride?: User | null) => {
     try {
@@ -526,21 +536,19 @@ export function App() {
 
       if (!activeUser || !activeUser.id) return;
 
+      pruneOldBitacoraDrafts();
       const todayStr = getInitialDateFromUrl(getTodayLocalDateStr());
 
-      const [uList, tList, todayServerList, hPage, sysSettings, srvNotifs, myTargets] = await Promise.all([
+      const [uList, tList, todayServerList, sysSettings, srvNotifs, myTargets] = await Promise.all([
         api.getUsers(),
         api.getTeams().catch(() => []),
         api.getBitacoras(todayStr, undefined, undefined, activeUser.id, activeUser.id).catch(() => []),
-        api.getBitacorasPaginated({ requestingUserId: activeUser.id, limit: 100, offset: 0, summary: true }).catch(() => ({ items: [], total: 0, hasMore: false })),
         api.getSettings().catch(() => ({ hora_inicio_default: '08:30' })),
         api.getNotifications(activeUser.id).catch(() => []),
         api.getMyDelegatedTargets(activeUser.id).catch(() => []),
       ]);
-      const hList = hPage.items;
       setUsers(uList);
       setTeams(tList);
-      setHistorial(hList);
       setDelegatedTargets(myTargets);
       if (activeProxyUser && !myTargets.some((t: User) => t.id === activeProxyUser.id)) {
         setActiveProxyUser(null);
@@ -553,7 +561,7 @@ export function App() {
           const existingIds = new Set(prev.map((n) => n.id));
           const newFromSrv = srvNotifs.filter((n) => !existingIds.has(n.id));
           const merged = [...newFromSrv, ...prev].slice(0, 50);
-          localStorage.setItem('system_notifications_history', JSON.stringify(merged));
+          safeSetItem('system_notifications_history', JSON.stringify(merged));
           return merged;
         });
       }
@@ -580,7 +588,7 @@ export function App() {
             // Envío seguro en modo merge (solo agrega actividades nuevas no sincronizadas, jamás pisa el servidor)
             const payload: Bitacora = { ...pastDraft, user_id: activeUser.id, colaborador: activeUser.full_name };
             api.saveBitacora(payload, activeUser.id, { mode: 'merge' }).then((res) => {
-              if (res?.bitacora) localStorage.setItem(k, JSON.stringify(res.bitacora));
+              if (res?.bitacora) safeSetItem(k, JSON.stringify(res.bitacora));
               showToast('info', `Se sincronizaron cambios pendientes de tu bitácora del ${dStr}.`);
             }).catch(console.warn);
           }
@@ -605,7 +613,7 @@ export function App() {
           setBitacora(r.bitacora);
           setIsGenerated(isClosedEstado(r.bitacora.estado));
           lastSavedSignature.current = getBitacoraSignature(r.bitacora, activeUser.full_name, activeUser.id);
-          localStorage.setItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(r.bitacora));
+          safeSetItem(getDraftKey(activeUser.id, todayStr), JSON.stringify(r.bitacora));
           if (r.hasLocalChanges) {
             syncNow({ ...r.bitacora, colaborador: activeUser.full_name, user_id: activeUser.id })
               .then(() => showToast('success', 'Se recuperaron y sincronizaron cambios locales que estaban pendientes.'))
@@ -644,17 +652,6 @@ export function App() {
       loadInitialData(currentUser);
     }
   }, [currentUser?.id]);
-
-  // Refrescar historial ligero desde el servidor al entrar a la vista 'historial'
-  useEffect(() => {
-    if (viewMode === 'historial' && currentUser?.id) {
-      api.getBitacorasPaginated({ requestingUserId: currentUser.id, limit: 100, offset: 0, summary: true }).then((page) => {
-        if (Array.isArray(page.items) && page.items.length > 0) {
-          setHistorial(page.items);
-        }
-      }).catch(console.warn);
-    }
-  }, [viewMode, currentUser?.id]);
 
   // Forzar sincronización completa con la nube a demanda
   const handleForceSyncCloud = async () => {
@@ -1397,6 +1394,12 @@ export function App() {
       return;
     }
 
+    // 1.5 Validar detalle de apoyo si el colaborador indicó que requiere apoyo
+    if (bitacora.necesita_apoyo === 'Si' && !(bitacora.apoyo_detalle || '').trim()) {
+      showToast('error', 'Especifica el detalle del apoyo que necesitas antes de generar la bitácora', 'Detalle requerido');
+      return;
+    }
+
     // 2. Si los campos de cierre están vacíos, autocompletar con texto estándar para no bloquear al usuario
     const pendientesText = bitacora.pendientes?.trim() || 'Sin tareas pendientes para otra fecha';
     const prioridadText = bitacora.prioridad_siguiente?.trim() || 'Continuar con el plan de actividades programado';
@@ -1488,10 +1491,9 @@ export function App() {
     });
     setHistorial([]);
     
-    // 3. Establecer usuario y cargar datos frescos desde el servidor
+    // 3. Establecer usuario (useEffect[currentUser?.id] ejecuta una única carga inicial limpia)
     setActiveProxyUser(null);
     setCurrentUser(user);
-    loadInitialData(user);
     
     if (user.role === 'admin' || user.role === 'lider' || user.is_leader) {
       setViewMode('equipo');
@@ -1636,6 +1638,7 @@ export function App() {
         />
 
         <main className="flex-1 w-full px-3 sm:px-6 py-4 sm:py-5 pb-24 md:pb-6">
+          <ErrorBoundary>
           <Suspense
             fallback={
               <div className="flex items-center justify-center py-24" role="status" aria-live="polite">
@@ -1791,7 +1794,14 @@ export function App() {
           {viewMode === 'gestion' && isAdmin && (
             <UserManagementView
               teams={teams}
-              onRefreshTeams={loadInitialData}
+              onRefreshTeams={async () => {
+                const [uList, tList] = await Promise.all([
+                  api.getUsers().catch(() => users),
+                  api.getTeams().catch(() => teams),
+                ]);
+                setUsers(uList);
+                setTeams(tList);
+              }}
               systemSettings={systemSettings || undefined}
               onUpdateSettings={setSystemSettings}
               currentUser={currentUser}
@@ -1837,6 +1847,7 @@ export function App() {
             />
           )}
           </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
 

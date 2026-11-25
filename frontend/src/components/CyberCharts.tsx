@@ -165,23 +165,28 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
           />
         )}
 
-        {/* Marcadores de eje X */}
-        {points.map((pt, i) => (
-          <g key={i}>
-            <text
-              x={pt.x}
-              y={padding.top + chartH + 20}
-              textAnchor="middle"
-              className={`text-[10px] font-semibold transition-colors ${
-                hoveredIdx === i
-                  ? 'fill-sky-600 dark:fill-sky-400 font-bold'
-                  : 'fill-slate-500 dark:fill-slate-400'
-              }`}
-            >
-              {formatDateLabel(pt.raw.fecha)}
-            </text>
-          </g>
-        ))}
+        {/* Marcadores de eje X (salto adaptativo para evitar colisión en rangos de 30 días) */}
+        {points.map((pt, i) => {
+          const tickStep = points.length > 10 ? Math.ceil(points.length / 8) : 1;
+          const showLabel = i === 0 || i === points.length - 1 || i % tickStep === 0 || hoveredIdx === i;
+          if (!showLabel) return null;
+          return (
+            <g key={i}>
+              <text
+                x={pt.x}
+                y={padding.top + chartH + 20}
+                textAnchor="middle"
+                className={`text-[10px] font-semibold transition-colors ${
+                  hoveredIdx === i
+                    ? 'fill-sky-600 dark:fill-sky-400 font-bold'
+                    : 'fill-slate-500 dark:fill-slate-400'
+                }`}
+              >
+                {formatDateLabel(pt.raw.fecha)}
+              </text>
+            </g>
+          );
+        })}
 
         {/* Puntos interactivos con anillos concéntricos */}
         {points.map((pt, i) => {
@@ -249,7 +254,7 @@ export const SplineAreaChart: React.FC<SplineAreaChartProps> = ({
         <div
           className="absolute z-20 pointer-events-none transform -translate-x-1/2 -translate-y-full px-3.5 py-2.5 rounded-xl bg-slate-900/95 dark:bg-[#1E222D]/95 backdrop-blur-md border border-slate-700/80 dark:border-white/15 shadow-lg text-white transition-all duration-150"
           style={{
-            left: `${(activePoint.x / width) * 100}%`,
+            left: `${Math.min(88, Math.max(12, (activePoint.x / width) * 100))}%`,
             top: `${Math.max(10, (activePoint.y / height) * 100 - 12)}%`,
           }}
         >

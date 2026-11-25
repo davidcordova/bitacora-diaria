@@ -147,19 +147,28 @@ export const NotasView: React.FC<NotasViewProps> = ({
     }
   }, [viewLayout, notas]);
 
-  const availableClients = useMemo(() => {
-    const set = new Set<string>();
-    notas.forEach((n) => {
-      if (n.para_cliente?.trim()) set.add(n.para_cliente.trim());
+  const [knownClients, setKnownClients] = useState<string[]>([]);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
+
+  useEffect(() => {
+    setKnownClients((prev) => {
+      const merged = new Set(prev);
+      notas.forEach((n) => {
+        if (n.para_cliente?.trim()) merged.add(n.para_cliente.trim());
+      });
+      const arr = Array.from(merged).sort();
+      return arr.length === prev.length && arr.every((v, i) => v === prev[i]) ? prev : arr;
     });
-    return Array.from(set).sort();
+    setKnownTags((prev) => {
+      const merged = new Set(prev);
+      notas.forEach((n) => n.etiquetas?.forEach((t) => merged.add(t)));
+      const arr = Array.from(merged).sort();
+      return arr.length === prev.length && arr.every((v, i) => v === prev[i]) ? prev : arr;
+    });
   }, [notas]);
 
-  const availableTags = useMemo(() => {
-    const set = new Set<string>();
-    notas.forEach((n) => n.etiquetas?.forEach((t) => set.add(t)));
-    return Array.from(set).sort();
-  }, [notas]);
+  const availableClients = knownClients;
+  const availableTags = knownTags;
 
   const pinnedNotas = useMemo(() => notas.filter((n) => n.is_pinned && !n.is_deleted), [notas]);
   const unpinnedNotas = useMemo(() => notas.filter((n) => !n.is_pinned || n.is_deleted), [notas]);

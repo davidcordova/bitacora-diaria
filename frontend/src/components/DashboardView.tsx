@@ -68,6 +68,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
   }, [teams, currentUser, selectedTeamId]);
 
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [periodRange, setPeriodRange] = useState<'today' | '7d' | '30d' | 'all'>('30d');
 
   // Controles de gráficos interactivos
@@ -79,6 +80,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
 
   const fetchStats = async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const activeTeamId = !isPersonalScope
         ? (selectedTeamId ? Number(selectedTeamId) : (currentUser?.role === 'lider' ? (leaderTeam?.id || currentUser?.team_id) : undefined))
@@ -108,8 +110,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
         fechaHasta
       );
       setStats(data);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching dashboard stats', e);
+      setFetchError(e?.message || 'No se pudieron cargar las estadísticas desde el servidor.');
     } finally {
       setLoading(false);
     }
@@ -316,7 +319,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ currentUser, teams
         </div>
       </div>
 
-      {!loading && totalBitacoras === 0 ? (
+      {fetchError && !loading ? (
+        <EmptyState
+          icon={AlertTriangle}
+          title="Error al cargar estadísticas"
+          description={fetchError}
+          actionText="Reintentar"
+          onAction={fetchStats}
+        />
+      ) : !loading && totalBitacoras === 0 ? (
         <EmptyState
           icon={BarChart3}
           title={isPersonalScope ? "Sin estadísticas registradas aún" : "Sin estadísticas de equipo aún"}

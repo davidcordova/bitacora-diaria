@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { ViewMode } from '../types';
 
 const VALID_VIEWS: Set<ViewMode> = new Set([
@@ -55,9 +55,16 @@ export function useUrlNavigation({
   onDateChange,
   enabled,
 }: UseUrlNavigationParams) {
+  // Evita que pushState sobrescriba la pila de historial mientras popstate sincroniza fecha async
+  const isPoppingRef = useRef(false);
+
   // Actualizar URL cuando cambian viewMode o fecha
   useEffect(() => {
     if (!enabled) return;
+    if (isPoppingRef.current) {
+      isPoppingRef.current = false;
+      return;
+    }
     try {
       const url = new URL(window.location.href);
       const currentViewParam = url.searchParams.get('view');
@@ -91,6 +98,7 @@ export function useUrlNavigation({
     if (!enabled) return;
     const handlePopState = () => {
       try {
+        isPoppingRef.current = true;
         const params = new URLSearchParams(window.location.search);
         const v = params.get('view') as ViewMode | null;
         const f = params.get('fecha');
@@ -100,7 +108,12 @@ export function useUrlNavigation({
         if (f && /^\d{4}-\d{2}-\d{2}$/.test(f) && onDateChange && f !== fecha) {
           onDateChange(f);
         }
-      } catch (e) {}
+        setTimeout(() => {
+          isPoppingRef.current = false;
+        }, 400);
+      } catch (e) {
+        isPoppingRef.current = false;
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

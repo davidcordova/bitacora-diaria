@@ -1,6 +1,9 @@
 import { Bitacora, User, EstadoActividad, Team, DashboardStats, Actividad, Evidencia, SystemSettings, ActividadPapelera, LiveFeedActividad, Sugerencia, ActividadReferencia, SystemNotification, QuickLink, ItEmpresa, ItMarca, ItCredential, ItCredentialPermission, ItPlatformUser, ItPlataforma, ItCargo, UserDelegation, RevisionDecision, RevisionResult, Nota, ChecklistItemNota } from '../types';
+import { safeSetItem, safeParseJson } from '../utils/safeStorage';
 
 const API_BASE = '/api';
+const DEFAULT_REQUEST_TIMEOUT_MS = 30000;
+let clientesSugerenciasCache: { items: string[]; expiresAt: number } | null = null;
 
 // ================= SESIÓN / AUTENTICACIÓN =================
 // Todas las llamadas a la API viajan con el token de sesión firmado por el servidor.
@@ -53,7 +56,19 @@ const authFetch = async (input: string, init: RequestInit = {}): Promise<Respons
   if (vt && input.includes('/it-vault') && !headers.has('X-Vault-Token')) {
     headers.set('X-Vault-Token', vt);
   }
-  const res = await fetch(input, { ...init, headers });
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let signal = init.signal;
+  if (!signal && typeof AbortController !== 'undefined') {
+    const controller = new AbortController();
+    timeoutId = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+    signal = controller.signal;
+  }
+  let res: Response;
+  try {
+    res = await fetch(input, { ...init, headers, signal });
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
   if (res.status === 401 && !input.includes('/auth/login')) {
     if (!authExpiredNotified) {
       authExpiredNotified = true;
@@ -303,6 +318,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(teamData),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Error al actualizar equipo' }));
+      throw new Error(err.error || 'Error al actualizar equipo');
+    }
     return await res.json();
   },
 
@@ -329,8 +348,12 @@ export const api = {
     } catch (e) {
       console.warn('API bitacoras fetch error', e);
     }
-    const local = localStorage.getItem('bitacoras_history');
-    return local ? JSON.parse(local) : [];
+    const localList = safeParseJson<Bitacora[]>(localStorage.getItem('bitacoras_history'), []);
+    return localList.filter((b) => {
+      if (fecha && b.fecha !== fecha) return false;
+      if (user_id && b.user_id && b.user_id !== user_id) return false;
+      return true;
+    });
   },
 
   async getBitacorasPaginated(opts?: {
@@ -1477,13 +1500,18 @@ export const api = {
   },
 
   async getClientesSugerencias(): Promise<string[]> {
+    if (clientesSugerenciasCache && clientesSugerenciasCache.expiresAt > Date.now()) {
+      return clientesSugerenciasCache.items;
+    }
     try {
       const res = await authFetch(`${API_BASE}/clientes/sugerencias`);
-      if (!res.ok) return [];
+      if (!res.ok) return clientesSugerenciasCache?.items || [];
       const data = await res.json();
-      return Array.isArray(data?.clientes) ? data.clientes : [];
+      const items = Array.isArray(data?.clientes) ? data.clientes : [];
+      clientesSugerenciasCache = { items, expiresAt: Date.now() + 60_000 };
+      return items;
     } catch {
-      return [];
+      return clientesSugerenciasCache?.items || [];
     }
   },
 
@@ -1719,11 +1747,10 @@ export const api = {
 
   saveToLocalStorage(bitacora: Bitacora) {
     try {
-      const existingStr = localStorage.getItem('bitacoras_history');
-      let list: Bitacora[] = existingStr ? JSON.parse(existingStr) : [];
+      let list = safeParseJson<Bitacora[]>(localStorage.getItem('bitacoras_history'), []);
       list = list.filter((b) => !(b.fecha === bitacora.fecha && b.colaborador === bitacora.colaborador));
       list.unshift(bitacora);
-      localStorage.setItem('bitacoras_history', JSON.stringify(list.slice(0, 50)));
+      safeSetItem('bitacoras_history', JSON.stringify(list.slice(0, 50)));
     } catch (e) {
       console.error('LocalStorage error', e);
     }

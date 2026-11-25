@@ -223,43 +223,52 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
   };
 
   const fetchPlatformUsers = async () => {
+    const seq = ++latestSearchSeqRef.current.users;
     try {
-      setLoadingUsers(true);
+      if (latestDataRef.current.users.length === 0) setLoadingUsers(true);
       const res = await api.getItPlatformUsers({
         empresa_id: selectedUserEmpresaId === 'todas' ? undefined : selectedUserEmpresaId,
         plataforma: selectedUserPlataforma === 'todas' ? undefined : selectedUserPlataforma,
         estado: selectedUserEstado === 'todos' ? undefined : selectedUserEstado,
         search: userSearch,
       });
+      if (seq !== latestSearchSeqRef.current.users) return;
       latestDataRef.current.users = res || [];
       setPlatformUsers(res || []);
     } catch (err) {
-      console.error('Error fetching platform users:', err);
+      if (seq === latestSearchSeqRef.current.users) {
+        console.error('Error fetching platform users:', err);
+      }
     } finally {
-      setLoadingUsers(false);
+      if (seq === latestSearchSeqRef.current.users) setLoadingUsers(false);
     }
   };
 
   const fetchLinks = async () => {
+    const seq = ++latestSearchSeqRef.current.links;
     try {
-      setLoadingLinks(true);
+      if (latestDataRef.current.links.length === 0) setLoadingLinks(true);
       const res = await api.getQuickLinks({
         user_id: currentUser?.id,
         categoria: linkCategoria === 'Todas' ? undefined : linkCategoria,
         search: linkSearch,
       });
+      if (seq !== latestSearchSeqRef.current.links) return;
       latestDataRef.current.links = res || [];
       setLinks(res || []);
     } catch (err) {
-      console.error('Error fetching quick links:', err);
+      if (seq === latestSearchSeqRef.current.links) {
+        console.error('Error fetching quick links:', err);
+      }
     } finally {
-      setLoadingLinks(false);
+      if (seq === latestSearchSeqRef.current.links) setLoadingLinks(false);
     }
   };
 
   const fetchVaultData = async () => {
+    const seq = ++latestSearchSeqRef.current.vault;
     try {
-      setLoadingVault(true);
+      if (latestDataRef.current.creds.length === 0) setLoadingVault(true);
       const credsRes = await api.getItCredentials({
         user_id: currentUser?.id,
         empresa_id: selectedEmpresaId === 'todas' ? undefined : selectedEmpresaId,
@@ -267,12 +276,15 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
         tipo_servicio: selectedTipoServicio === 'Todos' ? undefined : selectedTipoServicio,
         search: vaultSearch,
       });
+      if (seq !== latestSearchSeqRef.current.vault) return;
       latestDataRef.current.creds = credsRes || [];
       setCredentials(credsRes || []);
     } catch (err) {
-      console.error('Error fetching vault data:', err);
+      if (seq === latestSearchSeqRef.current.vault) {
+        console.error('Error fetching vault data:', err);
+      }
     } finally {
-      setLoadingVault(false);
+      if (seq === latestSearchSeqRef.current.vault) setLoadingVault(false);
     }
   };
 
@@ -289,19 +301,32 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     }
   };
 
+  const latestSearchSeqRef = useRef({ users: 0, vault: 0, links: 0 });
+  const unlockExpiresAtRef = useRef<number>(0);
+
   useEffect(() => {
     loadCatalogs();
     checkPinStatus();
   }, [currentUser?.id]);
 
+  // Debounce en búsquedas de texto (250ms) para evitar tormentas HTTP por tecla; filtros de selector cargan inmediato
   useEffect(() => {
-    if (activeTab === 'users') {
-      fetchPlatformUsers();
-    } else if (activeTab === 'vault') {
-      fetchVaultData();
-    } else if (activeTab === 'links') {
-      fetchLinks();
-    }
+    const hasSearch = Boolean(
+      (activeTab === 'users' && userSearch) ||
+      (activeTab === 'vault' && vaultSearch) ||
+      (activeTab === 'links' && linkSearch)
+    );
+    const delay = hasSearch ? 250 : 0;
+    const timer = setTimeout(() => {
+      if (activeTab === 'users') {
+        fetchPlatformUsers();
+      } else if (activeTab === 'vault') {
+        fetchVaultData();
+      } else if (activeTab === 'links') {
+        fetchLinks();
+      }
+    }, delay);
+    return () => clearTimeout(timer);
   }, [
     activeTab,
     selectedUserEmpresaId,
@@ -329,24 +354,30 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     setLinks(latestDataRef.current.links);
   };
 
+  // Un único intervalo basado en timestamp real mientras la bóveda está desbloqueada (sin recrear cada 1 s ni derivar en pestaña oculta)
   useEffect(() => {
-    if (!isVaultUnlocked || unlockRemainingSeconds <= 0) return;
+    if (!isVaultUnlocked) {
+      unlockExpiresAtRef.current = 0;
+      return;
+    }
+    if (!unlockExpiresAtRef.current || unlockExpiresAtRef.current <= Date.now()) {
+      unlockExpiresAtRef.current = Date.now() + Math.max(1, unlockRemainingSeconds) * 1000;
+    }
     const interval = setInterval(() => {
-      setUnlockRemainingSeconds((prev) => {
-        if (prev <= 1) {
-          setIsVaultUnlocked(false);
-          setRevealedUserPwIds({});
-          setRevealedCredPwIds({});
-          setRevealedLinkPwIds({});
-          purgeSecretsFromMemory();
-          onShowToast?.('La sesión segura de la bóveda ha expirado', 'info');
-          return 0;
-        }
-        return prev - 1;
-      });
+      const rem = Math.max(0, Math.ceil((unlockExpiresAtRef.current - Date.now()) / 1000));
+      setUnlockRemainingSeconds(rem);
+      if (rem <= 0) {
+        clearInterval(interval);
+        setIsVaultUnlocked(false);
+        setRevealedUserPwIds({});
+        setRevealedCredPwIds({});
+        setRevealedLinkPwIds({});
+        purgeSecretsFromMemory();
+        onShowToast?.('La sesión segura de la bóveda ha expirado', 'info');
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [isVaultUnlocked, unlockRemainingSeconds]);
+  }, [isVaultUnlocked]);
 
   useEffect(() => {
     return () => clearVaultToken();

@@ -289,9 +289,13 @@ def api_it_empresas():
     if request.method == 'GET':
         cursor.execute("SELECT * FROM it_empresas ORDER BY nombre ASC")
         empresas = [dict(row) for row in cursor.fetchall()]
+        cursor.execute("SELECT * FROM it_marcas ORDER BY nombre ASC")
+        marcas_by_emp = {}
+        for m in cursor.fetchall():
+            md = dict(m)
+            marcas_by_emp.setdefault(md['empresa_id'], []).append(md)
         for emp in empresas:
-            cursor.execute("SELECT * FROM it_marcas WHERE empresa_id = ? ORDER BY nombre ASC", (emp['id'],))
-            emp['marcas'] = [dict(m) for m in cursor.fetchall()]
+            emp['marcas'] = marcas_by_emp.get(emp['id'], [])
         conn.close()
         return jsonify(empresas), 200
 

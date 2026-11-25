@@ -41,7 +41,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'usuarios' | 'equipos' | 'delegaciones' | 'configuracion'>('usuarios');
   const [users, setUsers] = useState<User[]>([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   // Delegaciones / Usuarios de Apoyo State
   const [delegations, setDelegations] = useState<UserDelegation[]>([]);
@@ -745,7 +745,11 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
             ))}
           </div>
-          {users.length === 0 && (
+          {loading && users.length === 0 ? (
+            <div className="flex items-center justify-center py-12 text-xs text-slate-500 dark:text-slate-400">
+              Cargando colaboradores...
+            </div>
+          ) : users.length === 0 && (
             <EmptyState
               icon={Users}
               title="Sin usuarios registrados"

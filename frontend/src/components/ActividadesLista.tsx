@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, lazy, Suspense } from 'react';
 import {
   ListChecks,
   Plus,
@@ -39,7 +39,7 @@ import { Actividad, EstadoActividad, User, Evidencia, Nota } from '../types';
 import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays, stripHtml } from '../utils/formatters';
 import { TIPOS_TRABAJO } from '../utils/initialData';
 import { api } from '../services/api';
-import { ActividadModal } from './ActividadModal';
+const ActividadModal = lazy(() => import('./ActividadModal').then((m) => ({ default: m.ActividadModal })));
 import { ActividadDetalleModal } from './ActividadDetalleModal';
 import { ActividadReferenciaModal } from './ActividadReferenciaModal';
 import { RichHtmlRenderer } from './RichHtmlRenderer';
@@ -472,19 +472,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         return;
       }
 
-      // 'Ctrl+Enter' o 'Cmd+Enter' para registro rápido
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // 'Ctrl+Enter' o 'Cmd+Enter' para registro rápido solo cuando no hay modales abiertos
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !createModalOpen && !detailModalOpen && !refModalOpen) {
         if (quickDesc.trim()) {
           e.preventDefault();
           handleQuickAddSubmit();
         }
-      }
-
-      // 'Escape' cierra modales
-      if (e.key === 'Escape') {
-        if (createModalOpen) setCreateModalOpen(false);
-        if (detailModalOpen) setDetailModalOpen(false);
-        if (refModalOpen) setRefModalOpen(false);
       }
     };
 
@@ -1338,17 +1331,21 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
       />
 
       {/* MODAL 2: Creation & Edition Modal */}
-      <ActividadModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        actividadToEdit={editingActividad}
-        editIndex={editingIndex}
-        onSave={handleSaveModal}
-        users={users}
-        currentUser={currentUser}
-        fecha={fecha}
-        existingActividades={actividades}
-      />
+      {createModalOpen && (
+        <Suspense fallback={null}>
+          <ActividadModal
+            isOpen={createModalOpen}
+            onClose={() => setCreateModalOpen(false)}
+            actividadToEdit={editingActividad}
+            editIndex={editingIndex}
+            onSave={handleSaveModal}
+            users={users}
+            currentUser={currentUser}
+            fecha={fecha}
+            existingActividades={actividades}
+          />
+        </Suspense>
+      )}
 
       {/* MODAL 3: Referenced Task Deep Inspection & Navigation */}
       <ActividadReferenciaModal

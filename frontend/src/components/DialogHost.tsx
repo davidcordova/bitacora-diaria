@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
+import { useModalBehavior } from '../hooks/useModalBehavior';
 
 /**
  * Diálogos propios (reemplazan window.confirm / window.alert):
@@ -61,15 +62,11 @@ export const DialogHost: React.FC = () => {
     };
   }, []);
 
+  useModalBehavior(Boolean(current), () => close(false));
+
   useEffect(() => {
     if (!current) return;
     confirmBtnRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close(false);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current]);
 
   const close = (value: boolean) => {

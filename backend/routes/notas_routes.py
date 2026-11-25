@@ -176,33 +176,37 @@ def _can_edit_nota(cursor, user, nota_row):
 def _fetch_nota_links_summary(cursor, nota_ids):
     if not nota_ids:
         return {}
-    placeholders = ','.join('?' * len(nota_ids))
-    rows = cursor.execute(
-        f'''
-        SELECT nav.nota_id, nav.actividad_id, nav.tipo_relacion, nav.checklist_item_id,
-               a.estado, a.duracion_min
-        FROM nota_actividad_vinculos nav
-        JOIN actividades a ON nav.actividad_id = a.id
-        WHERE nav.nota_id IN ({placeholders})
-          AND (a.is_deleted IS NULL OR a.is_deleted = 0)
-        ''',
-        list(nota_ids),
-    ).fetchall()
+    ids_list = list(nota_ids)
     summary = {}
-    for r in rows:
-        nid = r['nota_id']
-        st = summary.setdefault(nid, {
-            'actividades_count': 0,
-            'actividades_completadas': 0,
-            'actividades_abiertas': 0,
-            'tiempo_total_min': 0,
-        })
-        st['actividades_count'] += 1
-        if r['estado'] == 'completada':
-            st['actividades_completadas'] += 1
-        else:
-            st['actividades_abiertas'] += 1
-        st['tiempo_total_min'] += int(r['duracion_min'] or 0)
+    CHUNK = 400
+    for i in range(0, len(ids_list), CHUNK):
+        chunk = ids_list[i:i + CHUNK]
+        placeholders = ','.join('?' * len(chunk))
+        rows = cursor.execute(
+            f'''
+            SELECT nav.nota_id, nav.actividad_id, nav.tipo_relacion, nav.checklist_item_id,
+                   a.estado, a.duracion_min
+            FROM nota_actividad_vinculos nav
+            JOIN actividades a ON nav.actividad_id = a.id
+            WHERE nav.nota_id IN ({placeholders})
+              AND a.is_deleted = 0
+            ''',
+            chunk,
+        ).fetchall()
+        for r in rows:
+            nid = r['nota_id']
+            st = summary.setdefault(nid, {
+                'actividades_count': 0,
+                'actividades_completadas': 0,
+                'actividades_abiertas': 0,
+                'tiempo_total_min': 0,
+            })
+            st['actividades_count'] += 1
+            if r['estado'] == 'completada':
+                st['actividades_completadas'] += 1
+            else:
+                st['actividades_abiertas'] += 1
+            st['tiempo_total_min'] += int(r['duracion_min'] or 0)
     return summary
 
 
@@ -262,8 +266,14 @@ def _format_nota(cursor, row, users_map=None, links_summary=None, include_activi
     d['author_name'] = users_map.get(d.get('user_id'), '')
     d['shared_with_names'] = [users_map[uid] for uid in d['shared_with'] if uid in users_map]
 
-    stats = (links_summary or {}).get(nid)
-    if stats is None:
+    if links_summary is not None:
+        stats = links_summary.get(nid, {
+            'actividades_count': 0,
+            'actividades_completadas': 0,
+            'actividades_abiertas': 0,
+            'tiempo_total_min': 0,
+        })
+    else:
         stats = _fetch_nota_links_summary(cursor, [nid]).get(nid, {
             'actividades_count': 0,
             'actividades_completadas': 0,
@@ -446,6 +456,10 @@ def handle_notas():
     if actividad_id:
         where_sql += " AND EXISTS (SELECT 1 FROM nota_actividad_vinculos nav WHERE nav.nota_id = n.id AND nav.actividad_id = ?)"
         params.append(actividad_id)
+
+    # Pre-filtro SQL de privacidad estricta: jamás traer a RAM notas personales de otros usuarios
+    where_sql += " AND (n.user_id = ? OR n.visibilidad != 'personal')"
+    params.append(uid)
 
     rows = cursor.execute(
         f'''
