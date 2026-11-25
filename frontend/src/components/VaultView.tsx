@@ -624,7 +624,7 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
 
   const handleColaboradorNameChange = (name: string) => {
     const isMail = isMailPlatform(userFormData.plataforma);
-    if (isMail) {
+    if (isMail && !editingPlatformUser) {
       const generatedEmail = generateCorporateEmail(name, selectedCorporateEntity);
       const generatedPass = generateCorporatePassword(name);
       setUserFormData((prev) => ({

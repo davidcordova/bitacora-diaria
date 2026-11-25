@@ -1,6 +1,6 @@
 import json
 import logging
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 
 from database import get_db, get_peru_now_str
 from helpers import check_and_notify_stagnant_activities
@@ -154,10 +154,14 @@ def update_sugerencia_status(sug_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
 
+    acting_user = getattr(g, 'current_user', None) or {}
+    if acting_user.get('role') not in ('admin', 'lider'):
+        return jsonify({"error": "Solo administradores o líderes pueden cambiar el estado de una sugerencia"}), 403
+
     data = request.get_json() or {}
     nuevo_estado = data.get('estado')
     respuesta_admin = data.get('respuesta_admin')
-    respondido_por = data.get('respondido_por') or 'Dirección'
+    respondido_por = acting_user.get('full_name') or 'Dirección'
     now_peru = get_peru_now_str()
 
     if not nuevo_estado:
@@ -270,9 +274,13 @@ def handle_notifications():
 def mark_notification_read(notif_id):
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    acting_user = getattr(g, 'current_user', None) or {}
+    uid = acting_user.get('id')
+    if not uid:
+        return jsonify({"error": "Autenticación requerida"}), 401
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (notif_id,))
+    cursor.execute("UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?", (notif_id, uid))
     conn.commit()
     conn.close()
     return jsonify({"success": True}), 200

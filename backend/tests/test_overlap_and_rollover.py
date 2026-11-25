@@ -242,7 +242,7 @@ def test_completar_actividad_multidia_cierra_eslabones_previos_sin_borrar_horas(
     assert rows[act_d3_id]['duracion_min'] == 30
 
     # Rollover al Día 4 (jueves 2026-11-12): NO debe arrastrarse nuevamente
-    roll_d4 = execute_daily_rollover(today_str='2026-11-12')
+    execute_daily_rollover(today_str='2026-11-12')
     b_d4_list = client.get(f'/api/bitacoras?fecha=2026-11-12&user_id={uid}', headers=u['h']).json
     assert len(b_d4_list) == 0 or len(b_d4_list[0]['actividades']) == 0
 

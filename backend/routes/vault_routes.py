@@ -4,7 +4,7 @@ import secrets
 import string
 import sqlite3
 import logging
-from flask import Blueprint, request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file, g
 from werkzeug.security import generate_password_hash, check_password_hash
 
 try:
@@ -16,7 +16,7 @@ except ImportError:
     openpyxl = None
     _HAS_OPENPYXL = False
 
-from database import get_db, get_peru_now, get_peru_now_str
+from database import get_db, get_peru_now_str
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
 from security import (
     issue_vault_token,
@@ -28,6 +28,34 @@ from helpers import _mask_vault_secrets
 
 logger = logging.getLogger('bitacora')
 vault_bp = Blueprint('vault_routes', __name__)
+
+
+def _require_vault_manager():
+    """Restringe la gestión del directorio de cuentas y catálogos TI a administradores y líderes."""
+    user = getattr(g, 'current_user', None) or {}
+    if user.get('role') not in ('admin', 'lider'):
+        return jsonify({"error": "Acceso restringido a administradores o líderes de equipo"}), 403
+    return None
+
+
+@vault_bp.before_request
+def _enforce_vault_rbac():
+    if request.method == 'OPTIONS':
+        return None
+    path = request.path
+    method = request.method
+    if path.startswith('/api/it-vault/platform-users'):
+        return _require_vault_manager()
+    if path.startswith('/api/it-vault/credentials/') and path.endswith('/permissions'):
+        return _require_vault_manager()
+    if method in ('POST', 'PUT', 'PATCH', 'DELETE') and path.startswith((
+        '/api/it-vault/empresas',
+        '/api/it-vault/marcas',
+        '/api/it-vault/plataformas',
+        '/api/it-vault/cargos',
+    )):
+        return _require_vault_manager()
+    return None
 
 
 # =========================================================================
@@ -65,7 +93,25 @@ def api_quick_links():
         '''
         params = []
 
-        if user_role not in ('admin', 'lider'):
+        if user_role == 'admin':
+            # Admin ve accesos globales y de equipos, pero nunca los enlaces personales de otros usuarios
+            if user_id:
+                query += " AND (q.visibilidad IN ('global', 'equipo') OR (q.visibilidad = 'personal' AND q.user_id = ?))"
+                params.append(user_id)
+            else:
+                query += " AND q.visibilidad IN ('global', 'equipo')"
+        elif user_role == 'lider':
+            leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (user_id, user_team_id)).fetchall()]
+            if leader_teams:
+                placeholders = ','.join(['?'] * len(leader_teams))
+                query += f" AND (q.visibilidad = 'global' OR (q.visibilidad = 'equipo' AND q.team_id IN ({placeholders})) OR (q.visibilidad = 'personal' AND q.user_id = ?))"
+                params.extend(leader_teams + [user_id])
+            elif user_id:
+                query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'personal' AND q.user_id = ?))"
+                params.append(user_id)
+            else:
+                query += " AND q.visibilidad = 'global'"
+        else:
             if user_id:
                 if user_team_id:
                     query += " AND (q.visibilidad = 'global' OR (q.visibilidad = 'equipo' AND q.team_id = ?) OR (q.visibilidad = 'personal' AND q.user_id = ?))"
@@ -122,7 +168,7 @@ def api_quick_links():
         if visibilidad not in ('personal', 'equipo', 'global'):
             visibilidad = 'personal'
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             INSERT INTO quick_links (
                 user_id, titulo, url, categoria, descripcion, icono, color,
@@ -205,7 +251,7 @@ def api_quick_link_detail(link_id):
             password = link['password']
         visibilidad = data.get('visibilidad') or link['visibilidad']
 
-        now_peru = get_peru_now()
+        now_peru = get_peru_now_str()
         cursor.execute('''
             UPDATE quick_links SET
                 titulo = ?, url = ?, categoria = ?, descripcion = ?,
@@ -1417,14 +1463,14 @@ def api_it_platform_users_import():
         return jsonify({}), 200
 
     modo = request.form.get('modo', 'crear_o_actualizar')
-    created_by = request.form.get('created_by', type=int) or 1
+    acting_user = getattr(g, 'current_user', None) or {}
+    created_by = acting_user.get('id') or 1
 
     payload_rows = []
     if request.is_json:
         data = request.get_json(silent=True) or {}
         payload_rows = data.get('rows', [])
         modo = data.get('modo', modo)
-        created_by = data.get('created_by', created_by)
     elif 'file' in request.files:
         uploaded_file = request.files['file']
         if not uploaded_file.filename:
@@ -1669,21 +1715,26 @@ def api_it_empresa_delete(empresa_id):
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM it_credentials WHERE empresa_id = ? AND is_active = 1", (empresa_id,))
+    cursor.execute("SELECT COUNT(*) FROM it_credentials WHERE empresa_id = ?", (empresa_id,))
     if cursor.fetchone()[0] > 0:
         conn.close()
-        return jsonify({"error": "No se puede eliminar esta empresa porque contiene credenciales maestras registradas"}), 400
+        return jsonify({"error": "No se puede eliminar esta empresa porque contiene credenciales maestras registradas (activas o históricas)"}), 400
 
     cursor.execute("SELECT COUNT(*) FROM it_platform_users WHERE empresa_id = ?", (empresa_id,))
     if cursor.fetchone()[0] > 0:
         conn.close()
         return jsonify({"error": "No se puede eliminar esta empresa porque contiene usuarios/colaboradores registrados"}), 400
 
-    cursor.execute("DELETE FROM it_marcas WHERE empresa_id = ?", (empresa_id,))
-    cursor.execute("DELETE FROM it_empresas WHERE id = ?", (empresa_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({"success": True}), 200
+    try:
+        cursor.execute("DELETE FROM it_marcas WHERE empresa_id = ?", (empresa_id,))
+        cursor.execute("DELETE FROM it_empresas WHERE id = ?", (empresa_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True}), 200
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        conn.close()
+        return jsonify({"error": "No se puede eliminar la empresa por registros relacionados"}), 400
 
 
 @vault_bp.route('/api/it-vault/marcas/<int:marca_id>', methods=['DELETE', 'OPTIONS'])

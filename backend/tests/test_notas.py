@@ -1,5 +1,4 @@
 """Pruebas integrales para el módulo versátil de Notas & Contexto Operativo."""
-import json
 from datetime import datetime, timedelta
 
 from database import get_db, get_peru_today_str
@@ -190,7 +189,7 @@ def test_bidirectional_nm_linking_checklist_conversion_and_rollover_inheritance(
         'nota_ids': [nota_id],
     }, headers=u['h'])
     assert r_act2.status_code in (200, 201)
-    act2_id = r_act2.json['actividad']['id']
+    assert r_act2.json['actividad']['id']
     assert any(n['id'] == nota_id for n in r_act2.json['actividad']['notas_vinculadas'])
 
     # También correr rollover explícito de ayer -> hoy y verificar que act1 arrastrada heredó la nota vinculada
@@ -270,14 +269,17 @@ def test_mcp_notes_tools_privacy_and_mode(client, admin, make_user):
 
     # Habilitar read_write -> crear_nota funciona
     client.post('/api/admin/mcp/config', json={'enabled': True, 'access_mode': 'read_write'}, headers=admin['h'])
-    r_rw = client.post('/api/mcp', json={
-        'jsonrpc': '2.0',
-        'id': 4,
-        'method': 'tools/call',
-        'params': {'name': 'crear_nota', 'arguments': {'titulo': 'IA Nota OK', 'visibilidad': 'equipo'}},
-    }, headers={'X-MCP-API-Key': api_key})
-    assert r_rw.json['result']['isError'] is False
-    assert r_rw.json['result']['structuredContent']['status'] == 'created'
+    try:
+        r_rw = client.post('/api/mcp', json={
+            'jsonrpc': '2.0',
+            'id': 4,
+            'method': 'tools/call',
+            'params': {'name': 'crear_nota', 'arguments': {'titulo': 'IA Nota OK', 'visibilidad': 'equipo'}},
+        }, headers={'X-MCP-API-Key': api_key})
+        assert r_rw.json['result']['isError'] is False
+        assert r_rw.json['result']['structuredContent']['status'] == 'created'
+    finally:
+        client.post('/api/admin/mcp/config', json={'enabled': True, 'access_mode': 'read_only'}, headers=admin['h'])
 
 
 def test_quick_note_linked_on_activity_create_edit_and_bitacora_sync(client, make_user):

@@ -39,14 +39,17 @@ def get_equipo_actividades_en_vivo():
                 params.extend([req_u['id'], req_u['full_name'], req_u['username']])
             elif req_u['role'] == 'lider':
                 leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
-                if not team_id or team_id == 'all':
-                    if leader_teams:
-                        placeholders = ','.join(['?'] * len(leader_teams))
-                        query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
-                        params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
-                    else:
-                        query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
-                        params.extend([req_u['id'], req_u['full_name']])
+                if team_id and team_id != 'all':
+                    if not (str(team_id).isdigit() and int(team_id) in leader_teams):
+                        conn.close()
+                        return jsonify({"success": True, "fecha": fecha, "total": 0, "actividades": []})
+                elif leader_teams:
+                    placeholders = ','.join(['?'] * len(leader_teams))
+                    query += f" AND (u.team_id IN ({placeholders}) OR u.id = ? OR b.user_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id IN ({placeholders}) AND tl.lider_id = u.id))"
+                    params.extend(leader_teams + [req_u['id'], req_u['id']] + leader_teams)
+                else:
+                    query += " AND (b.user_id = ? OR LOWER(b.colaborador) = LOWER(?))"
+                    params.extend([req_u['id'], req_u['full_name']])
 
     if team_id and team_id != 'all':
         query += " AND (u.team_id = ? OR EXISTS (SELECT 1 FROM teams tl WHERE tl.id = ? AND tl.lider_id = u.id))"
@@ -86,12 +89,18 @@ def get_dashboard_stats():
                 user_id = req_u['id']
                 team_id = None
             elif req_u['role'] == 'lider':
-                if not team_id:
-                    leader_t = cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ? LIMIT 1", (req_u['id'], req_u['team_id'])).fetchone()
-                    if leader_t:
-                        team_id = leader_t['id']
-                    elif req_u['team_id']:
-                        team_id = req_u['team_id']
+                leader_teams = [r['id'] for r in cursor.execute("SELECT id FROM teams WHERE lider_id = ? OR id = ?", (req_u['id'], req_u['team_id'])).fetchall()]
+                if team_id:
+                    if not (str(team_id).isdigit() and int(team_id) in leader_teams):
+                        team_id = leader_teams[0] if leader_teams else -1
+                elif leader_teams:
+                    team_id = leader_teams[0]
+                elif req_u['team_id']:
+                    team_id = req_u['team_id']
+                if user_id and str(user_id).isdigit() and int(user_id) != int(req_u['id']):
+                    target_u = cursor.execute("SELECT team_id FROM users WHERE id = ?", (int(user_id),)).fetchone()
+                    if not target_u or target_u['team_id'] not in leader_teams:
+                        user_id = req_u['id']
 
     base_filter = "WHERE 1=1"
     params = []
@@ -200,10 +209,10 @@ def get_dashboard_stats():
         LEFT JOIN users u ON b.user_id = u.id
         {base_filter}
         GROUP BY b.fecha
-        ORDER BY b.fecha ASC
+        ORDER BY b.fecha DESC
         LIMIT 30
     '''
-    tendencia_diaria = cursor.execute(tendencia_query, params).fetchall()
+    tendencia_diaria = list(reversed(cursor.execute(tendencia_query, params).fetchall()))
 
     horaria_query = f'''
         SELECT 

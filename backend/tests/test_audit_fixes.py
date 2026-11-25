@@ -1,9 +1,6 @@
 """Pruebas de regresión y auditoría: papelera aislada, scoping de privacidad y rollover con revisión."""
 import os
 import sqlite3
-import pytest
-
-from database import get_db
 
 
 def _db():

@@ -14,6 +14,12 @@ services:
       - TZ=America/Lima
     volumes:
       - bitacora_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=5)"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
     networks:
       - bitacora_net
 
@@ -28,7 +34,8 @@ services:
     expose:
       - "80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - bitacora_net
 

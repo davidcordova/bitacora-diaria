@@ -80,28 +80,27 @@ export const HistorialView: React.FC<HistorialViewProps> = ({
   const todayStr = useMemo(() => getTodayLocalDateStr(), []);
   const yesterdayStr = useMemo(() => getYesterdayLocalDateStr(), []);
 
-  // Sincronizar si el prop externo 'historial' cambia
+  // Sincronizar si el prop externo 'historial' cambia (respetando eliminaciones)
   useEffect(() => {
-    if (historial && historial.length > 0) {
-      setLiveHistorial((prev) => {
-        // Combinar evitando duplicados, priorizando versiones completas (!is_summary)
-        const map = new Map<number, Bitacora>();
-        historial.forEach((b) => {
-          if (b.id !== undefined) map.set(b.id, b);
-        });
-        prev.forEach((b) => {
-          if (b.id !== undefined) {
-            const existing = map.get(b.id);
-            if (!existing || (existing.is_summary && !b.is_summary)) {
-              map.set(b.id, b);
-            }
-          }
-        });
-        return Array.from(map.values()).sort((a, b) =>
-          b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : (b.id || 0) - (a.id || 0)
-        );
+    if (!historial) return;
+    setLiveHistorial((prev) => {
+      const prevById = new Map<number, Bitacora>();
+      prev.forEach((b) => {
+        if (b.id !== undefined) prevById.set(b.id, b);
       });
-    }
+      // Fuente de verdad: la lista actual en `historial`; solo conservamos detalle ya hidratado (!is_summary)
+      // para los registros que todavía existen en `historial`, evitando resucitar bitácoras eliminadas.
+      const next = historial.map((b) => {
+        if (b.id !== undefined && b.is_summary) {
+          const cached = prevById.get(b.id);
+          if (cached && !cached.is_summary) return cached;
+        }
+        return b;
+      });
+      return next.sort((a, b) =>
+        b.fecha > a.fecha ? 1 : b.fecha < a.fecha ? -1 : (b.id || 0) - (a.id || 0)
+      );
+    });
   }, [historial]);
 
   // Carga paginada ligera desde el servidor (summary=1) en montaje y al cambiar filtros

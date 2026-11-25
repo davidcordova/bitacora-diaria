@@ -4,7 +4,6 @@ import base64
 import sqlite3
 import threading
 import time
-import re
 import logging
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, g
@@ -12,8 +11,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
 from database import (
-    get_db, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str,
-    get_schema_version,
+    get_db, _new_connection, init_db, DB_PATH, get_peru_now, get_peru_now_str, get_peru_today_str,
+    EXPECTED_SCHEMA_VERSION, is_production_mode,
 )
 from security import (
     register_security, issue_token, login_is_throttled,
@@ -22,7 +21,6 @@ from security import (
 )
 from helpers import (
     validate_new_password,
-    generate_temp_password,
     is_dia_laborable,
     calculate_hora_fin,
     sanitize_evidencias,
@@ -32,7 +30,6 @@ from helpers import (
     fetch_enriched_bitacora_activities,
     check_and_notify_stagnant_activities,
     get_default_hora_inicio,
-    _mask_vault_secrets,
     attach_linked_notes_to_activities,
     _sync_note_activity_links,
 )
@@ -97,28 +94,63 @@ def add_cors_headers(response):
     return response
 
 
+@app.errorhandler(404)
+def handle_404(err):
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Recurso no encontrado", "code": "not_found"}), 404
+    return err
+
+
+@app.errorhandler(405)
+def handle_405(err):
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Método HTTP no permitido", "code": "method_not_allowed"}), 405
+    return err
+
+
+@app.errorhandler(413)
+def handle_413(err):
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "El archivo o payload excede el límite permitido (50 MB)", "code": "payload_too_large"}), 413
+    return err
+
+
+@app.errorhandler(500)
+def handle_500(err):
+    logger.exception("[API 500] Error no controlado en %s %s: %s", request.method, request.path, err)
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Error interno del servidor. Intenta nuevamente.", "code": "internal_error"}), 500
+    return err
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Usado por el monitor de disponibilidad: verifica también que la base de datos responda."""
+    """Usado por el monitor de disponibilidad: verifica DB y versión de esquema esperada."""
     now_dt = get_peru_now()
     db_ok = True
+    schema_ver = None
     try:
         conn = get_db()
         conn.execute("SELECT 1").fetchone()
+        row = conn.execute("SELECT MAX(version) FROM schema_migrations").fetchone()
+        schema_ver = (row[0] or 0) if row else 0
     except Exception as e:
         logger.error("[Health] Base de datos no disponible: %s", e)
         db_ok = False
+    schema_ok = db_ok and (schema_ver is not None and schema_ver >= EXPECTED_SCHEMA_VERSION)
+    healthy = db_ok and schema_ok
     payload = {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if healthy else "degraded",
         "database": "ok" if db_ok else "error",
-        "schema_version": get_schema_version() if db_ok else None,
+        "schema_version": schema_ver,
+        "expected_schema_version": EXPECTED_SCHEMA_VERSION,
         "service": "Bitácora API",
-        "version": "2.5.0",
+        "version": "2.6.0",
         "peru_time": now_dt.strftime('%Y-%m-%d %H:%M:%S'),
         "peru_date": get_peru_today_str(),
         "timezone": "America/Lima (UTC-5)",
     }
-    return jsonify(payload), (200 if db_ok else 503)
+    return jsonify(payload), (200 if healthy else 503)
 
 
 # ==================== CONFIGURACIONES GLOBALES (SETTINGS) ====================
@@ -2303,8 +2335,17 @@ def get_actividades_pendientes():
 def get_stagnant_actividades():
     if request.method == 'OPTIONS':
         return jsonify({}), 200
+    current_u = getattr(g, 'current_user', None) or {}
     user_id = request.args.get('user_id')
     user_id_int = int(user_id) if user_id and str(user_id).isdigit() else None
+
+    if current_u.get('role') in ('analista', 'operador'):
+        user_id_int = int(current_u['id'])
+    elif current_u.get('role') == 'lider':
+        if user_id_int and not user_can_access_owner(current_u, user_id_int):
+            return jsonify({"error": "No tienes permiso para consultar alertas de este usuario"}), 403
+        if not user_id_int:
+            user_id_int = int(current_u['id'])
 
     conn = get_db()
     cursor = conn.cursor()
@@ -2435,12 +2476,19 @@ def restaurar_actividad(act_id):
 
     old_bitacora_id = act['bitacora_id']
     new_bitacora_id = old_bitacora_id
+    current_u = getattr(g, 'current_user', None) or {}
 
     if target_bitacora_id and target_bitacora_id != old_bitacora_id:
-        target_b = cursor.execute("SELECT id FROM bitacoras WHERE id = ?", (target_bitacora_id,)).fetchone()
+        target_b = cursor.execute("SELECT id, user_id FROM bitacoras WHERE id = ?", (target_bitacora_id,)).fetchone()
         if target_b:
+            if not user_can_access_owner(current_u, target_b['user_id']):
+                conn.close()
+                return jsonify({"error": "No tienes permiso para restaurar en la bitácora destino"}), 403
             new_bitacora_id = target_bitacora_id
     elif target_fecha and target_user_id:
+        if not user_can_access_owner(current_u, target_user_id):
+            conn.close()
+            return jsonify({"error": "No tienes permiso para restaurar en la bitácora de este usuario"}), 403
         existing_b = cursor.execute("SELECT id FROM bitacoras WHERE user_id = ? AND fecha = ?", (target_user_id, target_fecha)).fetchone()
         if existing_b:
             new_bitacora_id = existing_b['id']
@@ -2694,6 +2742,24 @@ def importar_actividades_pendientes():
 
     conn = get_db()
     cursor = conn.cursor()
+    current_u = getattr(g, 'current_user', None) or {}
+    target_uid = int(user_id) if user_id and str(user_id).isdigit() else None
+    if target_uid is None:
+        owner_row = cursor.execute(
+            "SELECT id FROM users WHERE LOWER(TRIM(full_name)) = LOWER(TRIM(?)) OR LOWER(username) = LOWER(TRIM(?)) LIMIT 1",
+            (colaborador, colaborador),
+        ).fetchone()
+        target_uid = owner_row['id'] if owner_row else None
+    if target_uid is not None and not user_can_access_owner(current_u, target_uid):
+        conn.close()
+        return jsonify({"error": "No tienes permiso para consultar pendientes de este colaborador"}), 403
+    if target_uid is None and current_u.get('role') in ('analista', 'operador'):
+        if str(colaborador).strip().lower() not in (
+            str(current_u.get('full_name') or '').strip().lower(),
+            str(current_u.get('username') or '').strip().lower(),
+        ):
+            conn.close()
+            return jsonify({"error": "No tienes permiso para consultar pendientes de este colaborador"}), 403
 
     query = '''
         SELECT a.*, b.fecha as fecha_origen,
@@ -2800,27 +2866,60 @@ def ensure_daily_rollover(target_date=None, force=False):
         if LAST_ROLLOVER_DATE == today_str and not force:
             return
 
+        lock_file = None
         try:
-            conn = get_db()
-            cursor = conn.cursor()
-            cursor.execute("INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES ('last_rollover_date', '', datetime('now'))")
-            if force:
-                cursor.execute("UPDATE system_settings SET value = ?, updated_at = datetime('now') WHERE key = 'last_rollover_date'", (today_str,))
-                claimed = True
-            else:
-                cursor.execute(
-                    "UPDATE system_settings SET value = ?, updated_at = datetime('now') WHERE key = 'last_rollover_date' AND COALESCE(value, '') < ?",
-                    (today_str, today_str)
-                )
-                claimed = cursor.rowcount == 1
-            conn.commit()
-            LAST_ROLLOVER_DATE = today_str
-            if not claimed:
+            try:
+                import fcntl
+                lock_path = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), '.rollover.lock')
+                lock_file = open(lock_path, 'w')
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
                 return
+            except ImportError:
+                pass
+
+            conn = _new_connection()
+            try:
+                cursor = conn.cursor()
+                cursor.execute("INSERT OR IGNORE INTO system_settings (key, value, updated_at) VALUES ('last_rollover_date', '', datetime('now'))")
+                row = cursor.execute("SELECT value FROM system_settings WHERE key = 'last_rollover_date'").fetchone()
+                last_done = (row['value'] if row and row['value'] else '')
+                conn.commit()
+                if not force and last_done >= today_str:
+                    LAST_ROLLOVER_DATE = today_str
+                    return
+            finally:
+                conn.close()
+
             logger.info("[Scheduler] Ejecutando rollover diario para %s", today_str)
-            execute_daily_rollover(today_str)
+            res = execute_daily_rollover(today_str)
+            if isinstance(res, dict) and res.get('error'):
+                logger.error("[Scheduler] Rollover devolvió error, se reintentará: %s", res.get('error'))
+                return
+
+            conn2 = _new_connection()
+            try:
+                conn2.execute(
+                    "UPDATE system_settings SET value = ?, updated_at = datetime('now') WHERE key = 'last_rollover_date'",
+                    (today_str,)
+                )
+                conn2.commit()
+                LAST_ROLLOVER_DATE = today_str
+            finally:
+                conn2.close()
         except Exception as e:
             logger.exception("[Scheduler] Error en ensure_daily_rollover: %s", e)
+        finally:
+            if lock_file is not None:
+                try:
+                    import fcntl
+                    fcntl.flock(lock_file, fcntl.LOCK_UN)
+                except Exception:
+                    pass
+                try:
+                    lock_file.close()
+                except Exception:
+                    pass
 
 
 def start_midnight_scheduler():
@@ -2860,6 +2959,8 @@ try:
         start_midnight_scheduler()
 except Exception as e:
     logger.exception("[Startup] Error inicializando DB o scheduler: %s", e)
+    if is_production_mode():
+        raise
 
 if __name__ == '__main__':
     logger.info("Servidor de desarrollo de Bitácora en http://localhost:5000")

@@ -11,6 +11,7 @@ Soporta:
 """
 
 import re
+import html
 import json
 import base64
 import hashlib
@@ -29,7 +30,12 @@ from database import (
     get_peru_today_str,
 )
 from crypto_utils import encrypt_vault_secret, decrypt_vault_secret
-from security import _get_secret_key
+from security import (
+    _get_secret_key,
+    login_is_throttled,
+    register_login_failure,
+    clear_login_failures,
+)
 from routes.system_routes import normalize_client_name
 from helpers import attach_linked_notes_to_activities
 from activity_lifecycle import (
@@ -1798,21 +1804,37 @@ def oauth_authorization_server_metadata(subpath=None):
     }), 200
 
 
+def _is_safe_oauth_redirect_uri(uri):
+    """Solo permite esquemas HTTPS o loopback local para evitar open-redirect y javascript: XSS."""
+    if not uri:
+        return True
+    try:
+        parsed = urllib.parse.urlparse(uri)
+        if parsed.scheme == 'https' and parsed.netloc:
+            return True
+        if parsed.scheme == 'http' and parsed.hostname in ('localhost', '127.0.0.1'):
+            return True
+        return False
+    except Exception:
+        return False
+
+
 @mcp_bp.route('/api/mcp/oauth/register', methods=['POST', 'OPTIONS'])
 def oauth_dynamic_client_register():
-    """RFC 7591: Registro dinámico de clientes OAuth para conectores MCP que no piden Client ID manual."""
+    """RFC 7591: Registro dinámico de cliente público (PKCE, sin exponer jamás la API Key maestra)."""
     if request.method == 'OPTIONS':
         return jsonify({}), 200
     body = request.get_json(silent=True) or {}
-    cfg = get_or_init_mcp_settings()
+    redirect_uris = body.get('redirect_uris', [])
+    if not isinstance(redirect_uris, list) or not all(_is_safe_oauth_redirect_uri(str(u)) for u in redirect_uris):
+        return jsonify({'error': 'invalid_redirect_uri'}), 400
     return jsonify({
         'client_id': MCP_OAUTH_CLIENT_ID,
-        'client_secret': cfg['api_key'],
-        'client_name': body.get('client_name', 'MCP AI Client'),
-        'redirect_uris': body.get('redirect_uris', []),
-        'grant_types': ['authorization_code', 'refresh_token', 'client_credentials'],
+        'client_name': str(body.get('client_name', 'MCP AI Client'))[:120],
+        'redirect_uris': redirect_uris,
+        'grant_types': ['authorization_code', 'refresh_token'],
         'response_types': ['code'],
-        'token_endpoint_auth_method': body.get('token_endpoint_auth_method', 'client_secret_post'),
+        'token_endpoint_auth_method': 'none',
     }), 201
 
 
@@ -1828,11 +1850,11 @@ def _load_oauth_code(code_str):
 
 def _render_oauth_authorize_html(params, error_msg=None):
     hidden_inputs = '\n'.join(
-        f'<input type="hidden" name="{k}" value="{str(v or "").replace(chr(34), "&quot;")}" />'
+        f'<input type="hidden" name="{html.escape(str(k), quote=True)}" value="{html.escape(str(v or ""), quote=True)}" />'
         for k, v in params.items()
     )
     err_block = (
-        f'<div style="background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:14px;">{error_msg}</div>'
+        f'<div style="background:#FEE2E2;border:1px solid #FCA5A5;color:#991B1B;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:14px;">{html.escape(str(error_msg))}</div>'
         if error_msg
         else ''
     )
@@ -1975,13 +1997,24 @@ def oauth_authorize_endpoint():
         'code_challenge_method': src.get('code_challenge_method', 'S256'),
     }
 
+    if oauth_params['redirect_uri'] and not _is_safe_oauth_redirect_uri(oauth_params['redirect_uri']):
+        return jsonify({'error': 'invalid_request', 'error_description': 'Unsupported redirect_uri scheme'}), 400
+
     if request.method == 'GET':
         return _render_oauth_authorize_html(oauth_params), 200, {'Content-Type': 'text/html; charset=utf-8'}
 
-    # POST: validar credenciales de admin o MCP API Key
+    # POST: validar credenciales de admin o MCP API Key (con límite anti fuerza bruta)
     mcp_key_input = (request.form.get('mcp_api_key') or '').strip()
     username = (request.form.get('username') or '').strip()
     password = request.form.get('password') or ''
+    throttle_key = (username or '__mcp_oauth__').lower()
+
+    if login_is_throttled(throttle_key):
+        return (
+            _render_oauth_authorize_html(oauth_params, 'Demasiados intentos fallidos. Espera unos minutos e intenta nuevamente.'),
+            429,
+            {'Content-Type': 'text/html; charset=utf-8'},
+        )
 
     authorized = False
     if mcp_key_input:
@@ -2001,11 +2034,13 @@ def oauth_authorize_endpoint():
             conn.close()
 
     if not authorized:
+        register_login_failure(throttle_key)
         return (
             _render_oauth_authorize_html(oauth_params, 'Credenciales inválidas. Verifica la contraseña de admin o la MCP API Key.'),
             401,
             {'Content-Type': 'text/html; charset=utf-8'},
         )
+    clear_login_failures(throttle_key)
 
     code = _issue_oauth_code({
         'client_id': oauth_params['client_id'],
@@ -2067,10 +2102,17 @@ def oauth_token_endpoint():
         except (BadSignature, SignatureExpired):
             return jsonify({'error': 'invalid_grant', 'error_description': 'Invalid or expired authorization code'}), 400
 
-        # Verificar PKCE si el cliente envió code_challenge durante /authorize
+        # Verificar coincidencia de redirect_uri si fue registrado en el código
+        req_redirect = (data.get('redirect_uri') or '').strip()
+        if code_data.get('redirect_uri') and req_redirect and req_redirect != code_data.get('redirect_uri'):
+            return jsonify({'error': 'invalid_grant', 'error_description': 'redirect_uri mismatch'}), 400
+
+        # Verificar PKCE obligatoriamente siempre que el cliente envió code_challenge en /authorize
         code_challenge = code_data.get('code_challenge') or ''
         code_verifier = (data.get('code_verifier') or '').strip()
-        if code_challenge and code_verifier:
+        if code_challenge:
+            if not code_verifier:
+                return jsonify({'error': 'invalid_grant', 'error_description': 'Missing PKCE code_verifier'}), 400
             method = (code_data.get('code_challenge_method') or 'S256').upper()
             if method == 'S256':
                 digest = hashlib.sha256(code_verifier.encode('ascii')).digest()

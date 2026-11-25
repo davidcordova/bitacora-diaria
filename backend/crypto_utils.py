@@ -73,6 +73,8 @@ def get_or_create_vault_key() -> bytes:
             time.sleep(0.05)
     except Exception as e:
         logger.error("[Crypto] No se pudo guardar la llave de la bóveda en %s: %s", KEY_FILE, e)
+        if os.environ.get('FLASK_ENV') == 'production' or os.environ.get('COOLIFY_RESOURCE_UUID'):
+            raise RuntimeError(f"No se pudo persistir la clave maestra de bóveda en {KEY_FILE}: {e}") from e
     return candidate
 
 

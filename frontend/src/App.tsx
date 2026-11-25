@@ -775,7 +775,7 @@ export function App() {
 
     try {
       // 2. Consultar al backend por la bitácora de la nueva fecha
-      const serverBitacoras = await api.getBitacoras(newDate, undefined, undefined, activeUid, requestingUid);
+      const serverBitacoras = await api.getBitacoras(newDate, undefined, undefined, requestingUid, activeUid);
       const serverMatch = serverBitacoras.find(
         (b) =>
           (b.user_id === activeUid ||
@@ -876,7 +876,7 @@ export function App() {
     const activeUid = effectiveUser?.id || bitacora.user_id;
     const activeName = effectiveUser?.full_name || bitacora.colaborador;
     try {
-      const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, activeUid, currentUser?.id);
+      const serverBitacoras = await api.getBitacoras(bitacora.fecha, undefined, undefined, currentUser?.id, activeUid);
       const serverMatch = serverBitacoras.find(
         (b) =>
           (b.user_id === activeUid ||
@@ -925,8 +925,8 @@ export function App() {
 
     try {
       setAutoSaveStatus('saving');
-      // Consultar servidor con requesting_user_id
-      const serverBitacoras = await api.getBitacoras(targetDate, undefined, undefined, newTarget.id, currentUser?.id);
+      // Consultar servidor con requesting_user_id real y target user_id correcto
+      const serverBitacoras = await api.getBitacoras(targetDate, undefined, undefined, currentUser?.id, newTarget.id);
       const serverMatch = serverBitacoras.find(
         (b) => (b.user_id === newTarget.id || b.colaborador.toLowerCase() === newTarget.full_name.toLowerCase()) && b.fecha === targetDate
       );

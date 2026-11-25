@@ -30,7 +30,7 @@ jobs:
 
       - name: Run linter (pyflakes)
         run: |
-          pyflakes backend/app.py backend/database.py backend/security.py backend/crypto_utils.py backend/seed_data.py backend/tests/*.py
+          pyflakes backend/app.py backend/database.py backend/security.py backend/crypto_utils.py backend/helpers.py backend/activity_lifecycle.py backend/seed_data.py backend/routes/*.py backend/tests/*.py
 
       - name: Run test suite (pytest)
         env:

@@ -23,5 +23,5 @@ ENV UPLOAD_FOLDER=/data/uploads
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--workers", "3", "--bind", "0.0.0.0:5000", "--timeout", "120", "app:app"]
+CMD ["sh", "-c", "python -c 'from database import init_db; init_db()' && exec gunicorn --workers 3 --bind 0.0.0.0:5000 --timeout 120 app:app"]
 

@@ -1,9 +1,11 @@
+import logging
 from flask import Blueprint, request, jsonify, g
 from werkzeug.security import generate_password_hash
 
 from database import get_db
 from helpers import validate_new_password, generate_temp_password
 
+logger = logging.getLogger('bitacora')
 admin_bp = Blueprint('admin_routes', __name__)
 
 
@@ -177,6 +179,9 @@ def admin_user_detail(user_id):
         if permanent:
             try:
                 cursor.execute("UPDATE teams SET lider_id = NULL WHERE lider_id = ?", (user_id,))
+                cursor.execute("UPDATE actividades SET created_by_user_id = NULL WHERE created_by_user_id = ?", (user_id,))
+                cursor.execute("UPDATE actividades SET updated_by_user_id = NULL WHERE updated_by_user_id = ?", (user_id,))
+                cursor.execute("UPDATE actividades SET revisado_por = NULL WHERE revisado_por = ?", (user_id,))
                 cursor.execute('''
                     UPDATE actividades SET parent_task_id = NULL 
                     WHERE parent_task_id IN (SELECT id FROM actividades WHERE bitacora_id IN (SELECT id FROM bitacoras WHERE user_id = ?))
@@ -191,6 +196,28 @@ def admin_user_detail(user_id):
                 ''', (user_id,))
                 cursor.execute("DELETE FROM bitacoras WHERE user_id = ?", (user_id,))
 
+                # Limpiar referencias en notas, delegaciones, bóveda y buzón para respetar FK
+                cursor.execute("UPDATE notas SET created_by_user_id = NULL WHERE created_by_user_id = ?", (user_id,))
+                cursor.execute("UPDATE notas SET updated_by_user_id = NULL WHERE updated_by_user_id = ?", (user_id,))
+                cursor.execute("UPDATE nota_actividad_vinculos SET created_by = NULL WHERE created_by = ?", (user_id,))
+                cursor.execute("DELETE FROM notas WHERE user_id = ?", (user_id,))
+                cursor.execute("DELETE FROM user_delegations WHERE target_user_id = ? OR delegate_user_id = ? OR assigned_by = ?", (user_id, user_id, user_id))
+                cursor.execute("DELETE FROM it_credential_permissions WHERE user_id = ? OR assigned_by = ?", (user_id, user_id))
+                cursor.execute("DELETE FROM it_credential_audit WHERE user_id = ?", (user_id,))
+                cursor.execute("DELETE FROM quick_links WHERE user_id = ?", (user_id,))
+                cursor.execute("DELETE FROM buzon_votos WHERE user_id = ?", (user_id,))
+                cursor.execute("UPDATE buzon_sugerencias SET user_id = NULL WHERE user_id = ?", (user_id,))
+                # Reasignar autoría de activos corporativos de bóveda al administrador principal
+                admin_row = cursor.execute("SELECT id FROM users WHERE role = 'admin' AND id != ? ORDER BY id ASC LIMIT 1", (user_id,)).fetchone()
+                fallback_admin_id = admin_row['id'] if admin_row else None
+                if fallback_admin_id:
+                    cursor.execute("UPDATE it_credentials SET created_by = ? WHERE created_by = ?", (fallback_admin_id, user_id))
+                    cursor.execute("UPDATE it_platform_users SET created_by = ? WHERE created_by = ?", (fallback_admin_id, user_id))
+                    cursor.execute("UPDATE it_platform_users SET updated_by = ? WHERE updated_by = ?", (fallback_admin_id, user_id))
+                else:
+                    cursor.execute("DELETE FROM it_credentials WHERE created_by = ?", (user_id,))
+                    cursor.execute("DELETE FROM it_platform_users WHERE created_by = ?", (user_id,))
+
                 for tbl in ['tasks', 'audit_logs', 'notifications']:
                     try:
                         cursor.execute(f"DELETE FROM {tbl} WHERE user_id = ?", (user_id,))
@@ -204,7 +231,8 @@ def admin_user_detail(user_id):
             except Exception as e:
                 conn.rollback()
                 conn.close()
-                return jsonify({"error": f"Error al eliminar usuario: {str(e)}"}), 500
+                logger.exception("[Admin] Error eliminando usuario %s: %s", user_id, e)
+                return jsonify({"error": "No se pudo eliminar el usuario por dependencias activas"}), 500
         else:
             curr = cursor.execute("SELECT is_active FROM users WHERE id = ?", (user_id,)).fetchone()
             if not curr:

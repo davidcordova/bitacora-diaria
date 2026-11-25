@@ -3,6 +3,7 @@ import os
 import json
 import logging
 import secrets
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from crypto_utils import encrypt_vault_secret
@@ -58,7 +59,38 @@ def _new_connection():
     conn.execute("PRAGMA busy_timeout = 45000")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -16000")
+    conn.execute("PRAGMA temp_store = MEMORY")
     return conn
+
+
+@contextmanager
+def db_write_transaction():
+    """
+    Contexto transaccional con `BEGIN IMMEDIATE` para evitar deadlocks `SQLITE_BUSY`
+    al escalar de lectura a escritura entre múltiples workers Gunicorn en modo WAL.
+    """
+    conn = sqlite3.connect(DB_PATH, timeout=45.0, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.create_function("peru_now", 0, get_peru_now_str)
+    conn.create_function("peru_today", 0, get_peru_today_str)
+    conn.execute("PRAGMA busy_timeout = 45000")
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA cache_size = -16000")
+    conn.execute("PRAGMA temp_store = MEMORY")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        yield conn
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except Exception:
+            pass
+        raise
+    finally:
+        conn.close()
 
 
 def _is_open(conn):
@@ -780,50 +812,59 @@ def init_db():
               )
         ''')
 
-    # 7.1 Limpieza de referencias huérfanas o cíclicas de parent_task_id
-    cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = id")
-    cursor.execute('''
-        UPDATE actividades 
-        SET parent_task_id = NULL 
-        WHERE parent_task_id IS NOT NULL 
-          AND parent_task_id NOT IN (SELECT id FROM actividades)
-    ''')
+    # 7.1 Limpieza única de referencias huérfanas o cíclicas de parent_task_id
+    if _run_once('parent_task_cleanup_v1_done'):
+        cursor.execute("UPDATE actividades SET parent_task_id = NULL WHERE parent_task_id = id")
+        cursor.execute('''
+            UPDATE actividades 
+            SET parent_task_id = NULL 
+            WHERE parent_task_id IS NOT NULL 
+              AND parent_task_id NOT IN (SELECT id FROM actividades)
+        ''')
 
-    # 7.2 Corrección y sincronización automática de tiempo_total_min en bitácoras
-    cursor.execute('''
-        UPDATE bitacoras SET tiempo_total_min = (
-            SELECT COALESCE(SUM(duracion_min), 0)
-            FROM actividades
-            WHERE bitacora_id = bitacoras.id AND (is_deleted IS NULL OR is_deleted = 0)
-        )
-    ''')
+    # 7.2 Corrección única y sincronización de tiempo_total_min en bitácoras
+    if _run_once('bitacora_tiempo_total_sync_v1_done'):
+        cursor.execute('''
+            UPDATE bitacoras SET tiempo_total_min = (
+                SELECT COALESCE(SUM(duracion_min), 0)
+                FROM actividades
+                WHERE bitacora_id = bitacoras.id AND (is_deleted IS NULL OR is_deleted = 0)
+            )
+        ''')
 
-    # 7.3 Cifrado en reposo (AES Fernet) para todas las contraseñas de la bóveda
+    # 7.3 Cifrado en reposo (AES Fernet) único para contraseñas legadas de la bóveda
+    if _run_once('vault_encrypt_legacy_v1_done'):
+        try:
+            cursor.execute("SELECT id, password_secret FROM it_credentials")
+            for row in cursor.fetchall():
+                cid, psec = row[0], row[1]
+                if psec and not psec.startswith("enc::"):
+                    cursor.execute("UPDATE it_credentials SET password_secret = ? WHERE id = ?", (encrypt_vault_secret(psec), cid))
+
+            cursor.execute("SELECT id, password_actual FROM it_platform_users")
+            for row in cursor.fetchall():
+                pid, pact = row[0], row[1]
+                if pact and not pact.startswith("enc::"):
+                    cursor.execute("UPDATE it_platform_users SET password_actual = ? WHERE id = ?", (encrypt_vault_secret(pact), pid))
+
+            cursor.execute("SELECT id, password FROM quick_links")
+            for row in cursor.fetchall():
+                lid, lpass = row[0], row[1]
+                if lpass and not lpass.startswith("enc::"):
+                    cursor.execute("UPDATE quick_links SET password = ? WHERE id = ?", (encrypt_vault_secret(lpass), lid))
+        except Exception as e:
+            logger.error("[Crypto] Error en migración de contraseñas: %s", e)
+
     try:
-        cursor.execute("SELECT id, password_secret FROM it_credentials")
-        for row in cursor.fetchall():
-            cid, psec = row[0], row[1]
-            if psec and not psec.startswith("enc::"):
-                cursor.execute("UPDATE it_credentials SET password_secret = ? WHERE id = ?", (encrypt_vault_secret(psec), cid))
-
-        cursor.execute("SELECT id, password_actual FROM it_platform_users")
-        for row in cursor.fetchall():
-            pid, pact = row[0], row[1]
-            if pact and not pact.startswith("enc::"):
-                cursor.execute("UPDATE it_platform_users SET password_actual = ? WHERE id = ?", (encrypt_vault_secret(pact), pid))
-
-        cursor.execute("SELECT id, password FROM quick_links")
-        for row in cursor.fetchall():
-            lid, lpass = row[0], row[1]
-            if lpass and not lpass.startswith("enc::"):
-                cursor.execute("UPDATE quick_links SET password = ? WHERE id = ?", (encrypt_vault_secret(lpass), lid))
-    except Exception as e:
-        logger.error("[Crypto] Error en migración de contraseñas: %s", e)
-
-    run_migrations(cursor)
-
-    conn.commit()
-    conn.close()
+        # Confirmar esquema base ANTES del hot-backup y migraciones versionadas para no bloquear sqlite3.backup()
+        conn.commit()
+        run_migrations(cursor, conn=conn)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 # ==================== MIGRACIONES VERSIONADAS ====================
@@ -974,13 +1015,80 @@ def _mig_005_create_notas_and_links(cursor):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nav_actividad ON nota_actividad_vinculos(actividad_id)")
 
 
+def _mig_006_performance_indexes_and_hygiene(cursor):
+    """
+    Migración aditiva sin pérdida de datos:
+    - Normaliza flags nulos (`is_deleted`) y estados legados (`en_progreso` -> `generada`) para habilitar índices compuestos.
+    - Agrega índices faltantes en claves foráneas y consultas críticas (login, equipo, dashboard, notas, bóveda, notificaciones).
+    - Retira el índice exacto duplicado `idx_actividades_parent_task_id` (cubierto por el nuevo índice compuesto).
+    """
+    cursor.execute("UPDATE actividades SET is_deleted = 0 WHERE is_deleted IS NULL")
+    cursor.execute("UPDATE notas SET is_deleted = 0 WHERE is_deleted IS NULL")
+    cursor.execute("UPDATE bitacoras SET estado = 'generada' WHERE estado = 'en_progreso'")
+
+    # Índices de alto impacto en consultas frecuentes y claves foráneas
+    index_ddls = [
+        "CREATE INDEX IF NOT EXISTS idx_users_team_active ON users(team_id, is_active)",
+        "CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username))",
+        "CREATE INDEX IF NOT EXISTS idx_users_active_role ON users(is_active, role)",
+        "CREATE INDEX IF NOT EXISTS idx_teams_lider ON teams(lider_id)",
+        "CREATE INDEX IF NOT EXISTS idx_bitacoras_estado_fecha ON bitacoras(estado, fecha)",
+        "CREATE INDEX IF NOT EXISTS idx_bitacoras_apoyo_fecha ON bitacoras(necesita_apoyo, fecha) WHERE necesita_apoyo != 'No'",
+        "CREATE INDEX IF NOT EXISTS idx_bitacoras_colab_lower_fecha ON bitacoras(LOWER(TRIM(colaborador)), fecha)",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_bitacora_shared ON actividades(bitacora_id, shared_uuid) WHERE shared_uuid IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_parent_link ON actividades(parent_task_id, tipo_vinculo, bitacora_id) WHERE parent_task_id IS NOT NULL",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_bitacora_del_orden ON actividades(bitacora_id, is_deleted, orden, id)",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_cliente ON actividades(is_deleted, para_cliente) WHERE para_cliente IS NOT NULL AND para_cliente != ''",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_updated_by ON actividades(updated_by_user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_actividades_revisado_por ON actividades(revisado_por)",
+        "CREATE INDEX IF NOT EXISTS idx_login_attempts_created ON login_attempts(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_notifications_user_id_desc ON notifications(user_id, id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_it_audit_user_action_time ON it_credential_audit(user_id, action, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_it_credentials_active_emp ON it_credentials(is_active, empresa_id, marca_id)",
+        "CREATE INDEX IF NOT EXISTS idx_it_credentials_created_by ON it_credentials(created_by)",
+        "CREATE INDEX IF NOT EXISTS idx_platform_users_upsert ON it_platform_users(empresa_id, LOWER(plataforma), LOWER(usuario_login))",
+        "CREATE INDEX IF NOT EXISTS idx_platform_users_marca ON it_platform_users(marca_id)",
+        "CREATE INDEX IF NOT EXISTS idx_platform_users_created_by ON it_platform_users(created_by)",
+        "CREATE INDEX IF NOT EXISTS idx_quicklinks_vis_updated ON quick_links(visibilidad, updated_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_notas_vis_del_estado_upd ON notas(visibilidad, is_deleted, estado, is_pinned DESC, updated_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_buzon_estado_created ON buzon_sugerencias(estado, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_buzon_votos_created ON buzon_sugerencias(votos DESC, created_at DESC)",
+    ]
+    for ddl in index_ddls:
+        cursor.execute(ddl)
+
+    # Índice único idempotente para client_uid: solo se aplica si no existen colisiones históricas
+    try:
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_actividades_bitacora_client_uid "
+            "ON actividades(bitacora_id, client_uid) WHERE client_uid IS NOT NULL"
+        )
+    except sqlite3.IntegrityError:
+        logger.warning("[DB Mig v6] Se omitió ux_actividades_bitacora_client_uid por duplicados históricos existentes")
+
+    try:
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_delegations_pair "
+            "ON user_delegations(delegate_user_id, target_user_id)"
+        )
+    except sqlite3.IntegrityError:
+        logger.warning("[DB Mig v6] Se omitió ux_delegations_pair por delegaciones duplicadas existentes")
+
+    # Retirar índice duplicado exacto de parent_task_id
+    cursor.execute("DROP INDEX IF EXISTS idx_actividades_parent_task_id")
+    cursor.execute("PRAGMA optimize")
+
+
 MIGRATIONS = [
     (1, 'flag_weak_passwords', _mig_001_flag_weak_passwords),
     (2, 'normalize_existing_client_names', _mig_002_normalize_client_names),
     (3, 'backfill_bitacora_user_ids_and_indexes', _mig_003_backfill_bitacora_user_ids_and_indexes),
     (4, 'close_completed_continuation_lineages', _mig_004_close_completed_continuation_lineages),
     (5, 'create_notas_and_links', _mig_005_create_notas_and_links),
+    (6, 'performance_indexes_and_hygiene', _mig_006_performance_indexes_and_hygiene),
 ]
+
+EXPECTED_SCHEMA_VERSION = max(v for v, _, _ in MIGRATIONS)
 
 
 def get_backups_dir():
@@ -1016,9 +1124,17 @@ def create_hot_backup(reason='manual', max_backups=10):
         src_conn = sqlite3.connect(DB_PATH, timeout=30.0)
         dst_conn = sqlite3.connect(backup_path, timeout=30.0)
         src_conn.backup(dst_conn)
-        logger.info("[DB Backup] Respaldo en caliente creado: %s", backup_path)
+        check_res = dst_conn.execute("PRAGMA quick_check").fetchone()
+        if not check_res or check_res[0] != 'ok':
+            raise RuntimeError(f"quick_check falló en respaldo: {check_res}")
+        logger.info("[DB Backup] Respaldo en caliente creado y verificado: %s", backup_path)
     except Exception as e:
         logger.warning("[DB Backup] No se pudo crear respaldo automático (%s): %s", reason, e)
+        try:
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+        except OSError:
+            pass
         return None
     finally:
         if dst_conn:
@@ -1076,7 +1192,7 @@ def list_backups():
     return result
 
 
-def run_migrations(cursor):
+def run_migrations(cursor, conn=None):
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
@@ -1084,18 +1200,30 @@ def run_migrations(cursor):
             applied_at TEXT NOT NULL
         )
     ''')
+    if conn is not None:
+        conn.commit()
     applied = {r[0] for r in cursor.execute("SELECT version FROM schema_migrations").fetchall()}
     pending = [(v, n, fn) for (v, n, fn) in MIGRATIONS if v not in applied]
     if pending:
-        # Antes de aplicar cualquier migración nueva, tomar snapshot automático de seguridad
-        create_hot_backup(reason=f"pre_mig_v{pending[0][0]}")
+        # Antes de aplicar cualquier migración nueva, tomar snapshot verificado de seguridad
+        backup_path = create_hot_backup(reason=f"pre_mig_v{pending[0][0]}")
+        has_existing_data = bool(DB_PATH and DB_PATH != ':memory:' and os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) > 0)
+        if is_production_mode() and has_existing_data and not backup_path:
+            raise RuntimeError(f"Abortando migración v{pending[0][0]}: no se pudo generar respaldo previo verificado.")
     for version, name, fn in pending:
-        fn(cursor)
-        cursor.execute(
-            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
-            (version, name, get_peru_now_str()),
-        )
-        logger.info("[DB] Migración %s (%s) aplicada", version, name)
+        try:
+            fn(cursor)
+            cursor.execute(
+                "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+                (version, name, get_peru_now_str()),
+            )
+            if conn is not None:
+                conn.commit()
+            logger.info("[DB] Migración %s (%s) aplicada", version, name)
+        except Exception:
+            if conn is not None:
+                conn.rollback()
+            raise
 
 
 def get_schema_version():

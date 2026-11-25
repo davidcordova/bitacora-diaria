@@ -51,15 +51,20 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
   const [linkUrl, setLinkUrl] = useState('');
   const [linkText, setLinkText] = useState('');
   const [savedRange, setSavedRange] = useState<Range | null>(null);
+  const lastEmittedHtmlRef = useRef<string | null>(null);
 
-  // Mantener sincronizado el editor con el valor entrante si cambia externamente.
-  // Se sanitiza antes de inyectar: el contenido puede venir de otro usuario.
+  // Mantener sincronizado el editor solo cuando el valor cambia externamente
+  // (evita reescribir innerHTML mientras el usuario escribe y previene saltos del cursor al inicio).
   useEffect(() => {
     if (editorRef.current && !isRawHtml) {
+      if (lastEmittedHtmlRef.current !== null && value === lastEmittedHtmlRef.current) {
+        return;
+      }
       const safe = value ? sanitizeHtml(value) : '';
       if (editorRef.current.innerHTML !== safe) {
         editorRef.current.innerHTML = safe;
       }
+      lastEmittedHtmlRef.current = value || '';
     }
   }, [value, isRawHtml]);
 
@@ -68,11 +73,9 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
       // Normalizar vacío si sólo contiene <br> o <p><br></p>
-      if (html === '<br>' || html === '<p><br></p>' || html.trim() === '') {
-        onChange('');
-      } else {
-        onChange(html);
-      }
+      const normalized = html === '<br>' || html === '<p><br></p>' || html.trim() === '' ? '' : html;
+      lastEmittedHtmlRef.current = normalized;
+      onChange(normalized);
     }
   };
 
@@ -128,8 +131,10 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
         }
       }
 
-      // Crear enlace HTML seguro
-      const linkHtml = `<a href="${urlToInsert}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-400 underline font-semibold hover:opacity-80">${textToInsert}</a> `;
+      // Crear enlace HTML seguro escapando atributos y texto visible
+      const escapeAttr = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const linkHtml = `<a href="${escapeAttr(urlToInsert)}" target="_blank" rel="noopener noreferrer" class="text-sky-600 dark:text-sky-400 underline font-semibold hover:opacity-80">${escapeAttr(textToInsert)}</a> `;
       document.execCommand('insertHTML', false, linkHtml);
       handleContentChange();
     }
@@ -430,6 +435,8 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
                   e.preventDefault();
                   handleApplyLink();
                 } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setShowLinkModal(false);
                 }
               }}
@@ -447,6 +454,8 @@ export const HtmlEditor: React.FC<HtmlEditorProps> = ({
                   e.preventDefault();
                   handleApplyLink();
                 } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  e.stopPropagation();
                   setShowLinkModal(false);
                 }
               }}

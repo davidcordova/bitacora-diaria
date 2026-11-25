@@ -60,14 +60,19 @@ def _read_or_create_secret_file(path, nbytes=48):
     raise RuntimeError(f'No se pudo leer ni crear el secreto de sesión en {path}')
 
 
+_secret_key_cache = None
+_serializer = None
+_vault_serializer = None
+
+
 def _get_secret_key():
+    global _secret_key_cache
     env_key = os.environ.get('BITACORA_SECRET_KEY') or os.environ.get('SECRET_KEY')
     if env_key and len(env_key) >= 16:
         return env_key
-    return _read_or_create_secret_file(os.path.join(DATA_DIR, '.session_secret'))
-
-
-_serializer = None
+    if _secret_key_cache is None:
+        _secret_key_cache = _read_or_create_secret_file(os.path.join(DATA_DIR, '.session_secret'))
+    return _secret_key_cache
 
 
 def _get_serializer():
@@ -75,6 +80,13 @@ def _get_serializer():
     if _serializer is None:
         _serializer = URLSafeTimedSerializer(_get_secret_key(), salt=TOKEN_SALT)
     return _serializer
+
+
+def _get_vault_serializer():
+    global _vault_serializer
+    if _vault_serializer is None:
+        _vault_serializer = URLSafeTimedSerializer(_get_secret_key(), salt=VAULT_TOKEN_SALT)
+    return _vault_serializer
 
 
 def _password_fingerprint(password_hash):
@@ -114,8 +126,7 @@ def _load_user_from_token(token):
 # ==================== DESBLOQUEO DE BÓVEDA ====================
 
 def issue_vault_token(user_id):
-    s = URLSafeTimedSerializer(_get_secret_key(), salt=VAULT_TOKEN_SALT)
-    return s.dumps({'uid': int(user_id)})
+    return _get_vault_serializer().dumps({'uid': int(user_id)})
 
 
 def vault_unlocked():
@@ -125,7 +136,7 @@ def vault_unlocked():
     if not user or not token:
         return False
     try:
-        data = URLSafeTimedSerializer(_get_secret_key(), salt=VAULT_TOKEN_SALT).loads(token, max_age=VAULT_UNLOCK_SECONDS)
+        data = _get_vault_serializer().loads(token, max_age=VAULT_UNLOCK_SECONDS)
     except (BadSignature, SignatureExpired):
         return False
     return int(data.get('uid', -1)) == int(user['id'])
@@ -342,11 +353,13 @@ def _ownership_denied(user):
     owner = None
     found = False
 
-    m = _ACT_RE.match(path) or _TRASH_RE.match(path)
-    if m and (method != 'GET'):
+    m_act = _ACT_RE.match(path)
+    m_trash = _TRASH_RE.match(path)
+    if m_act or (m_trash and method != 'GET'):
+        act_target = int((m_act or m_trash).group(1))
         row = conn.execute('''
             SELECT b.user_id FROM actividades a JOIN bitacoras b ON a.bitacora_id = b.id WHERE a.id = ?
-        ''', (int(m.group(1)),)).fetchone()
+        ''', (act_target,)).fetchone()
         found, owner = bool(row), (row['user_id'] if row else None)
     else:
         m = _BIT_RE.match(path)
