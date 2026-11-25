@@ -530,97 +530,34 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
   };
 
   return (
-    <div className="space-y-6">
-      {/* ================= PANEL DE CONTROL UNIFICADO ================= */}
-      <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 sm:p-5 shadow-sm space-y-3.5 transition-all duration-200">
-        {/* FILA 1: TÍTULO, SELECTOR DE EQUIPO, LIVE BADGE Y ACCIONES GLOBALES */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-500/30">
-              <Users className="w-5 h-5 text-sky-600 dark:text-sky-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white tracking-tight">
-                  Supervisión de Equipo
-                </h2>
-
-                {/* Filtro de Equipo si es Admin o tiene más de 1 equipo */}
-                {currentUser?.role === 'admin' && accessibleTeams.length > 1 ? (
-                  <select
-                    value={selectedTeamFilter}
-                    onChange={(e) => setSelectedTeamFilter(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#232836] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
-                  >
-                    <option value="all">🏢 Todos los Equipos ({accessibleTeams.length})</option>
-                    {accessibleTeams.map((t) => (
-                      <option key={t.id} value={t.id.toString()}>
-                        👥 {t.nombre}
-                      </option>
-                    ))}
-                  </select>
-                ) : accessibleTeams.length > 1 ? (
-                  <select
-                    value={selectedTeamFilter}
-                    onChange={(e) => setSelectedTeamFilter(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-bold rounded-lg bg-slate-100 dark:bg-[#232836] text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-white/[0.08] focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
-                  >
-                    {accessibleTeams.map((t) => (
-                      <option key={t.id} value={t.id.toString()}>
-                        👥 {t.nombre}
-                      </option>
-                    ))}
-                  </select>
-                ) : primaryTeam ? (
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/30">
-                    {primaryTeam.nombre}
-                  </span>
-                ) : null}
-
-                {/* Pulsing Live Monitor Badge */}
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                  <span>En Vivo</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Botón Refrescar Manual */}
-            <button
-              type="button"
-              onClick={loadAllTeamData}
-              disabled={loading}
-              title={`Última actualización: ${lastRefreshTime.toLocaleTimeString()}`}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-[#232836] hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-700 dark:text-slate-300 rounded-full text-xs font-bold transition-all cursor-pointer border border-slate-200 dark:border-white/[0.08]"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-500' : ''}`} />
-              <span className="hidden sm:inline">Refrescar</span>
-            </button>
-
-            {/* Toggle de Vistas del Equipo: Feed en Vivo / Semáforo / Kanban */}
+    <div className="space-y-4 max-w-[1440px] mx-auto">
+      {/* ================= BARRA DE CONTROL COMPACTA (UNIFICADA) ================= */}
+      <div className="bg-white dark:bg-[#12151D] rounded-xl border border-slate-200/75 dark:border-white/[0.07] p-3.5 sm:p-4 space-y-3">
+        {/* FILA 1: TABS DE VISTA + EQUIPO + FECHA + ACCIONES */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          {/* Izquierda: Tabs + Selector de Equipo */}
+          <div className="flex flex-wrap items-center gap-2">
             {selectedMemberId === 'all' ? (
-              <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08] max-w-full overflow-x-auto scrollbar-none">
+              <div className="flex items-center bg-slate-100/90 dark:bg-white/[0.05] p-0.5 rounded-lg max-w-full overflow-x-auto no-scrollbar">
                 <button
                   type="button"
                   onClick={() => setTeamTab('feed')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer shrink-0 ${
                     teamTab === 'feed'
-                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
+                      ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                   }`}
                 >
-                  <Radio className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 animate-pulse shrink-0" />
-                  <span>Feed <span className="hidden sm:inline">en Vivo</span> ({liveActivities.length})</span>
+                  <Radio className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <span>Feed ({liveActivities.length})</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTeamTab('semaforo')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer shrink-0 ${
                     teamTab === 'semaforo'
-                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
+                      ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                   }`}
                 >
                   <TrendingUp className="w-3.5 h-3.5 shrink-0" />
@@ -629,26 +566,25 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <button
                   type="button"
                   onClick={() => setTeamTab('kanban')}
-                  className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer shrink-0 min-h-[34px] ${
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs transition-all cursor-pointer shrink-0 ${
                     teamTab === 'kanban'
-                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
+                      ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                   }`}
                 >
                   <KanbanIcon className="w-3.5 h-3.5 shrink-0" />
-                  <span>Tablero <span className="hidden sm:inline">({unifiedActivities.length})</span></span>
+                  <span>Tablero ({unifiedActivities.length})</span>
                 </button>
               </div>
             ) : (
-              /* Si está en modo individual, toggle Kanban / Resumen */
-              <div className="flex items-center bg-slate-100 dark:bg-[#1E222D] p-0.5 rounded-xl border border-slate-200/80 dark:border-white/[0.08]">
+              <div className="flex items-center bg-slate-100/90 dark:bg-white/[0.05] p-0.5 rounded-lg">
                 <button
                   type="button"
                   onClick={() => setSubView('kanban')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                     subView === 'kanban'
-                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
+                      ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                   }`}
                 >
                   <KanbanIcon className="w-3.5 h-3.5" />
@@ -657,10 +593,10 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                 <button
                   type="button"
                   onClick={() => setSubView('resumen')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all cursor-pointer ${
                     subView === 'resumen'
-                      ? 'bg-white dark:bg-[#1E2030] text-slate-900 dark:text-white font-bold shadow-xs border border-slate-200/60 dark:border-white/10'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-semibold'
+                      ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                      : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 font-medium'
                   }`}
                 >
                   <LayoutList className="w-3.5 h-3.5" />
@@ -669,155 +605,154 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               </div>
             )}
 
-            {/* Copiar Daily Standup para Slack / Teams / WhatsApp */}
-            <button
-              type="button"
-              onClick={handleCopyDailyStandup}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px] border ${
-                copiedStandup
-                  ? 'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20'
-                  : 'bg-gradient-to-r from-cyan-500/10 to-blue-500/10 hover:from-cyan-500/20 hover:to-blue-500/20 text-sky-700 dark:text-sky-400 border-cyan-500/30'
-              }`}
-              title="Copiar resumen del equipo en formato Daily Standup listo para Slack / Teams / WhatsApp"
-            >
-              {copiedStandup ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>¡Copiado!</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  <span>Copiar Daily Standup</span>
-                </>
-              )}
-            </button>
-
-            {/* Exportar Excel CSV */}
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-white dark:bg-[#232836] hover:bg-slate-50 dark:hover:bg-white/[0.08] active:scale-95 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/[0.08] rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer min-h-[36px]"
-              title="Descargar reporte en formato Excel CSV"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-              <span>Exportar Excel</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Feedback Alert if an action occurred */}
-        {feedbackMsg && (
-          <div className="bg-[#E6F9F5] dark:bg-mint-500/15 border border-[#00C9A7]/30 text-[#007D67] dark:text-[#00C9A7] px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 animate-in fade-in shadow-xs">
-            <CheckCircle2 className="w-4 h-4 text-[#00C9A7] shrink-0" />
-            <span>{feedbackMsg}</span>
-          </div>
-        )}
-
-        {/* FILA 2: NAVEGADOR DE FECHA LIMPIO Y DIRECTO */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Fecha actual formateada */}
-          <div className="flex items-center gap-2.5">
-            <Calendar className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-            <span className="text-sm font-bold text-slate-900 dark:text-white">
-              {formatDateLong(selectedDate)}
-            </span>
-            {isSelectedToday ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-sky-600 text-white">
-                Hoy
+            {/* Selector de Equipo limpio */}
+            {currentUser?.role === 'admin' && accessibleTeams.length > 1 ? (
+              <select
+                value={selectedTeamFilter}
+                onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                aria-label="Filtrar por equipo"
+                className="h-8 px-2.5 text-xs font-medium rounded-lg bg-slate-50 dark:bg-[#191D28] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                <option value="all">Todos los equipos ({accessibleTeams.length})</option>
+                {accessibleTeams.map((t) => (
+                  <option key={t.id} value={t.id.toString()}>
+                    {t.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : accessibleTeams.length > 1 ? (
+              <select
+                value={selectedTeamFilter}
+                onChange={(e) => setSelectedTeamFilter(e.target.value)}
+                aria-label="Filtrar por equipo"
+                className="h-8 px-2.5 text-xs font-medium rounded-lg bg-slate-50 dark:bg-[#191D28] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                {accessibleTeams.map((t) => (
+                  <option key={t.id} value={t.id.toString()}>
+                    {t.nombre}
+                  </option>
+                ))}
+              </select>
+            ) : primaryTeam ? (
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 px-2">
+                {primaryTeam.nombre}
               </span>
-            ) : isSelectedYesterday ? (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
-                Ayer
-              </span>
-            ) : (
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-400 border border-slate-200/90 dark:border-white/[0.08]">
-                Histórico
-              </span>
-            )}
+            ) : null}
           </div>
 
-          {/* Controles de fecha: < >, Hoy, Ayer, Selector de fecha nativo */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center bg-white dark:bg-[#232836] p-0.5 rounded-full border border-slate-200/90 dark:border-white/[0.08] shadow-2xs">
+          {/* Derecha: Fecha compacta + Acciones discretas */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="inline-flex items-center bg-slate-100/80 dark:bg-white/[0.04] p-0.5 rounded-lg">
               <button
                 type="button"
                 onClick={handlePrevDay}
                 title="Día anterior"
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+                aria-label="Día anterior"
+                className="w-7 h-7 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer flex items-center justify-center"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
+                aria-label="Fecha de supervisión"
+                title={formatDateLong(selectedDate)}
+                className="bg-transparent px-1.5 h-7 text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-hidden cursor-pointer tabular-nums"
+              />
               <button
                 type="button"
                 onClick={handleNextDay}
                 title="Día siguiente"
-                className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-white/5 rounded-full transition-colors cursor-pointer"
+                aria-label="Día siguiente"
+                className="w-7 h-7 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer flex items-center justify-center"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
 
+            {!isSelectedToday && (
+              <button
+                type="button"
+                onClick={handleToday}
+                className="h-8 px-2.5 rounded-lg text-xs font-semibold text-sky-600 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-500/10 transition-colors cursor-pointer"
+              >
+                Hoy
+              </button>
+            )}
+            {isSelectedToday && (
+              <button
+                type="button"
+                onClick={handleYesterday}
+                className="h-8 px-2.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer hidden sm:inline-flex items-center"
+              >
+                Ayer
+              </button>
+            )}
+
+            <div className="h-4 w-px bg-slate-200 dark:bg-white/10 mx-0.5 hidden sm:block" />
+
             <button
               type="button"
-              onClick={handleToday}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isSelectedToday
-                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
-                  : 'bg-white dark:bg-[#232836] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/5'
+              onClick={handleCopyDailyStandup}
+              className={`h-8 px-2.5 rounded-lg text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                copiedStandup
+                  ? 'bg-emerald-500 text-white'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06]'
               }`}
+              title="Copiar resumen Daily Standup"
             >
-              Hoy
-            </button>
-            <button
-              type="button"
-              onClick={handleYesterday}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                isSelectedYesterday
-                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
-                  : 'bg-white dark:bg-[#232836] text-slate-700 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/5'
-              }`}
-            >
-              Ayer
+              {copiedStandup ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{copiedStandup ? 'Copiado' : 'Standup'}</span>
             </button>
 
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => e.target.value && setSelectedDate(e.target.value)}
-              className="px-3 py-1.5 bg-white dark:bg-[#232836] hover:bg-slate-100 dark:hover:bg-white/5 text-xs font-bold text-slate-800 dark:text-slate-100 rounded-full border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 outline-hidden cursor-pointer"
-              title="Elegir otra fecha"
-            />
+            <button
+              type="button"
+              onClick={handleExportCSV}
+              className="h-8 px-2.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              title="Exportar reporte Excel CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Excel</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={loadAllTeamData}
+              disabled={loading}
+              title={`Refrescar (${lastRefreshTime.toLocaleTimeString()})`}
+              aria-label="Refrescar datos"
+              className="w-8 h-8 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer inline-flex items-center justify-center"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-500' : ''}`} />
+            </button>
           </div>
         </div>
 
-        {/* FILA 3: FILTRO DE COLABORADORES (PÍLDORAS HORIZONTALES) */}
-        <div className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full no-scrollbar">
-            {/* Botón Todo el Equipo */}
+        {/* Feedback Alert */}
+        {feedbackMsg && (
+          <div className="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+            <span>{feedbackMsg}</span>
+          </div>
+        )}
+
+        {/* FILA 2: COLABORADORES + BUSCADOR INLINE (Sin doble cabecera) */}
+        <div className="pt-2.5 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 max-w-full no-scrollbar">
             <button
               type="button"
               onClick={() => setSelectedMemberId('all')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer shrink-0 ${
                 selectedMemberId === 'all'
-                  ? 'bg-sky-600 text-white font-extrabold shadow-sm'
-                  : 'bg-slate-100 dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] hover:bg-slate-200 dark:hover:bg-[#1E2030]'
+                  ? 'bg-slate-900 dark:bg-sky-600 text-white font-semibold'
+                  : 'bg-slate-100/80 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-white/[0.09]'
               }`}
             >
-              <Users className="w-3.5 h-3.5" />
-              <span>Todo el Equipo</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  selectedMemberId === 'all'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-slate-200 dark:bg-white/[0.08] text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                {allMembers.length}
-              </span>
+              <span>Todos</span>
+              <span className="opacity-70 text-[11px] tabular-nums">{allMembers.length}</span>
             </button>
 
-            {/* Chips de cada colaborador */}
             {allMembers.map((m) => {
               const isSelected = selectedMemberId === m.id;
               const memberLog = teamBitacoras.find(
@@ -829,264 +764,156 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
               );
               const count = memberLog ? (memberLog.actividades || []).filter((a) => !a.is_deleted).length : 0;
               const hasSupport = memberLog?.necesita_apoyo === 'Si';
+              const shortName = m.full_name.trim().split(/\s+/).slice(0, 2).join(' ');
 
               return (
                 <button
                   key={m.id}
                   type="button"
                   onClick={() => setSelectedMemberId(m.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                  title={m.full_name}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer shrink-0 ${
                     isSelected
-                      ? 'bg-sky-600 text-white font-extrabold shadow-sm'
-                      : 'bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#1E2030] border border-slate-200/80 dark:border-white/[0.08]'
+                      ? 'bg-slate-900 dark:bg-sky-600 text-white font-semibold'
+                      : 'bg-slate-100/60 dark:bg-white/[0.04] text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-white/[0.08]'
                   }`}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full ${
-                      hasSupport ? 'bg-amber-400 animate-ping' : isSelected ? 'bg-white' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300'
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      hasSupport ? 'bg-amber-400' : isSelected ? 'bg-white' : count > 0 ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
                     }`}
                   />
-                  <span>{m.full_name}</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      isSelected
-                        ? 'bg-white/20 text-white'
-                        : 'bg-slate-200 dark:bg-white/[0.08] text-slate-700 dark:text-slate-300'
-                    }`}
-                  >
-                    {count}
-                  </span>
+                  <span>{shortName}</span>
+                  <span className="opacity-65 text-[11px] tabular-nums">{count}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Breadcrumb cuando se selecciona a un colaborador */}
-          {selectedMemberId !== 'all' && (
+          {selectedMemberId === 'all' && teamTab === 'feed' ? (
+            <div className="relative w-full sm:w-60 shrink-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Filtrar feed..."
+                value={feedSearch}
+                onChange={(e) => setFeedSearch(e.target.value)}
+                className="w-full pl-8 pr-7 h-8 text-xs bg-slate-50/80 dark:bg-[#191D28] border border-slate-200/80 dark:border-white/[0.08] rounded-lg focus:outline-none focus:border-sky-500 text-slate-800 dark:text-white placeholder:text-slate-400"
+              />
+              {feedSearch && (
+                <button
+                  type="button"
+                  onClick={() => setFeedSearch('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : selectedMemberId !== 'all' ? (
             <button
               type="button"
               onClick={() => setSelectedMemberId('all')}
-              className="text-xs font-bold text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer shrink-0"
+              className="text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline cursor-pointer shrink-0 self-start sm:self-center"
             >
-              <span>← Volver a Todo el Equipo</span>
+              ← Todo el equipo
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* ================= BANDEJA DE ATENCIÓN DEL LÍDER (INBOX DE ACCIÓN RÁPIDA) ================= */}
+      {/* ================= ALERTAS ACCIONABLES (SOLO SI HAY PENDIENTES > 0) ================= */}
       {selectedMemberId === 'all' && (() => {
         const pendingReviewTasks = liveActivities.filter((a) => a.estado === 'en_revision' && !isOwnActivity(a));
         const blockedMembers = memberWorkload.filter((m) => m.needsSupport || m.dateLog?.necesita_apoyo === 'Si');
         const noLogMembers = memberWorkload.filter((m) => m.totalMinutos === 0 && m.activitiesCount === 0);
 
+        if (pendingReviewTasks.length === 0 && blockedMembers.length === 0 && noLogMembers.length === 0 && feedStatusFilter !== 'en_revision') {
+          return null;
+        }
+
         return (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            {/* 1. Solicitudes por aprobar */}
-            <button
-              type="button"
-              onClick={() => {
-                setTeamTab('feed');
-                setFeedStatusFilter((prev) => (prev === 'en_revision' ? 'all' : 'en_revision'));
-              }}
-              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                feedStatusFilter === 'en_revision'
-                  ? 'bg-sky-50 dark:bg-sky-500/10 border-sky-400 dark:border-sky-500/50 ring-2 ring-sky-400/20 shadow-sm'
-                  : pendingReviewTasks.length > 0
-                  ? 'bg-white dark:bg-[#161922] border-sky-200 dark:border-sky-500/30 hover:border-sky-400 shadow-2xs'
-                  : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08] opacity-80 hover:opacity-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  pendingReviewTasks.length > 0
-                    ? 'bg-sky-100 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400'
-                    : 'bg-slate-100 dark:bg-[#232836] text-slate-400'
-                }`}>
-                  <ShieldCheck className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Por Aprobar
-                    </span>
-                    {feedStatusFilter === 'en_revision' && (
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-600 text-white">
-                        Filtro Activo
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
-                    {pendingReviewTasks.length > 0
-                      ? `${pendingReviewTasks.length} ${pendingReviewTasks.length === 1 ? 'tarea espera' : 'tareas esperan'} tu visto bueno`
-                      : 'Todo al día sin revisiones pendientes'}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
-                pendingReviewTasks.length > 0
-                  ? 'bg-sky-600 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-[#232836] text-slate-500'
-              }`}>
-                {pendingReviewTasks.length}
-              </span>
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {(pendingReviewTasks.length > 0 || feedStatusFilter === 'en_revision') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTeamTab('feed');
+                  setFeedStatusFilter((prev) => (prev === 'en_revision' ? 'all' : 'en_revision'));
+                }}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+                  feedStatusFilter === 'en_revision'
+                    ? 'bg-sky-600 text-white border-sky-600'
+                    : 'bg-amber-50/90 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-200/80 dark:border-amber-500/25 hover:bg-amber-100/80'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {pendingReviewTasks.length} {pendingReviewTasks.length === 1 ? 'tarea por aprobar' : 'tareas por aprobar'}
+                </span>
+                {feedStatusFilter === 'en_revision' && <X className="w-3 h-3 ml-0.5" />}
+              </button>
+            )}
 
-            {/* 2. Bloqueos / Solicitudes de Apoyo */}
-            <button
-              type="button"
-              onClick={() => {
-                if (blockedMembers.length === 1) {
-                  setDrawerMemberId(blockedMembers[0].member.id);
-                } else {
-                  setTeamTab('semaforo');
-                }
-              }}
-              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                blockedMembers.length > 0
-                  ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-300 dark:border-amber-700/60 hover:border-amber-400 shadow-2xs'
-                  : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08] opacity-80 hover:opacity-100'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  blockedMembers.length > 0
-                    ? 'bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-300'
-                    : 'bg-slate-100 dark:bg-[#232836] text-slate-400'
-                }`}>
-                  <ShieldAlert className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                    Solicitudes de Apoyo
-                  </span>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
-                    {blockedMembers.length > 0
-                      ? blockedMembers.map((b) => b.member.full_name.split(' ')[0]).join(', ')
-                      : 'Sin bloqueos reportados hoy'}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
-                blockedMembers.length > 0
-                  ? 'bg-amber-500 text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-[#232836] text-slate-500'
-              }`}>
-                {blockedMembers.length}
-              </span>
-            </button>
+            {blockedMembers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (blockedMembers.length === 1) {
+                    setDrawerMemberId(blockedMembers[0].member.id);
+                  } else {
+                    setTeamTab('semaforo');
+                  }
+                }}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-rose-50/90 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/25 hover:bg-rose-100/80 transition-colors cursor-pointer"
+              >
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {blockedMembers.length} {blockedMembers.length === 1 ? 'apoyo:' : 'apoyos:'}{' '}
+                  {blockedMembers.map((b) => b.member.full_name.split(' ')[0]).join(', ')}
+                </span>
+              </button>
+            )}
 
-            {/* 3. Colaboradores sin registro en la fecha */}
-            <button
-              type="button"
-              onClick={() => setTeamTab('semaforo')}
-              className={`text-left p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                noLogMembers.length > 0
-                  ? 'bg-white dark:bg-[#161922] border-slate-300 dark:border-[#2E3045] hover:border-sky-400 shadow-2xs'
-                  : 'bg-emerald-50/40 dark:bg-emerald-950/15 border-emerald-200/80 dark:border-emerald-800/40'
-              }`}
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                  noLogMembers.length > 0
-                    ? 'bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-300'
-                    : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300'
-                }`}>
-                  <UserCheck className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
-                    Sin Registro ({formatDateDisplay(selectedDate)})
-                  </span>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 truncate mt-0.5">
-                    {noLogMembers.length > 0
-                      ? noLogMembers.map((m) => m.member.full_name.split(' ')[0]).join(', ')
-                      : '100% del equipo con actividad registrada'}
-                  </p>
-                </div>
-              </div>
-              <span className={`text-xl font-black px-2.5 py-1 rounded-xl shrink-0 ${
-                noLogMembers.length > 0
-                  ? 'bg-slate-200 dark:bg-white/[0.08] text-slate-800 dark:text-slate-200'
-                  : 'bg-emerald-500 text-white'
-              }`}>
-                {noLogMembers.length}
-              </span>
-            </button>
+            {noLogMembers.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setTeamTab('semaforo')}
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#12151D] text-slate-600 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] hover:border-slate-300 transition-colors cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span>
+                  {noLogMembers.length} sin registro ({noLogMembers.map((m) => m.member.full_name.split(' ')[0]).slice(0, 3).join(', ')}
+                  {noLogMembers.length > 3 ? ` +${noLogMembers.length - 3}` : ''})
+                </span>
+              </button>
+            )}
           </div>
         );
       })()}
 
       {/* ================= CONTENIDO PRINCIPAL ================= */}
       {selectedMemberId === 'all' ? (
-        <div className="space-y-6">
-          {/* TAB 1: FEED EN VIVO (LÍNEA DE TIEMPO DE ACTIVIDADES EN TIEMPO REAL) */}
+        <div className="space-y-4">
+          {/* TAB 1: FEED EN VIVO */}
           {teamTab === 'feed' && (
-            <div className="space-y-4">
-              {/* Header & Feed Search */}
-              <div className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center">
-                    <Radio className="w-4 h-4 animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                      Línea de Tiempo de Actividades en Tiempo Real
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Viendo lo que tus colaboradores han anotado y actualizado para el {formatDateDisplay(selectedDate)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Filtrar por tarea, cliente o miembro..."
-                    value={feedSearch}
-                    onChange={(e) => setFeedSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-[#232836] border border-slate-200 dark:border-white/[0.08] rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500/30 text-slate-800 dark:text-white placeholder:text-slate-400"
-                  />
-                  {feedSearch && (
-                    <button
-                      onClick={() => setFeedSearch('')}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-
+            <div className="space-y-3">
               {/* Feed Stream Cards */}
               {loading && liveActivities.length === 0 ? (
-                <div className="py-16 text-center text-slate-400">
-                  <RefreshCw className="w-8 h-8 mx-auto animate-spin mb-3 text-sky-500" />
-                  <p className="text-sm font-medium">Sincronizando actividades del equipo en vivo...</p>
+                <div className="py-14 text-center text-slate-400">
+                  <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2.5 text-sky-500" />
+                  <p className="text-xs font-medium">Sincronizando actividades...</p>
                 </div>
               ) : filteredLiveFeed.length === 0 ? (
                 <EmptyState
                   icon={Clock}
-                  title={`No hay actividades anotadas para el ${formatDateDisplay(selectedDate)}`}
-                  description="Los colaboradores aún no han registrado tareas en esta fecha, o están redactando en su panel. Las tareas aparecerán aquí en vivo en cuanto se sincronicen."
-                  actionText="Ir al día de Hoy"
-                  onAction={handleToday}
+                  title={`Sin actividades el ${formatDateDisplay(selectedDate)}`}
+                  description="Las tareas aparecerán aquí en vivo conforme el equipo las registre."
+                  actionText={!isSelectedToday ? 'Ir a Hoy' : undefined}
+                  onAction={!isSelectedToday ? handleToday : undefined}
                 />
               ) : (
-                <div className="space-y-3">
-                  {(() => {
-                    const pendientes = filteredLiveFeed.filter((a) => a.estado === 'en_revision' && !isOwnActivity(a)).length;
-                    return pendientes > 0 ? (
-                      <div className="flex items-center gap-2.5 p-3 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-xs text-amber-800 dark:text-amber-200">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
-                        <span>
-                          <strong>{pendientes} {pendientes === 1 ? 'solicitud espera' : 'solicitudes esperan'} tu aprobación.</strong>{' '}
-                          Pulsa «Revisar» para dejar continuar, cerrar o devolver con observaciones.
-                        </span>
-                      </div>
-                    ) : null;
-                  })()}
+                <div className="space-y-2.5">
                   {filteredLiveFeed.map((act) => {
                     const isCompleted = act.estado === 'completada';
                     const isInReview = act.estado === 'en_revision';
@@ -1095,26 +922,25 @@ export const TeamSupervisionView: React.FC<TeamSupervisionViewProps> = ({ curren
                     return (
                       <div
                         key={act.id}
-                        className="bg-white dark:bg-[#161922] rounded-2xl border border-slate-200/90 dark:border-white/[0.08] p-4 sm:p-5 shadow-xs hover:border-sky-500/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 group"
+                        className="bg-white dark:bg-[#12151D] rounded-xl border border-slate-200/75 dark:border-white/[0.07] p-3.5 sm:p-4 hover:border-slate-300 dark:hover:border-white/15 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-3 group"
                       >
-                        <div className="flex items-start gap-3.5 flex-1 min-w-0">
-                          {/* Avatar */}
-                          <div className="w-10 h-10 rounded-xl bg-sky-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-xs">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-slate-900 dark:bg-sky-600 text-white font-semibold text-xs flex items-center justify-center shrink-0 mt-0.5">
                             {act.colaborador.charAt(0)}
                           </div>
 
-                          <div className="space-y-1.5 flex-1 min-w-0">
+                          <div className="space-y-1 flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold text-sm text-slate-900 dark:text-white">
+                              <span className="font-semibold text-[13.5px] text-slate-900 dark:text-white">
                                 {act.colaborador}
                               </span>
                               {act.team_name && (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-[#232836] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/[0.08]">
-                                  {act.team_name}
+                                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                  · {act.team_name}
                                 </span>
                               )}
                               {act.para_cliente && (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/40">
+                                <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-300">
                                   {act.para_cliente}
                                 </span>
                               )}

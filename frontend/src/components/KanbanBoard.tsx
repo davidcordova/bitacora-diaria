@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   Plus,
   Trash2,
@@ -174,6 +174,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onAddActividadConEstado(estado);
     }
   };
+
+  useEffect(() => {
+    const handleQuickNew = () => {
+      if (!isLeaderView || onAddActividad) {
+        handleOpenCreateForColumn('en_proceso');
+      }
+    };
+    window.addEventListener('bitacora:open-new-activity', handleQuickNew);
+    return () => window.removeEventListener('bitacora:open-new-activity', handleQuickNew);
+  }, [isLeaderView, onAddActividad]);
 
   const handleOpenEdit = (index: number) => {
     const target = actividades[index];

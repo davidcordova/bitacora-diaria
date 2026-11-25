@@ -34,6 +34,7 @@ import {
   Check,
   X,
   StickyNote,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { Actividad, EstadoActividad, User, Evidencia, Nota } from '../types';
 import { formatDuration, calculateHoraFin, getTodayLocalDateStr, shiftDateByDays, stripHtml } from '../utils/formatters';
@@ -116,6 +117,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
   const [clientSuggestions, setClientSuggestions] = useState<string[]>([]);
   const [recentFeedback, setRecentFeedback] = useState<string | null>(null);
   const [showPresets, setShowPresets] = useState<boolean>(false);
+  const [quickOptionsOpen, setQuickOptionsOpen] = useState<boolean>(false);
 
   // Cargar sugerencias normalizadas de clientes una sola vez al montar (las nuevas se fusionan con useMemo)
   useEffect(() => {
@@ -485,45 +487,57 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createModalOpen, detailModalOpen, refModalOpen, quickDesc, quickDuration, quickTipo, quickCliente]);
 
+  // Escuchar evento del botón '+' de la barra móvil inferior
+  useEffect(() => {
+    const handleQuickNew = () => {
+      handleOpenCreateModal();
+    };
+    window.addEventListener('bitacora:open-new-activity', handleQuickNew);
+    return () => window.removeEventListener('bitacora:open-new-activity', handleQuickNew);
+  }, []);
+
   const getStatusBadge = (estado: EstadoActividad) => {
     switch (estado) {
       case 'completada':
         return {
-          bg: 'bg-emerald-50/90 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25',
+          bg: 'bg-emerald-50/80 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-500/20',
           label: 'Completada',
         };
       case 'en_proceso':
         return {
-          bg: 'bg-sky-50/90 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-500/25',
+          bg: 'bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200/70 dark:border-sky-500/20',
           label: 'En proceso',
         };
       case 'en_revision':
         return {
-          bg: 'bg-amber-50/90 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25',
+          bg: 'bg-amber-50/80 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-500/20',
           label: 'En revisión',
         };
       case 'pendiente':
       default:
         return {
-          bg: 'bg-slate-100/80 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border-slate-200/90 dark:border-white/10',
+          bg: 'bg-slate-100/70 dark:bg-white/[0.05] text-slate-600 dark:text-slate-300 border-slate-200/70 dark:border-white/10',
           label: 'Por iniciar',
         };
     }
   };
 
+  const showQuickOptions = quickOptionsOpen || quickDesc.trim().length > 0;
+
   return (
-    <div className="bg-white dark:bg-[#161922] rounded-xl border border-slate-200/80 dark:border-white/[0.07] shadow-2xs overflow-hidden">
+    <div className="bg-white dark:bg-[#12151D] rounded-xl border border-slate-200/75 dark:border-white/[0.07] overflow-hidden">
       {/* 1. CLEAN UNIFIED HEADER BAR */}
-      <div className="px-4 sm:px-5 py-3 border-b border-slate-200/70 dark:border-white/[0.06] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-        {/* Left: Date Navigator + Start Time + Connection Alert */}
-        <div className="flex flex-wrap items-center gap-2.5">
+      <div className="px-3.5 sm:px-5 py-3 border-b border-slate-100 dark:border-white/[0.06] flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2.5">
+        {/* Left: Date Navigator + Start Time (Uncropped!) */}
+        <div className="flex flex-wrap items-center justify-between sm:justify-start gap-2">
           {fecha && onDateChange && (
-            <div className="inline-flex items-center bg-slate-50 dark:bg-[#1E222D] p-0.5 rounded-lg border border-slate-200/80 dark:border-white/[0.08]">
+            <div className="inline-flex items-center bg-slate-100/70 dark:bg-white/[0.04] p-0.5 rounded-lg">
               <button
                 type="button"
                 onClick={() => changeDayByOffset(-1)}
                 title="Día anterior"
-                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer flex items-center justify-center"
+                aria-label="Día anterior"
+                className="w-8 h-8 sm:w-7 sm:h-7 text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-white dark:hover:bg-white/[0.07] rounded-md transition-colors cursor-pointer flex items-center justify-center"
               >
                 <ChevronLeft className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               </button>
@@ -538,10 +552,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       dateInputRef.current?.focus();
                     }
                   }}
-                  className="min-h-[40px] sm:min-h-0 flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-white/[0.05] rounded-md cursor-pointer transition-colors"
-                  title="Seleccionar fecha en el calendario"
+                  className="h-8 sm:h-7 flex items-center gap-1.5 px-2 text-xs font-semibold text-slate-800 dark:text-slate-100 hover:bg-white dark:hover:bg-white/[0.06] rounded-md cursor-pointer transition-colors"
+                  title="Seleccionar fecha"
                 >
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400 shrink-0" />
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span>{formatHeaderDate(fecha)}</span>
                 </button>
 
@@ -549,10 +563,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   <button
                     type="button"
                     onClick={goToToday}
-                    className="min-h-[40px] sm:min-h-0 text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline px-2 py-0.5 cursor-pointer flex items-center"
-                    title="Volver a la fecha de hoy"
+                    className="h-7 text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline px-1.5 cursor-pointer flex items-center"
+                    title="Volver a hoy"
                   >
-                    Ir a hoy
+                    Hoy
                   </button>
                 )}
 
@@ -575,26 +589,26 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 type="button"
                 onClick={() => changeDayByOffset(1)}
                 title="Día siguiente"
-                className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer flex items-center justify-center"
+                aria-label="Día siguiente"
+                className="w-8 h-8 sm:w-7 sm:h-7 text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-white dark:hover:bg-white/[0.07] rounded-md transition-colors cursor-pointer flex items-center justify-center"
               >
                 <ChevronRight className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               </button>
             </div>
           )}
 
-          {/* Subtle Referential Start Time */}
+          {/* Uncropped Referential Start Time */}
           <div
-            className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-[#1E222D] border border-slate-200/80 dark:border-white/[0.08]"
+            className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 px-2.5 h-8 sm:h-7 rounded-lg bg-slate-100/70 dark:bg-white/[0.04]"
             title="Hora referencial de inicio de la jornada"
           >
-            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span className="text-[11px] text-slate-400 dark:text-slate-500">Inicio</span>
             {onHoraInicioChange ? (
               <input
                 type="time"
                 value={horaInicio || '08:30'}
                 onChange={(e) => onHoraInicioChange(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer w-14 tabular-nums"
+                className="bg-transparent text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none cursor-pointer w-[88px] sm:w-[86px] tabular-nums"
                 title="Ajustar hora referencial de inicio"
               />
             ) : (
@@ -610,16 +624,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                 type="button"
                 onClick={onForceSyncCloud}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 hover:bg-rose-100 transition-colors cursor-pointer"
-                title="Hubo un problema de conexión al guardar. Clic para reintentar ahora"
               >
                 <CloudOff className="w-3.5 h-3.5 text-rose-500" />
-                <span>Reintentar guardado</span>
+                <span>Reintentar</span>
               </button>
               {onOpenErrorReport && (
                 <button
                   type="button"
                   onClick={onOpenErrorReport}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium text-amber-700 dark:text-amber-300 hover:underline cursor-pointer"
                 >
                   <span>Ver detalle</span>
                 </button>
@@ -629,21 +642,21 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         </div>
 
         {/* Right: Quiet Inline Progress + Primary Action */}
-        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4">
+        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3">
           {actividades.length > 0 && (
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-2.5 text-xs">
               <div className="flex items-center gap-1.5 tabular-nums">
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                <span className="font-semibold text-slate-800 dark:text-slate-100">
                   {formatDuration(totalMinutos)}
                 </span>
                 <span className="text-slate-400 dark:text-slate-500">/ 8h</span>
                 <span className="text-slate-300 dark:text-slate-600">·</span>
                 <span className="text-slate-500 dark:text-slate-400">
-                  {completadasCount} de {actividades.length} completadas
+                  {completadasCount}/{actividades.length} listas
                 </span>
               </div>
               <div
-                className="hidden sm:block w-24 bg-slate-100 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden"
+                className="hidden sm:block w-20 bg-slate-100 dark:bg-white/[0.08] h-1.5 rounded-full overflow-hidden"
                 title={`${porcentajeJornada}% de la meta diaria de 8 horas`}
               >
                 <div
@@ -661,22 +674,22 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
               <button
                 type="button"
                 onClick={onOpenQuickCierre}
-                className={`inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-colors shrink-0 cursor-pointer min-h-[40px] sm:min-h-[34px] ${
+                className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 cursor-pointer h-8 ${
                   isJornadaClosed
-                    ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/25 hover:bg-emerald-100 dark:hover:bg-emerald-500/15'
-                    : 'bg-slate-50 dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border-slate-200/90 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/[0.08]'
+                    ? 'bg-emerald-50/80 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/80'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06]'
                 }`}
-                title="Abrir cierre rápido de jornada sin desplazarte al final"
+                title="Abrir cierre rápido de jornada"
               >
                 <CheckCircle2 className={`w-3.5 h-3.5 shrink-0 ${isJornadaClosed ? 'text-emerald-500' : 'text-slate-400'}`} />
-                <span>{isJornadaClosed ? 'Jornada cerrada' : 'Cerrar jornada'}</span>
+                <span>{isJornadaClosed ? 'Cerrada' : 'Cerrar día'}</span>
               </button>
             )}
 
             <button
               type="button"
               onClick={handleOpenCreateModal}
-              className="inline-flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer min-h-[40px] sm:min-h-[34px]"
+              className="hidden sm:inline-flex items-center justify-center gap-1.5 bg-sky-600 hover:bg-sky-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0 cursor-pointer h-8"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Nueva actividad</span>
@@ -685,124 +698,144 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         </div>
       </div>
 
-      {/* 2. CLEAN SINGLE-ROW QUICK ENTRY BAR (Zero Input Overlap) */}
-      <div className="px-4 sm:px-5 py-2.5 bg-slate-50/70 dark:bg-[#1A1E29]/60 border-b border-slate-200/70 dark:border-white/[0.06] space-y-2">
-        <form onSubmit={handleQuickAddSubmit} className="flex flex-col xl:flex-row items-stretch xl:items-center gap-2">
-          <input
-            type="text"
-            value={quickDesc}
-            onChange={(e) => setQuickDesc(e.target.value)}
-            placeholder="Registrar actividad rápida... (Enter para agregar, N para formulario completo)"
-            className="flex-1 min-w-0 px-3 py-1.5 text-xs sm:text-[13px] bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/90 dark:border-white/[0.08] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 min-h-[34px]"
-          />
-
-          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5">
-            <select
-              value={quickDuration}
-              onChange={(e) => setQuickDuration(Number(e.target.value))}
-              aria-label="Duración rápida"
-              title="Duración estimada"
-              className="w-full sm:w-auto text-xs font-medium px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px] tabular-nums"
-            >
-              <option value={15}>15 min</option>
-              <option value={30}>30 min</option>
-              <option value={45}>45 min</option>
-              <option value={60}>1 h</option>
-              <option value={90}>1h 30m</option>
-              <option value={120}>2 h</option>
-              <option value={180}>3 h</option>
-              <option value={240}>4 h</option>
-            </select>
-
+      {/* 2. PROGRESSIVE MINIMALIST QUICK ENTRY BAR */}
+      <div className="px-3.5 sm:px-5 py-2.5 bg-slate-50/50 dark:bg-white/[0.015] border-b border-slate-100 dark:border-white/[0.06] space-y-2">
+        <form onSubmit={handleQuickAddSubmit} className="space-y-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <input
               type="text"
-              list="quick-clientes-datalist"
-              value={quickCliente}
-              onChange={(e) => setQuickCliente(e.target.value)}
-              placeholder="Cliente / Área"
-              className="w-full sm:w-36 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 min-h-[34px] placeholder:text-slate-400 min-w-0"
-              title="Cliente o área (opcional)"
+              value={quickDesc}
+              onChange={(e) => setQuickDesc(e.target.value)}
+              placeholder="Registrar actividad rápida..."
+              className="flex-1 min-w-0 px-3 py-2 text-[13px] bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-100 rounded-lg border border-slate-200/80 dark:border-white/[0.08] focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 outline-hidden transition-all placeholder:text-slate-400 dark:placeholder:text-slate-500 h-9"
             />
-            <datalist id="quick-clientes-datalist">
-              {mergedClientSuggestions.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
 
-            <select
-              value={quickTipo}
-              onChange={(e) => setQuickTipo(e.target.value)}
-              aria-label="Tipo de trabajo para registro rápido"
-              className="col-span-2 sm:col-span-1 w-full sm:w-40 text-xs px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer min-h-[34px]"
+            {/* Compact Options Chip (reveals Duration/Client/Type on demand or while typing) */}
+            <button
+              type="button"
+              onClick={() => setQuickOptionsOpen((prev) => !prev)}
+              title="Configurar duración, cliente y tipo"
+              className={`inline-flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 border ${
+                showQuickOptions
+                  ? 'bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-200/80 dark:border-sky-500/25'
+                  : 'bg-white dark:bg-[#191D28] text-slate-500 dark:text-slate-400 border-slate-200/80 dark:border-white/[0.08] hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
             >
-              {TIPOS_TRABAJO.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
+              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline tabular-nums">
+                {quickDuration >= 60 ? `${quickDuration / 60}h` : `${quickDuration}m`}
+              </span>
+            </button>
 
-            <div className="col-span-2 sm:col-span-1 flex items-center gap-1.5">
-              <button
-                type="submit"
-                disabled={!quickDesc.trim()}
-                className="flex-1 sm:flex-initial px-3 py-1.5 bg-slate-800 hover:bg-slate-900 dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0 min-h-[34px]"
-              >
-                Agregar
-              </button>
+            <button
+              type="submit"
+              disabled={!quickDesc.trim()}
+              className="px-3.5 h-9 bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 disabled:opacity-35 text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            >
+              Agregar
+            </button>
 
-              {/* Live Timer */}
-              {!isTimerRunning ? (
-                <button
-                  type="button"
-                  onClick={handleStartTimer}
-                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border border-slate-200/90 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer min-h-[34px] shrink-0"
-                  title="Iniciar cronómetro en vivo"
-                >
-                  <Play className="w-3 h-3 text-slate-500 dark:text-slate-400 fill-current" />
-                  <span className="hidden sm:inline">Cronómetro</span>
-                </button>
-              ) : (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 min-h-[34px] shrink-0">
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                  <span className="font-mono tabular-nums">{formatTimerClock(timerSeconds)}</span>
-                  <button
-                    type="button"
-                    onClick={handleStopTimer}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 cursor-pointer"
-                    title="Detener cronómetro y registrar actividad"
-                  >
-                    <Square className="w-2.5 h-2.5 fill-current" />
-                    <span>Guardar</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancelTimer}
-                    className="p-0.5 text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 cursor-pointer"
-                    title="Descartar cronómetro"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              {/* Quiet Presets Toggle */}
+            {/* Live Timer */}
+            {!isTimerRunning ? (
               <button
                 type="button"
-                onClick={() => setShowPresets((prev) => !prev)}
-                className={`inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer min-h-[34px] shrink-0 ${
-                  showPresets
-                    ? 'bg-slate-200/80 dark:bg-white/10 text-slate-800 dark:text-white border-slate-300 dark:border-white/15'
-                    : 'bg-white dark:bg-[#1E222D] text-slate-500 dark:text-slate-400 border-slate-200/90 dark:border-white/[0.08] hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-                title="Plantillas rápidas de 1 clic"
+                onClick={handleStartTimer}
+                className="inline-flex items-center justify-center gap-1.5 px-2.5 h-9 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/[0.06] transition-colors cursor-pointer shrink-0"
+                title="Iniciar cronómetro en vivo"
               >
-                <Zap className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Plantillas</span>
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span className="hidden xl:inline">Cronómetro</span>
               </button>
-            </div>
+            ) : (
+              <div className="inline-flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-xs font-semibold bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-500/30 shrink-0">
+                <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                <span className="font-mono tabular-nums">{formatTimerClock(timerSeconds)}</span>
+                <button
+                  type="button"
+                  onClick={handleStopTimer}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-600 text-white text-[11px] font-semibold hover:bg-rose-500 cursor-pointer"
+                  title="Detener y guardar"
+                >
+                  <Square className="w-2.5 h-2.5 fill-current" />
+                  <span className="hidden sm:inline">Guardar</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelTimer}
+                  className="p-0.5 text-rose-400 hover:text-rose-700 dark:hover:text-rose-200 cursor-pointer"
+                  title="Descartar cronómetro"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {/* Quiet Presets Toggle */}
+            <button
+              type="button"
+              onClick={() => setShowPresets((prev) => !prev)}
+              className={`inline-flex items-center justify-center gap-1 px-2.5 h-9 rounded-lg text-xs font-medium transition-colors cursor-pointer shrink-0 ${
+                showPresets
+                  ? 'bg-slate-200/80 dark:bg-white/10 text-slate-900 dark:text-white'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-white/[0.06]'
+              }`}
+              title="Plantillas rápidas de 1 clic"
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Plantillas</span>
+            </button>
           </div>
+
+          {/* Progressive Optional Fields: revealed smoothly while typing or toggled */}
+          {showQuickOptions && (
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 pt-0.5 animate-in fade-in duration-150">
+              <select
+                value={quickDuration}
+                onChange={(e) => setQuickDuration(Number(e.target.value))}
+                aria-label="Duración rápida"
+                title="Duración estimada"
+                className="w-full sm:w-auto text-xs font-medium px-2.5 h-8 rounded-lg bg-white dark:bg-[#191D28] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer tabular-nums"
+              >
+                <option value={15}>15 min</option>
+                <option value={30}>30 min</option>
+                <option value={45}>45 min</option>
+                <option value={60}>1 h</option>
+                <option value={90}>1h 30m</option>
+                <option value={120}>2 h</option>
+                <option value={180}>3 h</option>
+                <option value={240}>4 h</option>
+              </select>
+
+              <input
+                type="text"
+                list="quick-clientes-datalist"
+                value={quickCliente}
+                onChange={(e) => setQuickCliente(e.target.value)}
+                placeholder="Cliente / Área (opcional)"
+                className="w-full sm:w-44 text-xs px-2.5 h-8 rounded-lg bg-white dark:bg-[#191D28] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 placeholder:text-slate-400 min-w-0"
+                title="Cliente o área (opcional)"
+              />
+              <datalist id="quick-clientes-datalist">
+                {mergedClientSuggestions.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+
+              <select
+                value={quickTipo}
+                onChange={(e) => setQuickTipo(e.target.value)}
+                aria-label="Tipo de trabajo para registro rápido"
+                className="col-span-2 sm:col-span-1 w-full sm:w-44 text-xs px-2.5 h-8 rounded-lg bg-white dark:bg-[#191D28] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/[0.08] focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                {TIPOS_TRABAJO.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </form>
 
-        {/* Collapsible Presets Row (Only shown when explicitly toggled) */}
+        {/* Collapsible Presets Row */}
         {showPresets && (
           <div className="flex flex-wrap items-center gap-1.5 pt-1">
             {IT_PRESETS.map((preset) => {
@@ -812,12 +845,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   key={preset.id}
                   type="button"
                   onClick={() => handleApplyPreset(preset)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-white/[0.07] text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-white/[0.08] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-white dark:bg-[#191D28] hover:bg-slate-100 dark:hover:bg-white/[0.07] text-slate-700 dark:text-slate-300 border border-slate-200/75 dark:border-white/[0.08] transition-colors cursor-pointer"
                   title={`Registrar "${preset.label}" (${preset.duracion} min)`}
                 >
                   <Icon className="w-3 h-3 text-slate-400 shrink-0" />
                   <span>{preset.label}</span>
-                  <span className="text-slate-400 text-[11px]">({preset.duracion}m)</span>
+                  <span className="text-slate-400 text-[11px]">{preset.duracion}m</span>
                 </button>
               );
             })}
@@ -825,24 +858,24 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         )}
 
         {recentFeedback && (
-          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-500/10 px-2.5 py-1.5 rounded-lg border border-emerald-200/80 dark:border-emerald-500/20">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50/80 dark:bg-emerald-500/10 px-2.5 py-1.5 rounded-lg">
             <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span>{recentFeedback}</span>
           </div>
         )}
 
         {notasRecordatorio && notasRecordatorio.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 text-xs bg-sky-50/70 dark:bg-sky-500/10 px-3 py-2 rounded-xl border border-sky-200/80 dark:border-sky-500/25">
-            <StickyNote className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
-            <span className="font-semibold text-sky-800 dark:text-sky-200">
-              Notas programadas ({notasRecordatorio.length}):
+          <div className="flex flex-wrap items-center gap-1.5 text-xs pt-0.5">
+            <span className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400 font-medium">
+              <StickyNote className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+              <span>Notas hoy:</span>
             </span>
             {notasRecordatorio.map((nota) => (
               <button
                 key={nota.id}
                 type="button"
                 onClick={() => onOpenNotaContext?.(nota.id)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-[#1E222D] hover:bg-sky-600 text-sky-700 dark:text-sky-300 hover:text-white border border-sky-200 dark:border-sky-500/30 font-medium transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50/90 dark:bg-sky-500/10 hover:bg-sky-100 dark:hover:bg-sky-500/20 text-sky-700 dark:text-sky-300 font-medium transition-colors cursor-pointer"
               >
                 <span className="truncate max-w-[180px]">{nota.titulo}</span>
               </button>
@@ -853,15 +886,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
 
       {/* Empty State */}
       {actividades.length === 0 ? (
-        <div className="text-center py-12 px-4">
+        <div className="text-center py-14 px-4">
           <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-white/[0.05] text-slate-400 dark:text-slate-500 flex items-center justify-center mx-auto mb-3">
             <ListChecks className="w-5 h-5" />
           </div>
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
             Sin actividades {isToday(fecha) ? 'hoy' : 'en esta fecha'}
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto mb-4">
-            Escribe arriba para un registro rápido o abre el formulario para detallar horarios y evidencias.
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto mb-4">
+            Escribe arriba para registrar rápido o abre el formulario completo.
           </p>
           <button
             type="button"
@@ -874,20 +907,20 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
         </div>
       ) : (
         <>
-          {/* DESKTOP CLEAN 6-COLUMN TABLE (Zero horizontal clipping on 1366px screens) */}
+          {/* DESKTOP CLEAN TABLE */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200/80 dark:border-white/[0.06] bg-slate-50/50 dark:bg-white/[0.02] text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-slate-100 dark:border-white/[0.06] text-[11px] font-medium text-slate-400 dark:text-slate-500">
                   <th className="py-2.5 px-3 w-10 text-center">#</th>
                   <th className="py-2.5 px-3 w-40 whitespace-nowrap">Horario</th>
                   <th className="py-2.5 px-4">Actividad</th>
                   <th className="py-2.5 px-3 w-44 whitespace-nowrap">Cliente / Tipo</th>
                   <th className="py-2.5 px-3 w-36 whitespace-nowrap">Estado</th>
-                  <th className="py-2.5 px-3 w-20 text-right whitespace-nowrap">Acciones</th>
+                  <th className="py-2.5 px-3 w-20 text-right whitespace-nowrap"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05] text-xs text-slate-700 dark:text-slate-300">
+              <tbody className="divide-y divide-slate-100/90 dark:divide-white/[0.05] text-xs text-slate-700 dark:text-slate-300">
                 {actividades.map((act, index) => {
                   const statusConfig = getStatusBadge(act.estado);
                   const sharedNames = act.shared_with_names || [];
@@ -915,25 +948,23 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                       key={act.id || `act-${index}`}
                       id={act.id ? `act-row-${act.id}` : undefined}
                       onClick={() => handleOpenDetailModal(act, index)}
-                      className={`group hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer ${
+                      className={`group hover:bg-slate-50/70 dark:hover:bg-white/[0.025] transition-colors cursor-pointer ${
                         highlightedActId === act.id ? 'act-highlighted bg-sky-50/60 dark:bg-sky-500/10' : ''
                       }`}
                     >
-                      {/* # */}
-                      <td className="py-3 px-3 text-center align-top">
+                      <td className="py-3.5 px-3 text-center align-top">
                         <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500 tabular-nums">
                           {index + 1}
                         </span>
                       </td>
 
-                      {/* Horario & Duración Neta */}
-                      <td className="py-3 px-3 whitespace-nowrap align-top">
+                      <td className="py-3.5 px-3 whitespace-nowrap align-top">
                         {isUntimed ? (
                           <div className="flex flex-col">
                             <span className="text-xs text-slate-400 dark:text-slate-500">Sin horario</span>
                             {(act.parent_task_id || act.is_rollover) && (
                               <span className="text-[11px] text-slate-400/80 dark:text-slate-500">
-                                Pendiente previa
+                                Previa
                               </span>
                             )}
                           </div>
@@ -947,15 +978,15 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                               </span>
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px]">
-                              <span className="font-semibold text-slate-500 dark:text-slate-400">
+                              <span className="font-medium text-slate-500 dark:text-slate-400">
                                 {formatDuration(act.duracion_min)}
                               </span>
                               {discountedMin > 0 && (
                                 <span
                                   className="text-[10px] font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-1.5 py-0.2 rounded"
-                                  title={`Ventana total: ${formatDuration(grossMin)}. Se descontaron automáticamente ${formatDuration(discountedMin)} ocupados por actividades realizadas dentro de este rango.`}
+                                  title={`Ventana total: ${formatDuration(grossMin)}. Descontado: ${formatDuration(discountedMin)}`}
                                 >
-                                  −{formatDuration(discountedMin)} int.
+                                  −{formatDuration(discountedMin)}
                                 </span>
                               )}
                             </div>
@@ -963,13 +994,12 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         )}
                       </td>
 
-                      {/* Actividad (Descripción limpia + metadatos discretos solo cuando existen) */}
-                      <td className="py-3 px-4 align-top w-full max-w-0">
+                      <td className="py-3.5 px-4 align-top w-full max-w-0">
                         <div className="flex flex-col gap-1 min-w-0 overflow-hidden">
                           <RichHtmlRenderer
                             content={act.descripcion}
                             clampLines={2}
-                            className="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug"
+                            className="text-[13.5px] font-medium text-slate-800 dark:text-slate-100 leading-relaxed"
                           />
 
                           {hasMetaRow && (
@@ -1025,10 +1055,10 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                               {evidenceCount > 0 && (
                                 <span
                                   className="inline-flex items-center gap-1 text-slate-500 dark:text-slate-400"
-                                  title={`${evidenceCount} archivo(s) adjunto(s)`}
+                                  title={`${evidenceCount} adjunto(s)`}
                                 >
                                   <Paperclip className="w-3 h-3" />
-                                  <span>{evidenceCount} adj.</span>
+                                  <span>{evidenceCount}</span>
                                 </span>
                               )}
 
@@ -1048,7 +1078,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                   title={`Registrado en apoyo por ${act.created_by_name}`}
                                 >
                                   <UserCheck className="w-3 h-3" />
-                                  <span>Apoyo: {act.created_by_name.split(' ')[0]}</span>
+                                  <span>{act.created_by_name.split(' ')[0]}</span>
                                 </span>
                               )}
 
@@ -1061,8 +1091,8 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                       e.stopPropagation();
                                       onOpenNotaContext?.(nota.id);
                                     }}
-                                    title={`Ver nota de contexto: ${nota.titulo}`}
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200/80 dark:border-sky-500/25 hover:bg-sky-100 dark:hover:bg-sky-500/20 font-medium transition-colors cursor-pointer"
+                                    title={`Ver nota: ${nota.titulo}`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50/80 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 font-medium transition-colors cursor-pointer"
                                   >
                                     <StickyNote className="w-3 h-3 shrink-0" />
                                     <span className="truncate max-w-[140px]">{nota.titulo}</span>
@@ -1079,8 +1109,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         </div>
                       </td>
 
-                      {/* Cliente / Tipo limpio sin cajas redundantes */}
-                      <td className="py-3 px-3 whitespace-nowrap align-top">
+                      <td className="py-3.5 px-3 whitespace-nowrap align-top">
                         {act.para_cliente || act.tipo_trabajo ? (
                           <div className="flex flex-col gap-0.5">
                             {act.para_cliente && (
@@ -1099,8 +1128,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                         )}
                       </td>
 
-                      {/* Estado */}
-                      <td className="py-3 px-3 whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3.5 px-3 whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
                         <div className="relative inline-flex items-center">
                           <select
                             value={act.estado}
@@ -1112,25 +1140,24 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                                 onUpdateActividad(index, 'estado', nuevoEstado);
                               }
                             }}
-                            className={`text-xs font-semibold pl-2.5 pr-6 py-1 rounded-lg border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
+                            className={`text-xs font-medium pl-2.5 pr-6 py-1 rounded-full border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
                           >
-                            <option value="pendiente" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Por iniciar</option>
-                            <option value="en_proceso" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En proceso</option>
-                            <option value="en_revision" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En revisión</option>
-                            <option value="completada" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Completada</option>
+                            <option value="pendiente" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">Por iniciar</option>
+                            <option value="en_proceso" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">En proceso</option>
+                            <option value="en_revision" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">En revisión</option>
+                            <option value="completada" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">Completada</option>
                           </select>
                           <ChevronRight className="w-3 h-3 rotate-90 absolute right-2 pointer-events-none opacity-50" />
                         </div>
                       </td>
 
-                      {/* Acciones */}
-                      <td className="py-3 px-3 text-right whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-0.5">
+                      <td className="py-3.5 px-3 text-right whitespace-nowrap align-top" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-0.5 opacity-60 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => handleOpenEditModal(act, index)}
                             className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-md transition-colors cursor-pointer"
-                            title="Editar actividad"
+                            title="Editar"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -1152,7 +1179,7 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
             </table>
           </div>
 
-          {/* MOBILE / TABLET CLEAN LIST VIEW (< 1024px) */}
+          {/* MOBILE / TABLET CLEAN CONTENT-FIRST LIST (< 1024px) */}
           <div className="lg:hidden divide-y divide-slate-100 dark:divide-white/[0.06]">
             {actividades.map((act, index) => {
               const statusConfig = getStatusBadge(act.estado);
@@ -1169,116 +1196,92 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                   key={act.id || `act-m-${index}`}
                   id={act.id ? `act-m-${act.id}` : undefined}
                   onClick={() => handleOpenDetailModal(act, index)}
-                  className={`p-3.5 hover:bg-slate-50/80 dark:hover:bg-white/[0.025] transition-colors cursor-pointer ${
+                  className={`px-4 py-3.5 active:bg-slate-50 dark:active:bg-white/[0.03] transition-colors cursor-pointer ${
                     highlightedActId === act.id ? 'act-highlighted bg-sky-50/60 dark:bg-sky-500/10' : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
-                      <span className="text-[11px] font-mono text-slate-400 dark:text-slate-500">
-                        #{index + 1}
-                      </span>
-                      {isUntimed ? (
-                        <span className="text-slate-400 dark:text-slate-500">Sin horario</span>
-                      ) : (
-                        <>
-                          <span className="font-medium text-slate-800 dark:text-slate-200">
-                            {act.hora_inicio || '--:--'} –{' '}
-                            {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}
-                          </span>
-                          <span className="font-semibold text-slate-500 dark:text-slate-400">
-                            ({formatDuration(act.duracion_min)})
-                          </span>
-                          {discountedMin > 0 && (
-                            <span className="text-[10px] font-medium text-sky-700 dark:text-sky-400 bg-sky-50 dark:bg-sky-500/10 px-1.5 py-0.2 rounded">
-                              −{formatDuration(discountedMin)} int.
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5 sm:gap-0.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditModal(act, index)}
-                        className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
-                        title="Editar"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onRemoveActividad(index)}
-                        className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-
+                  {/* 1. Description first for instant readability */}
                   <div className="mb-2 min-w-0 overflow-hidden">
                     <RichHtmlRenderer
                       content={act.descripcion}
                       clampLines={2}
-                      className="text-[13px] font-medium text-slate-800 dark:text-slate-100 leading-snug"
+                      className="text-[14px] font-medium text-slate-900 dark:text-slate-100 leading-snug"
                     />
                     {(act.estado === 'en_revision' || act.revision_decision) && (
-                      <div className="mt-1">
+                      <div className="mt-1.5">
                         <RevisionBadge actividad={act} />
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0">
-                      {act.para_cliente && (
-                        <span className="font-medium text-slate-700 dark:text-slate-300 truncate max-w-[130px]">
-                          {act.para_cliente}
-                        </span>
-                      )}
-                      {act.tipo_trabajo && (
+                  {/* 2. Quiet metadata row */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400 mb-2.5 tabular-nums">
+                    {isUntimed ? (
+                      <span>Sin horario</span>
+                    ) : (
+                      <span className="font-medium text-slate-600 dark:text-slate-300">
+                        {act.hora_inicio || '--:--'} –{' '}
+                        {act.hora_fin || calculateHoraFin(act.hora_inicio, act.duracion_min, fecha) || '--:--'}{' '}
+                        <span className="text-slate-400">({formatDuration(act.duracion_min)})</span>
+                      </span>
+                    )}
+                    {discountedMin > 0 && (
+                      <span className="text-[11px] font-medium text-sky-600 dark:text-sky-400">
+                        −{formatDuration(discountedMin)}
+                      </span>
+                    )}
+                    {act.para_cliente && (
+                      <>
+                        <span className="text-slate-300 dark:text-slate-600">·</span>
+                        <span className="truncate max-w-[140px]">{act.para_cliente}</span>
+                      </>
+                    )}
+                    {act.tipo_trabajo && (
+                      <>
+                        <span className="text-slate-300 dark:text-slate-600">·</span>
                         <span className="text-slate-400 dark:text-slate-500">{act.tipo_trabajo}</span>
-                      )}
-                      {act.parent_task_id && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
-                          className="inline-flex items-center gap-0.5 text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 cursor-pointer"
-                        >
-                          <Link2 className="w-3 h-3" />
-                          <span>Continuación</span>
-                        </button>
-                      )}
-                      {hasShared && (
-                        <span className="inline-flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          <span>{sharedNames[0] || 'Compartida'}</span>
-                        </span>
-                      )}
-                      {evidenceCount > 0 && (
-                        <span className="inline-flex items-center gap-0.5">
-                          <Paperclip className="w-3 h-3" />
-                          <span>{evidenceCount}</span>
-                        </span>
-                      )}
-                      {(act.notas_vinculadas?.length || 0) > 0 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenNotaContext?.(act.notas_vinculadas![0].id);
-                          }}
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-500/25 font-medium cursor-pointer"
-                        >
-                          <StickyNote className="w-3 h-3" />
-                          <span>{act.notas_vinculadas!.length}</span>
-                        </button>
-                      )}
-                    </div>
+                      </>
+                    )}
+                    {act.parent_task_id && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleNavigateToRef(act.parent_task_id!, act.tipo_vinculo, e)}
+                        className="inline-flex items-center gap-0.5 text-sky-600 dark:text-sky-400 cursor-pointer"
+                      >
+                        <Link2 className="w-3 h-3" />
+                        <span>Cont.</span>
+                      </button>
+                    )}
+                    {hasShared && (
+                      <span className="inline-flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        <span>{sharedNames[0] || 'Comp.'}</span>
+                      </span>
+                    )}
+                    {evidenceCount > 0 && (
+                      <span className="inline-flex items-center gap-0.5">
+                        <Paperclip className="w-3 h-3" />
+                        <span>{evidenceCount}</span>
+                      </span>
+                    )}
+                    {(act.notas_vinculadas?.length || 0) > 0 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenNotaContext?.(act.notas_vinculadas![0].id);
+                        }}
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 text-[11px] font-medium cursor-pointer"
+                      >
+                        <StickyNote className="w-3 h-3" />
+                        <span>{act.notas_vinculadas!.length}</span>
+                      </button>
+                    )}
+                  </div>
 
-                    <div className="relative inline-flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                  {/* 3. Status + Touch Actions Footer */}
+                  <div className="flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="relative inline-flex items-center">
                       <select
                         value={act.estado}
                         onChange={(e) => {
@@ -1289,14 +1292,33 @@ export const ActividadesLista: React.FC<ActividadesListaProps> = ({
                             onUpdateActividad(index, 'estado', nuevoEstado);
                           }
                         }}
-                        className={`text-[11px] font-semibold pl-2.5 pr-6 py-1 rounded-lg border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
+                        className={`text-xs font-medium pl-3 pr-7 py-1 rounded-full border transition-colors cursor-pointer outline-hidden appearance-none ${statusConfig.bg}`}
                       >
-                        <option value="pendiente" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Por iniciar</option>
-                        <option value="en_proceso" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En proceso</option>
-                        <option value="en_revision" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">En revisión</option>
-                        <option value="completada" className="bg-white dark:bg-[#1E222D] text-slate-800 dark:text-slate-200">Completada</option>
+                        <option value="pendiente" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">Por iniciar</option>
+                        <option value="en_proceso" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">En proceso</option>
+                        <option value="en_revision" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">En revisión</option>
+                        <option value="completada" className="bg-white dark:bg-[#191D28] text-slate-800 dark:text-slate-200">Completada</option>
                       </select>
-                      <ChevronRight className="w-3 h-3 rotate-90 absolute right-2 pointer-events-none opacity-50" />
+                      <ChevronRight className="w-3 h-3 rotate-90 absolute right-2.5 pointer-events-none opacity-50" />
+                    </div>
+
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditModal(act, index)}
+                        className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] rounded-lg transition-colors cursor-pointer"
+                        title="Editar"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveActividad(index)}
+                        className="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Eliminar"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 </div>

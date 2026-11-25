@@ -1649,64 +1649,45 @@ export function App() {
           >
           {/* VIEW 1: MI BITÁCORA */}
           {viewMode === 'lista' && (
-            <div className="w-full max-w-[1700px] mx-auto space-y-6">
+            <div className="w-full max-w-[1440px] mx-auto space-y-4">
               {activeProxyUser && (
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
-                  <div className="flex items-center space-x-3.5">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
-                      🤝
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] uppercase tracking-wider font-extrabold bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full">
-                          Modo Apoyo Activo
-                        </span>
-                        <span className="text-xs text-amber-700/80 dark:text-amber-400/80 hidden sm:inline">
-                          Las actividades se registrarán en la bitácora de este colaborador
-                        </span>
-                      </div>
-                      <p className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 mt-0.5">
-                        Registrando para:{' '}
-                        <span className="text-amber-600 dark:text-amber-400 font-extrabold">
-                          {activeProxyUser.full_name}
-                        </span>
-                        {activeProxyUser.team_name && (
-                          <span className="text-xs text-slate-500 dark:text-slate-400 font-normal ml-2">
-                            ({activeProxyUser.team_name})
-                          </span>
-                        )}
-                      </p>
-                    </div>
+                <div className="bg-amber-50/80 dark:bg-amber-500/10 border border-amber-200/80 dark:border-amber-500/25 rounded-xl px-4 py-2.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <p className="text-xs sm:text-[13px] text-slate-700 dark:text-slate-200 truncate">
+                      <span className="font-semibold text-amber-800 dark:text-amber-300">Modo Apoyo:</span>{' '}
+                      registrando para <strong className="font-semibold">{activeProxyUser.full_name}</strong>
+                      {activeProxyUser.team_name && (
+                        <span className="text-slate-500 dark:text-slate-400 ml-1">({activeProxyUser.team_name})</span>
+                      )}
+                    </p>
                   </div>
-                  <div className="flex items-center gap-2 self-start sm:self-center flex-wrap">
+                  <div className="flex items-center gap-2 self-start sm:self-center flex-wrap shrink-0">
                     {delegatedTargets.length > 1 && (
-                      <div className="flex items-center gap-1.5 bg-white/90 dark:bg-slate-800/90 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-600/40 shadow-xs">
-                        <label htmlFor="proxy-target-select" className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                          Cambiar a:
-                        </label>
-                        <select
-                          id="proxy-target-select"
-                          value={activeProxyUser.id}
-                          onChange={(e) => {
-                            const selectedId = Number(e.target.value);
-                            const target = delegatedTargets.find((t) => t.id === selectedId);
-                            if (target) handleSelectProxyUser(target);
-                          }}
-                          className="bg-transparent text-xs font-bold text-amber-700 dark:text-amber-300 focus:outline-hidden cursor-pointer"
-                        >
-                          {delegatedTargets.map((t) => (
-                            <option key={t.id} value={t.id} className="text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800">
-                              {t.full_name} {t.team_name ? `(${t.team_name})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <select
+                        id="proxy-target-select"
+                        aria-label="Cambiar colaborador en modo apoyo"
+                        value={activeProxyUser.id}
+                        onChange={(e) => {
+                          const selectedId = Number(e.target.value);
+                          const target = delegatedTargets.find((t) => t.id === selectedId);
+                          if (target) handleSelectProxyUser(target);
+                        }}
+                        className="bg-white dark:bg-[#191D28] text-xs font-medium text-amber-800 dark:text-amber-300 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-500/30 focus:outline-hidden cursor-pointer"
+                      >
+                        {delegatedTargets.map((t) => (
+                          <option key={t.id} value={t.id} className="text-slate-800 dark:text-slate-200 bg-white dark:bg-[#191D28]">
+                            {t.full_name}
+                          </option>
+                        ))}
+                      </select>
                     )}
                     <button
+                      type="button"
                       onClick={() => handleSelectProxyUser(null)}
-                      className="inline-flex items-center justify-center px-3.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-xs cursor-pointer"
+                      className="px-2.5 py-1.5 text-xs font-medium bg-white dark:bg-[#191D28] hover:bg-amber-50 dark:hover:bg-white/[0.06] text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-white/10 rounded-lg transition-colors cursor-pointer"
                     >
-                      Volver a mi bitácora
+                      Salir
                     </button>
                   </div>
                 </div>
@@ -1746,6 +1727,7 @@ export function App() {
                 isProxyMode={Boolean(activeProxyUser)}
                 proxyUserName={activeProxyUser?.full_name}
                 actividades={bitacora.actividades}
+                collapsible={true}
               />
             </div>
           )}
@@ -1860,6 +1842,16 @@ export function App() {
         }}
         activitiesCount={bitacora.actividades.length}
         onOpenSummary={() => setMobileDrawerOpen(true)}
+        onQuickNewActivity={() => {
+          if (viewMode !== 'lista' && viewMode !== 'kanban') {
+            setViewMode('lista');
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('bitacora:open-new-activity'));
+            }, 80);
+          } else {
+            window.dispatchEvent(new CustomEvent('bitacora:open-new-activity'));
+          }
+        }}
         onToggleMobileMenu={() => setMobileMenuOpen(true)}
         currentUser={currentUser}
       />
@@ -1929,6 +1921,7 @@ export function App() {
                 isProxyMode={Boolean(activeProxyUser)}
                 proxyUserName={activeProxyUser?.full_name}
                 actividades={bitacora.actividades}
+                collapsible={false}
               />
             </div>
           </div>

@@ -884,143 +884,77 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
     Boolean(userSearch.trim());
 
   return (
-    <div className="space-y-5 pb-20 animate-fadeIn">
-      {/* ================= CABECERA PRINCIPAL ================= */}
-      <div className="bg-white dark:bg-[#161922] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-4 sm:p-5 shadow-xs">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 rounded-xl bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-200/80 dark:border-sky-500/25">
-              <KeyRound className="w-5 h-5" />
-            </span>
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-              Accesos & Bóveda
-            </h1>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {isAdminOrLeader && (
-              <button
-                type="button"
-                onClick={() => openCatalogModalAt('empresas')}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors cursor-pointer"
-                title="Configurar catálogos de Empresas, Marcas, Plataformas y Cargos"
-              >
-                <Settings className="w-4 h-4 text-sky-600 dark:text-sky-400" />
-                <span>Catálogos</span>
-              </button>
-            )}
+    <div className="space-y-4 pb-16 max-w-[1440px] mx-auto animate-fadeIn">
+      {/* ================= BARRA UNIFICADA (TABS + SEGURIDAD + UTILIDADES) ================= */}
+      <div className="bg-white dark:bg-[#12151D] border border-slate-200/75 dark:border-white/[0.07] rounded-xl p-3 sm:p-3.5 space-y-3">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5">
+          {/* Izquierda: Tabs principales */}
+          <div className="flex items-center bg-slate-100/90 dark:bg-white/[0.05] p-0.5 rounded-lg overflow-x-auto max-w-full no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setActiveTab('users')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                activeTab === 'users'
+                  ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Cuentas ({platformUsers.length})</span>
+            </button>
 
             <button
               type="button"
-              onClick={() => {
-                const pass = generateVaultPassword(genLength, genIncludeSpecial, genIncludeNumbers);
-                setGeneratedQuickPass(pass);
-                setIsGenModalOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 dark:bg-amber-500/10 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/25 text-xs font-semibold transition-colors cursor-pointer"
-              title="Generar contraseñas seguras"
-            >
-              <Sparkles className="w-4 h-4 text-amber-500" />
-              <span>Generar Clave</span>
-            </button>
-
-            <div className="flex items-center bg-slate-100 dark:bg-[#1A1E29] p-1 rounded-xl border border-slate-200/80 dark:border-white/[0.08] overflow-x-auto max-w-full">
-              <button
-                type="button"
-                onClick={() => setActiveTab('users')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  activeTab === 'users'
-                    ? 'bg-white dark:bg-[#222735] text-sky-600 dark:text-sky-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }`}
-              >
-                <Users className="w-3.5 h-3.5" />
-                <span>Cuentas ({platformUsers.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('vault')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  activeTab === 'vault'
-                    ? 'bg-white dark:bg-[#222735] text-sky-600 dark:text-sky-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }`}
-              >
-                <Shield className="w-3.5 h-3.5" />
-                <span>Bóveda ({credentials.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('links')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                  activeTab === 'links'
-                    ? 'bg-white dark:bg-[#222735] text-sky-600 dark:text-sky-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }`}
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Accesos ({links.length})</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= BARRA DE ESTADO DE SEGURIDAD (MODO SUDO / PIN) ================= */}
-      {!isSecurityBarExpanded ? (
-        <div
-          className={`rounded-2xl px-4 py-2.5 border transition-colors shadow-xs flex items-center justify-between gap-3 flex-wrap ${
-            isVaultUnlocked
-              ? 'bg-emerald-50/70 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div
-              className={`p-1.5 rounded-lg border shrink-0 ${
-                isVaultUnlocked
-                  ? 'bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/35 text-emerald-700 dark:text-emerald-400'
-                  : 'bg-amber-500/10 border-amber-200 dark:border-amber-500/25 text-amber-600 dark:text-amber-400'
+              onClick={() => setActiveTab('vault')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                activeTab === 'vault'
+                  ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
               }`}
             >
-              {isVaultUnlocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-            </div>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-              {isVaultUnlocked ? 'Bóveda Desbloqueada' : 'Bóveda Protegida'}
-            </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border hidden sm:inline-block bg-slate-100 dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10">
-              Cifrado Fernet
-            </span>
-            {isVaultUnlocked && (
-              <span className="text-xs font-mono font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 tabular-nums">
-                <Clock className="w-3.5 h-3.5 text-emerald-500" />
-                {formatTimer(unlockRemainingSeconds)}
-              </span>
-            )}
+              <Shield className="w-3.5 h-3.5" />
+              <span>Bóveda ({credentials.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('links')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs whitespace-nowrap transition-colors cursor-pointer ${
+                activeTab === 'links'
+                  ? 'bg-white dark:bg-[#1E2330] text-slate-900 dark:text-white font-semibold shadow-2xs'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium'
+              }`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Accesos ({links.length})</span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+          {/* Derecha: Estado de Bóveda integrado + utilidades discretas */}
+          <div className="flex flex-wrap items-center gap-1.5">
             {isVaultUnlocked ? (
-              <>
+              <div className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-emerald-50/90 dark:bg-emerald-500/10 border border-emerald-200/80 dark:border-emerald-500/25 text-xs">
+                <Unlock className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                  {formatTimer(unlockRemainingSeconds)}
+                </span>
                 <button
                   type="button"
                   onClick={handleExtendSession}
-                  className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-[#1E222D] hover:bg-slate-100 dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-white/10 cursor-pointer transition-colors"
-                  title="Renovar la sesión segura (pide tu PIN)"
+                  className="text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white font-medium px-1 cursor-pointer"
+                  title="Renovar sesión segura"
                 >
                   Renovar
                 </button>
                 <button
                   type="button"
                   onClick={handleLockVaultNow}
-                  className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 text-xs font-semibold border border-rose-200 dark:border-rose-500/25 cursor-pointer transition-colors"
-                  title="Bloquear bóveda de inmediato"
+                  className="text-rose-600 dark:text-rose-400 hover:underline font-semibold px-1 cursor-pointer"
+                  title="Bloquear bóveda ahora"
                 >
                   Bloquear
                 </button>
-              </>
+              </div>
             ) : (
               <button
                 type="button"
@@ -1031,9 +965,10 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                   setUnlockPasswordInput('');
                   setIsUnlockModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs cursor-pointer transition-colors"
+                className="inline-flex items-center gap-1.5 px-3 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 text-white text-xs font-semibold cursor-pointer transition-colors"
+                title="Bóveda protegida · Clic para desbloquear con PIN o contraseña"
               >
-                <Unlock className="w-3.5 h-3.5" />
+                <Lock className="w-3.5 h-3.5" />
                 <span>Desbloquear</span>
               </button>
             )}
@@ -1047,325 +982,196 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
                 setPinConfirmPin('');
                 setIsPinConfigModalOpen(true);
               }}
-              className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-500 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
-              title={hasSecurityPin ? 'Cambiar PIN' : 'Configurar PIN'}
+              className="w-8 h-8 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
+              title={hasSecurityPin ? 'Cambiar PIN de bóveda' : 'Configurar PIN rápido'}
             >
-              <Key className="w-4 h-4" />
+              <Key className="w-3.5 h-3.5" />
             </button>
 
             <button
               type="button"
-              onClick={() => setIsSecurityBarExpanded(true)}
-              className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
-              title="Expandir detalles de seguridad"
+              onClick={() => {
+                const pass = generateVaultPassword(genLength, genIncludeSpecial, genIncludeNumbers);
+                setGeneratedQuickPass(pass);
+                setIsGenModalOpen(true);
+              }}
+              className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] text-xs font-medium transition-colors cursor-pointer"
+              title="Generar contraseña segura"
             >
-              <ChevronDown className="w-4 h-4" />
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span className="hidden sm:inline">Clave</span>
+            </button>
+
+            {isAdminOrLeader && (
+              <button
+                type="button"
+                onClick={() => openCatalogModalAt('empresas')}
+                className="inline-flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] text-xs font-medium transition-colors cursor-pointer"
+                title="Catálogos de Empresas, Plataformas y Cargos"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Catálogos</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setIsSecurityBarExpanded((prev) => !prev)}
+              className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
+              title={isSecurityBarExpanded ? 'Ocultar detalles de cifrado' : 'Ver detalles de cifrado'}
+            >
+              {isSecurityBarExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
         </div>
-      ) : (
-        <div
-          className={`rounded-2xl border transition-colors shadow-xs relative overflow-hidden ${
-            isVaultUnlocked
-              ? 'bg-emerald-50/60 dark:bg-[#161922] border-emerald-200 dark:border-emerald-500/30'
-              : 'bg-white dark:bg-[#161922] border-slate-200/80 dark:border-white/[0.08]'
-          }`}
-        >
-          <div className="p-4 sm:p-5 space-y-3.5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start sm:items-center gap-3.5">
-                <div
-                  className={`p-2.5 rounded-xl border flex items-center justify-center shrink-0 ${
-                    isVaultUnlocked
-                      ? 'bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/35 text-emerald-700 dark:text-emerald-400'
-                      : 'bg-amber-500/10 border-amber-200 dark:border-amber-500/25 text-amber-600 dark:text-amber-400'
-                  }`}
-                >
-                  {isVaultUnlocked ? <Unlock className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
-                </div>
 
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">
-                      {isVaultUnlocked
-                        ? 'Bóveda Desbloqueada — Sesión Segura Activa'
-                        : 'Bóveda Protegida — Modo Seguro'}
-                    </h2>
-
-                    <span
-                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border flex items-center gap-1 ${
-                        isVaultUnlocked
-                          ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/30'
-                          : 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/25'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${isVaultUnlocked ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                      />
-                      {isVaultUnlocked ? 'Desbloqueada' : 'Protegida'}
-                    </span>
-
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-slate-100 dark:bg-[#1E222D] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-white/10">
-                      Cifrado Fernet
-                    </span>
-                  </div>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 max-w-2xl leading-relaxed">
-                    {isVaultUnlocked
-                      ? 'Las contraseñas maestras y de plataformas pueden consultarse y copiarse. Por política de seguridad, la bóveda se bloqueará automáticamente al expirar el tiempo de sesión.'
-                      : 'Las contraseñas se guardan cifradas y el servidor no las entrega hasta que desbloquees con tu PIN o tu contraseña. Cada consulta queda registrada.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap self-end sm:self-center shrink-0">
-                {isVaultUnlocked ? (
-                  <>
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-xs font-mono font-bold tabular-nums">
-                      <Timer className="w-3.5 h-3.5 text-emerald-500" />
-                      <span>Auto-bloqueo: {formatTimer(unlockRemainingSeconds)}</span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleExtendSession}
-                      className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors cursor-pointer"
-                      title="Renovar la sesión segura (pide tu PIN)"
-                    >
-                      Renovar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleLockVaultNow}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/25 text-xs font-semibold transition-colors cursor-pointer"
-                      title="Bloquear inmediatamente y ofuscar contraseñas"
-                    >
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>Bloquear Ahora</span>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPendingAction(null);
-                      setUnlockError('');
-                      setUnlockPinInput('');
-                      setUnlockPasswordInput('');
-                      setIsUnlockModalOpen(true);
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors cursor-pointer"
-                  >
-                    <Unlock className="w-4 h-4" />
-                    <span>Desbloquear Bóveda</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPinConfigError('');
-                    setPinCurrentPass('');
-                    setPinNewPin('');
-                    setPinConfirmPin('');
-                    setIsPinConfigModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 text-xs font-semibold transition-colors cursor-pointer"
-                  title="Configurar o cambiar tu PIN de 4 dígitos para desbloqueo rápido"
-                >
-                  <Key className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                  <span>{hasSecurityPin ? 'Cambiar PIN' : 'Configurar PIN'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsSecurityBarExpanded(false)}
-                  className="min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer flex items-center justify-center"
-                  title="Minimizar barra de seguridad"
-                >
-                  <ChevronUp className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
+        {/* Detalle expandible de seguridad (oculto por defecto) */}
+        {isSecurityBarExpanded && (
+          <div className="pt-3 border-t border-slate-100 dark:border-white/[0.06] space-y-2.5 text-xs text-slate-500 dark:text-slate-400">
+            <p className="leading-relaxed">
+              {isVaultUnlocked
+                ? 'Sesión segura activa. Las contraseñas pueden consultarse y copiarse hasta que expire el temporizador.'
+                : 'Las contraseñas se almacenan cifradas con Fernet (AES-128 + HMAC-SHA256) y requieren PIN o contraseña para consultarse.'}
+            </p>
             {isVaultUnlocked && (
-              <div className="pt-2 border-t border-slate-200/70 dark:border-white/[0.06]">
-                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
-                  <span className="flex items-center gap-1 font-medium">
-                    <Clock className="w-3 h-3 text-sky-500" /> Tiempo restante de sesión
-                  </span>
-                  <span className="font-mono font-bold text-slate-700 dark:text-slate-300 tabular-nums">
-                    {formatTimer(unlockRemainingSeconds)} ({Math.round(unlockProgressPercent)}%)
-                  </span>
-                </div>
-                <div className="w-full bg-slate-100 dark:bg-[#1E222D] rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-1000 ${
-                      unlockRemainingSeconds <= 60
-                        ? 'bg-rose-500'
-                        : unlockRemainingSeconds <= 120
-                        ? 'bg-amber-500'
-                        : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${unlockProgressPercent}%` }}
-                  />
-                </div>
+              <div className="w-full bg-slate-100 dark:bg-white/[0.06] rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    unlockRemainingSeconds <= 60
+                      ? 'bg-rose-500'
+                      : unlockRemainingSeconds <= 120
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${unlockProgressPercent}%` }}
+                />
               </div>
             )}
-
-            <div className="pt-2.5 border-t border-slate-200/70 dark:border-white/[0.06] flex flex-wrap items-center justify-between gap-2.5 text-[11px] text-slate-500 dark:text-slate-400">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Cifrado Fernet (AES-128 + HMAC-SHA256)</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-sky-500" />
-                  <span>{hasSecurityPin ? 'PIN activo' : 'Autenticación por contraseña'}</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" />
-                  <span>Cada consulta queda auditada</span>
-                </span>
-              </div>
+            <div className="flex flex-wrap items-center gap-4 text-[11px]">
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Cifrado Fernet</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Key className="w-3.5 h-3.5 text-sky-500" />
+                <span>{hasSecurityPin ? 'PIN activo' : 'Solo contraseña'}</span>
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                <span>Consultas auditadas</span>
+              </span>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ========================================================================= */}
       {/* PESTAÑA 1: DIRECTORIO DE USUARIOS POR PLATAFORMA                          */}
       {/* ========================================================================= */}
       {activeTab === 'users' && (
         <div className="space-y-4 animate-fadeIn">
-          <div className="bg-white dark:bg-[#161922] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-4 shadow-xs space-y-3">
-            <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-              <div className="flex flex-wrap items-center gap-2 flex-1">
-                <div className="relative flex-1 min-w-[220px] max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="bg-white dark:bg-[#12151D] border border-slate-200/75 dark:border-white/[0.07] rounded-xl p-3.5 space-y-2.5">
+            <div className="flex flex-col xl:flex-row gap-2.5 items-stretch xl:items-center justify-between">
+              {/* Filtros limpios en 1 sola línea (incluye Plataforma como select, sin barra de chips) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 flex-1">
+                <div className="relative sm:col-span-2 lg:flex-1 lg:min-w-[200px] lg:max-w-xs">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                   <input
                     type="text"
-                    placeholder="Buscar colaborador, usuario o email..."
+                    placeholder="Buscar persona, usuario o correo..."
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200 dark:border-white/10 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full pl-8 pr-3 h-9 text-xs rounded-lg bg-slate-50/80 dark:bg-[#191D28] border border-slate-200/80 dark:border-white/[0.08] text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-sky-500"
                   />
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-slate-400" />
-                  <select
-                    value={selectedUserEmpresaId}
-                    onChange={(e) =>
-                      setSelectedUserEmpresaId(e.target.value === 'todas' ? 'todas' : Number(e.target.value))
-                    }
-                    className="px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
-                  >
-                    <option value="todas">Todas las Empresas</option>
-                    {empresas.map((emp) => (
-                      <option key={emp.id} value={emp.id}>
-                        {emp.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <select
+                  value={selectedUserPlataforma}
+                  onChange={(e) => setSelectedUserPlataforma(e.target.value)}
+                  aria-label="Filtrar por plataforma"
+                  className="px-2.5 h-9 text-xs rounded-lg bg-slate-50/80 dark:bg-[#191D28] border border-slate-200/80 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
+                >
+                  <option value="todas">Todas las plataformas ({platformUsers.length})</option>
+                  {displayPlatforms.map((plat) => (
+                    <option key={plat} value={plat}>
+                      {plat} ({platformCounts[plat] || 0})
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedUserEmpresaId}
+                  onChange={(e) =>
+                    setSelectedUserEmpresaId(e.target.value === 'todas' ? 'todas' : Number(e.target.value))
+                  }
+                  aria-label="Filtrar por empresa"
+                  className="px-2.5 h-9 text-xs rounded-lg bg-slate-50/80 dark:bg-[#191D28] border border-slate-200/80 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
+                >
+                  <option value="todas">Todas las empresas</option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.nombre}
+                    </option>
+                  ))}
+                </select>
 
                 <select
                   value={selectedUserEstado}
                   onChange={(e) => setSelectedUserEstado(e.target.value)}
-                  className="px-3 py-2 text-xs sm:text-sm rounded-xl bg-slate-50 dark:bg-[#1A1E29] border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  aria-label="Filtrar por estado"
+                  className="px-2.5 h-9 text-xs rounded-lg bg-slate-50/80 dark:bg-[#191D28] border border-slate-200/80 dark:border-white/[0.08] text-slate-700 dark:text-slate-200 focus:outline-none focus:border-sky-500 cursor-pointer"
                 >
-                  <option value="todos">Todos los Estados</option>
+                  <option value="todos">Todos los estados</option>
                   <option value="activo">Activos</option>
-                  <option value="por_crear">Por Crear (Alta Previa)</option>
+                  <option value="por_crear">Por crear</option>
                   <option value="suspendido">Suspendidos</option>
-                  <option value="baja">De Baja</option>
+                  <option value="baja">De baja</option>
                 </select>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              {/* Acciones: 1 CTA primario + utilidades discretas */}
+              <div className="flex flex-wrap items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
                   disabled={isDownloadingTemplate}
-                  title="Descargar plantilla oficial de Excel con ejemplos para rellenar"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Descargar plantilla Excel"
+                  className="inline-flex items-center gap-1.5 px-2.5 h-9 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer disabled:opacity-40"
                 >
                   <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="hidden sm:inline">
-                    {isDownloadingTemplate ? 'Descargando...' : 'Descargar Plantilla'}
-                  </span>
-                  <span className="sm:hidden">Plantilla</span>
+                  <span className="hidden sm:inline">Plantilla</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={handleExportAccounts}
                   disabled={isExportingAccounts || platformUsers.length === 0}
-                  title="Exportar todas las cuentas mostradas a Excel (.xlsx)"
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1E222D] dark:hover:bg-[#252B3B] text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/10 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Exportar cuentas (.xlsx)"
+                  className="inline-flex items-center gap-1.5 px-2.5 h-9 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer disabled:opacity-40"
                 >
-                  <Download className="w-3.5 h-3.5 text-sky-500" />
-                  <span className="hidden sm:inline">{isExportingAccounts ? 'Exportando...' : 'Exportar (.xlsx)'}</span>
-                  <span className="sm:hidden">Exportar</span>
+                  <Download className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Exportar</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsImportModalOpen(true)}
-                  title="Carga masiva de cuentas desde un archivo Excel o CSV"
-                  className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/25 transition-colors cursor-pointer"
+                  title="Importar cuentas desde Excel o CSV"
+                  className="inline-flex items-center gap-1.5 px-2.5 h-9 text-xs font-medium rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5 text-emerald-500" />
-                  <span>Importar Excel</span>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Importar</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleOpenUserModal()}
-                  className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer whitespace-nowrap"
+                  className="inline-flex items-center justify-center gap-1.5 px-3.5 h-9 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ml-auto sm:ml-0"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Registrar Cuenta</span>
+                  <span>Registrar</span>
                 </button>
               </div>
-            </div>
-
-            {/* Chips de Plataforma */}
-            <div className="pt-2 border-t border-slate-100 dark:border-white/[0.06] flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-              <span className="text-slate-400 text-[11px] font-medium mr-1 flex items-center gap-1 shrink-0">
-                <Tag className="w-3.5 h-3.5" /> Plataforma:
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedUserPlataforma('todas')}
-                className={`px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                  selectedUserPlataforma === 'todas'
-                    ? 'bg-sky-600 text-white shadow-xs'
-                    : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#222735]'
-                }`}
-              >
-                Todas ({platformUsers.length})
-              </button>
-
-              {displayPlatforms.map((plat) => {
-                const count = platformCounts[plat] || 0;
-                return (
-                  <button
-                    key={plat}
-                    type="button"
-                    onClick={() => setSelectedUserPlataforma(plat)}
-                    className={`px-3 py-1 rounded-lg font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                      selectedUserPlataforma === plat
-                        ? 'bg-sky-600 text-white shadow-xs'
-                        : 'bg-slate-100 dark:bg-[#1A1E29] text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#222735]'
-                    }`}
-                  >
-                    {plat} ({count})
-                  </button>
-                );
-              })}
             </div>
 
             {hasActiveUserFilters && (
@@ -1524,10 +1330,117 @@ export const VaultView: React.FC<VaultViewProps> = ({ currentUser, onShowToast }
               </button>
             </div>
           ) : (
-            <div className="bg-white dark:bg-[#161922] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl shadow-xs overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="bg-white dark:bg-[#12151D] border border-slate-200/75 dark:border-white/[0.07] rounded-xl overflow-hidden">
+              {/* Mobile Card List (< 768px) */}
+              <div className="md:hidden divide-y divide-slate-100 dark:divide-white/[0.06]">
+                {platformUsers.map((u) => {
+                  const isPwRev = Boolean(revealedUserPwIds[u.id]);
+                  return (
+                    <div key={u.id} className="p-3.5 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                            {u.colaborador_nombre}
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                            {u.plataforma} · {u.empresa_nombre}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${
+                            u.estado === 'activo'
+                              ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : u.estado === 'por_crear'
+                              ? 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400'
+                              : 'bg-slate-100 dark:bg-white/[0.06] text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {u.estado === 'activo'
+                            ? 'Activa'
+                            : u.estado === 'por_crear'
+                            ? 'Por crear'
+                            : u.estado === 'suspendido'
+                            ? 'Suspendida'
+                            : 'Baja'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText(u.usuario_login, 'Usuario', u.id, false)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100/80 dark:bg-white/[0.05] text-slate-700 dark:text-slate-200 cursor-pointer"
+                        >
+                          <span className="truncate max-w-[160px]">{u.usuario_login}</span>
+                          {copiedId === `${u.id}-Usuario` ? (
+                            <Check className="w-3 h-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="w-3 h-3 text-slate-400" />
+                          )}
+                        </button>
+
+                        <div className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100/80 dark:bg-white/[0.05]">
+                          <span className={isPwRev ? 'text-amber-600 dark:text-amber-300' : 'text-slate-400'}>
+                            {isPwRev ? u.password_actual : '••••••'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleRevealUserPw(u.id)}
+                            className="p-1 text-slate-400 hover:text-amber-500 cursor-pointer"
+                          >
+                            {isPwRev ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(() => getUserPw(u.id), 'Contraseña', u.id, true)}
+                            className="p-1 text-slate-400 hover:text-sky-500 cursor-pointer"
+                          >
+                            {copiedId === `${u.id}-Contraseña` ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenResetModal(u)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs font-medium cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Resetear</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenUserModal(u)}
+                          className="w-8 h-8 rounded-lg text-slate-400 hover:text-sky-600 flex items-center justify-center cursor-pointer"
+                          title="Editar cuenta"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {isAdminOrLeader && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u.id)}
+                            className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-600 flex items-center justify-center cursor-pointer"
+                            title="Eliminar cuenta"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table (>= 768px) */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-left text-xs sm:text-sm">
-                  <thead className="bg-slate-50 dark:bg-[#1A1E29] text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider border-b border-slate-200/80 dark:border-white/[0.08]">
+                  <thead className="bg-slate-50/70 dark:bg-white/[0.02] text-slate-400 dark:text-slate-500 text-[11px] font-medium border-b border-slate-100 dark:border-white/[0.06]">
                     <tr>
                       <th className="py-3 px-4">Colaborador / Cargo</th>
                       {showEmpresaCol && <th className="py-3 px-4">Empresa & Marca</th>}

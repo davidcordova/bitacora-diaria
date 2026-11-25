@@ -32,10 +32,10 @@
 }
 
 :root {
-  --bg-canvas: #f8fafc;
+  --bg-canvas: #fafafa;
   --bg-surface: #ffffff;
-  --bg-elevated: #f8fafc;
-  --border-subtle: rgba(226, 232, 240, 0.95);
+  --bg-elevated: #f4f4f5;
+  --border-subtle: rgba(15, 23, 42, 0.08);
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --text-muted: #64748b;
@@ -45,9 +45,9 @@
 }
 
 .dark {
-  --bg-canvas: #0f1117;
-  --bg-surface: #161922;
-  --bg-elevated: #1e222d;
+  --bg-canvas: #0b0d12;
+  --bg-surface: #12151d;
+  --bg-elevated: #191d28;
   --border-subtle: rgba(255, 255, 255, 0.07);
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
@@ -69,7 +69,7 @@
   
   .dark body,
   html.dark body {
-    background-color: #0f1117;
+    background-color: #0b0d12;
     color: #f1f5f9;
   }
   
@@ -85,14 +85,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 .dark ::-webkit-scrollbar-track {
-  background: #0f1117;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d4d4d8;
   border-radius: 9999px;
 }
 .dark ::-webkit-scrollbar-thumb {
@@ -100,7 +100,7 @@
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #a1a1aa;
 }
 .dark ::-webkit-scrollbar-thumb:hover {
   background: #3b4254;
@@ -111,31 +111,33 @@
   background-color: var(--bg-surface);
   border-radius: 0.875rem;
   border: 1px solid var(--border-subtle);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.025);
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .dark .saas-card {
-  background-color: #161922;
+  background-color: #12151d;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .dark .saas-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.11);
 }
 
-/* Spotlight Highlight Widget */
+/* Subtle Highlight Surface */
 .saas-card-accent {
-  background-color: #0284c7;
-  color: #ffffff;
+  background-color: #f0f9ff;
+  color: #0f172a;
   border-radius: 0.875rem;
-  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.18);
+  border: 1px solid #bae6fd;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.06);
 }
 .dark .saas-card-accent {
-  background-color: #0369a1;
-  color: #ffffff;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  background-color: rgba(14, 165, 233, 0.08);
+  color: #f1f5f9;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: none;
 }
 
 /* Primary Action Button (Calm, Accessible & High Contrast in both themes) */
@@ -347,6 +349,11 @@ body {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* Mobile bottom bar safe area for iOS/Android gesture navigation */
+.safe-area-bottom {
+  padding-bottom: max(0.375rem, env(safe-area-inset-bottom));
 }
 
 /* Prevent forced iOS Safari / mobile auto-zoom on form fields (< 640px) while keeping desktop compact */
