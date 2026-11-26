@@ -846,26 +846,8 @@ export function App() {
     enabled: Boolean(currentUser),
   });
 
-  // Auto-detectar cambio de día al volver a la pestaña (evita registrar tareas en el día de ayer por error)
-  useEffect(() => {
-    const handleFocusOrVisible = () => {
-      if (document.visibilityState === 'visible' && currentUser?.id) {
-        const todayStr = getTodayLocalDateStr();
-        if (bitacora.fecha && bitacora.fecha < todayStr) {
-          if (bitacora.actividades.length === 0 || bitacora.estado === 'cerrada' || bitacora.estado === 'cerrada_sistema') {
-            console.log(`[SmartSync] Cambio de jornada detectado (activa: ${bitacora.fecha}, hoy: ${todayStr}). Cambiando a hoy.`);
-            handleDateChange(todayStr);
-          }
-        }
-      }
-    };
-    document.addEventListener('visibilitychange', handleFocusOrVisible);
-    window.addEventListener('focus', handleFocusOrVisible);
-    return () => {
-      document.removeEventListener('visibilitychange', handleFocusOrVisible);
-      window.removeEventListener('focus', handleFocusOrVisible);
-    };
-  }, [currentUser?.id, bitacora.fecha, bitacora.actividades.length, bitacora.estado]);
+  // Nota UX: No resetear `bitacora.fecha` ni recargar la vista en `visibilitychange`/`focus`
+  // para que el usuario pueda cambiar de pestaña o ventana sin perder el día que está revisando.
 
   const reloadActiveBitacora = async () => {
     refreshPapeleraCount();
